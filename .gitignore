@@ -1,0 +1,42 @@
+# Dependencias
+node_modules/
+
+# Compilacion
+dist/
+build/
+*.tsbuildinfo
+
+# Pruebas y cobertura
+coverage/
+.nyc_output/
+
+# Entorno y secretos — NUNCA a Git (seccion 6 y criterio de aceptacion)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editores
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Cache de herramientas
+.eslintcache
+.cache/
