@@ -1,0 +1,13 @@
+# Normaliza finales de linea: el repo guarda LF y cada quien recibe lo suyo.
+# Con cinco personas en Windows, macOS y Linux, sin esto los diffs se llenan de
+# cambios fantasma de CRLF y las revisiones por pares se vuelven inutiles.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

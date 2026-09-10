@@ -1,0 +1,100 @@
+# Entorno local completo de MeritIA: `docker compose up` y nada mas.
+# Servicios separados, como pide el planteamiento de arquitectura: el monolito
+# no lleva dentro ni la base de datos, ni la cola, ni el almacenamiento.
+
+name: meritia
+
+services:
+  backend:
+    build:
+      context: .
+      target: dev
+    env_file:
+      # Opcional para que `docker compose config` funcione en un clon recien
+      # hecho; las variables sin valor por defecto fallan abajo con su mensaje.
+      - path: .env
+        required: false
+    environment:
+      DATABASE_HOST: postgres
+      REDIS_HOST: redis
+      S3_ENDPOINT: http://minio:9000
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      # El codigo se monta para recarga en caliente; node_modules queda en el
+      # contenedor para no mezclar binarios nativos de Windows con los de Linux.
+      - ./src:/app/src
+      - ./test:/app/test
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsconfig.build.json:/app/tsconfig.build.json
+      - ./nest-cli.json:/app/nest-cli.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Informacion estructurada. Un solo cluster, un esquema por modulo.
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-meritia}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?definelo en .env}
+      POSTGRES_DB: ${DATABASE_NAME:-meritia}
+    ports:
+      - '${DATABASE_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-meritia} -d ${DATABASE_NAME:-meritia}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Doble funcion: cola de trabajos para la evaluacion con IA (asincrona, para
+  # que la peticion del candidato no espere al modelo) y respaldo del rate
+  # limiting en tres capas del Plan de Seguridad.
+  redis:
+    image: redis:8.2-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Almacenamiento de objetos compatible con S3, para entregas de candidatos y
+  # evidencias. Los binarios no van a PostgreSQL.
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-meritia}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?definelo en .env}
+    ports:
+      - '${S3_PORT:-9000}:9000'
+      # 9001 suele estar en los rangos que Hyper-V reserva en Windows;
+      # por eso el puerto del host es variable y su valor por defecto es 9101.
+      - '${S3_CONSOLE_PORT:-9101}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
