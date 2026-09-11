@@ -108,3 +108,34 @@ export async function consultar<T = Record<string, unknown>>(
 }
 
 export const uuid = (): string => crypto.randomUUID();
+
+/**
+ * Crea un ejercicio real en el banco y devuelve su identificador.
+ *
+ * Desde el paquete 2.3, una vacante no admite identificadores de ejercicio
+ * inventados: los valida contra el banco. Las pruebas que asocian ejercicios
+ * necesitan uno de verdad.
+ */
+export async function crearEjercicioEnElBanco(
+  app: INestApplication<Server>,
+  dueno: Sesion,
+  titulo = 'Ejercicio de prueba',
+): Promise<string> {
+  const { body } = await api(app)
+    .post('/api/v1/ejercicios')
+    .set({ Authorization: `Bearer ${dueno.token}` })
+    .send({
+      titulo,
+      enunciado: 'Enunciado de prueba suficientemente largo para pasar la validacion del DTO.',
+      criterios: [
+        {
+          nombre: 'Correccion funcional',
+          descripcion: 'La solucion resuelve todos los casos del enunciado, incluidos los limite.',
+          peso: 100,
+          escalaMaxima: 5,
+        },
+      ],
+    })
+    .expect(201);
+  return body.id as string;
+}

@@ -11,6 +11,7 @@ import {
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
 import { Rol } from '../autenticacion/index.js';
+import { EjerciciosService } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
 
 /** Quien pide, tal como lo resolvio el guardia de autenticacion. */
@@ -44,6 +45,7 @@ export class VacantesService {
     @InjectRepository(VacanteCandidato)
     private readonly asignaciones: Repository<VacanteCandidato>,
     private readonly dataSource: DataSource,
+    private readonly ejerciciosDelBanco: EjerciciosService,
   ) {}
 
   async crear(datos: CrearVacanteDto, solicitante: Solicitante): Promise<Vacante> {
@@ -205,6 +207,17 @@ export class VacantesService {
     const unicos = [...new Set(idsDeEjercicios)];
     if (unicos.length !== idsDeEjercicios.length) {
       throw new BadRequestException('La lista de ejercicios tiene identificadores repetidos.');
+    }
+
+    // Se pregunta al modulo de ejercicios por su interfaz publica, no a sus
+    // tablas. Hasta que ese modulo existio, esta comprobacion no se podia hacer
+    // y la vacante aceptaba identificadores inventados.
+    const existentes = await this.ejerciciosDelBanco.cualesExistenActivos(unicos);
+    const faltantes = unicos.filter((id) => !existentes.includes(id));
+    if (faltantes.length > 0) {
+      throw new BadRequestException(
+        `Estos ejercicios no existen en el banco o fueron retirados: ${faltantes.join(', ')}`,
+      );
     }
 
     await this.dataSource.transaction(async (manager) => {

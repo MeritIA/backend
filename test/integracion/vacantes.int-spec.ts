@@ -6,6 +6,7 @@ import {
   api,
   consultar,
   crearConRol,
+  crearEjercicioEnElBanco,
   levantarAplicacion,
   registrarCandidato,
   uuid,
@@ -21,6 +22,10 @@ describe('integracion: vacantes', () => {
   let otroCandidato: Sesion;
 
   const auth = (s: Sesion) => ({ Authorization: `Bearer ${s.token}` });
+
+  let contadorEjercicios = 0;
+  const ejercicio = () =>
+    crearEjercicioEnElBanco(app, reclutador, `Ejercicio ${++contadorEjercicios}`);
 
   async function crearVacante(dueno = reclutador): Promise<string> {
     const { body } = await api(app)
@@ -131,7 +136,7 @@ describe('integracion: vacantes', () => {
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
-        .send({ idsDeEjercicios: [uuid(), uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio(), await ejercicio()] })
         .expect(200);
 
       const { body } = await api(app)
@@ -144,8 +149,8 @@ describe('integracion: vacantes', () => {
 
     it('guarda la relacion en su propio esquema, con el orden', async () => {
       const id = await crearVacante();
-      const e1 = uuid();
-      const e2 = uuid();
+      const e1 = await ejercicio();
+      const e2 = await ejercicio();
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
@@ -161,7 +166,7 @@ describe('integracion: vacantes', () => {
 
     it('rechaza ejercicios repetidos y listas vacias', async () => {
       const id = await crearVacante();
-      const e = uuid();
+      const e = await ejercicio();
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
@@ -181,14 +186,14 @@ describe('integracion: vacantes', () => {
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
-        .send({ idsDeEjercicios: [uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio()] })
         .expect(200);
       await api(app).post(`/api/v1/vacantes/${id}/publicar`).set(auth(reclutador)).expect(200);
 
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
-        .send({ idsDeEjercicios: [uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio()] })
         .expect(400);
     });
   });
@@ -199,7 +204,7 @@ describe('integracion: vacantes', () => {
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
-        .send({ idsDeEjercicios: [uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio()] })
         .expect(200);
       await api(app).post(`/api/v1/vacantes/${id}/publicar`).set(auth(reclutador)).expect(200);
       return id;
@@ -286,7 +291,7 @@ describe('integracion: vacantes', () => {
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(otroReclutador))
-        .send({ idsDeEjercicios: [uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio()] })
         .expect(404);
       await api(app)
         .post(`/api/v1/vacantes/${id}/candidatos`)
@@ -369,7 +374,7 @@ describe('integracion: vacantes', () => {
       await api(app)
         .put(`/api/v1/vacantes/${id}/ejercicios`)
         .set(auth(reclutador))
-        .send({ idsDeEjercicios: [uuid()] })
+        .send({ idsDeEjercicios: [await ejercicio()] })
         .expect(200);
 
       // La transaccion con bloqueo de fila existe para esto. Sin ella, las dos

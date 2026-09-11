@@ -457,6 +457,154 @@
           "vacantes"
         ]
       }
+    },
+    "/ejercicios": {
+      "post": {
+        "description": "Crea el ejercicio y su version 1 en una sola operacion. Los pesos de los criterios deben sumar 100: con otra suma la nota final no seria comparable entre ejercicios, y se devuelve 400.",
+        "operationId": "EjerciciosController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEjercicioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea un ejercicio con su rubrica",
+        "tags": [
+          "ejercicios"
+        ]
+      },
+      "get": {
+        "description": "Un reclutador ve los suyos; un administrador, todos.",
+        "operationId": "EjerciciosController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lista el banco de ejercicios",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
+    "/ejercicios/{id}": {
+      "get": {
+        "description": "Las versiones llegan de la mas reciente a la mas antigua, con su rubrica.",
+        "operationId": "EjerciciosController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "El ejercicio no existe, o no es de quien pregunta. Se responde lo mismo en ambos casos."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta un ejercicio con todas sus versiones",
+        "tags": [
+          "ejercicios"
+        ]
+      },
+      "delete": {
+        "description": "No lo borra: deja de poder asociarse a vacantes nuevas, pero se conserva para que las evaluaciones ya emitidas sigan siendo auditables.",
+        "operationId": "EjerciciosController_retirar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Retira el ejercicio del banco",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
+    "/ejercicios/{id}/versiones": {
+      "post": {
+        "description": "Las versiones anteriores NO se modifican: es la unica forma de que una calificacion emitida hace un mes siga mostrando el enunciado y los pesos con los que se calculo. Corregir un enunciado significa versionar, nunca editar.",
+        "operationId": "EjerciciosController_nuevaVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NuevaVersionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea la version siguiente",
+        "tags": [
+          "ejercicios"
+        ]
+      }
     }
   },
   "info": {
@@ -677,6 +825,94 @@
         },
         "required": [
           "idCandidato"
+        ]
+      },
+      "CriterioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Correccion funcional",
+            "maxLength": 120
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "La solucion resuelve todos los casos del enunciado, incluidos los limite.",
+            "description": "Texto que el motor de IA recibe como referencia de que significa cada nota. Una descripcion vaga produce calificaciones poco fiables.",
+            "maxLength": 1000
+          },
+          "peso": {
+            "type": "number",
+            "example": 40,
+            "description": "Aporte a la nota final. Los pesos deben sumar 100."
+          },
+          "escalaMaxima": {
+            "type": "number",
+            "example": 5,
+            "description": "El criterio se puntua de 0 a este valor."
+          }
+        },
+        "required": [
+          "nombre",
+          "descripcion",
+          "peso",
+          "escalaMaxima"
+        ]
+      },
+      "CrearEjercicioDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Concurrencia: contador seguro entre hilos",
+            "maxLength": 160
+          },
+          "tecnologia": {
+            "type": "string",
+            "example": "Java",
+            "maxLength": 80
+          },
+          "enunciado": {
+            "type": "string",
+            "maxLength": 20000,
+            "description": "Enunciado que vera el candidato."
+          },
+          "criterios": {
+            "description": "Criterios de la rubrica. Sus pesos suman 100.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDto"
+            }
+          }
+        },
+        "required": [
+          "titulo",
+          "enunciado",
+          "criterios"
+        ]
+      },
+      "NuevaVersionDto": {
+        "type": "object",
+        "properties": {
+          "enunciado": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "criterios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDto"
+            }
+          },
+          "motivoDelCambio": {
+            "type": "string",
+            "example": "Se aclara el caso limite de la lista vacia, que confundia a los candidatos.",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "enunciado",
+          "criterios"
         ]
       }
     }
