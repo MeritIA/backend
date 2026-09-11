@@ -59,13 +59,13 @@ export class TodasLasExcepcionesFilter implements ExceptionFilter {
    * ficheros.
    */
   private interpretar(excepcion: unknown): {
-    estado: number;
+    estado: HttpStatus;
     codigo: string;
     mensaje: string;
     errores?: readonly DetalleValidacion[];
   } {
     if (excepcion instanceof HttpException) {
-      const estado = excepcion.getStatus();
+      const estado: HttpStatus = excepcion.getStatus();
       const respuesta = excepcion.getResponse();
 
       // ValidationPipe entrega un objeto con `message` como lista de cadenas.
@@ -140,7 +140,7 @@ export class TodasLasExcepcionesFilter implements ExceptionFilter {
   }
 }
 
-function codigoPorEstado(estado: number): string {
+function codigoPorEstado(estado: HttpStatus): string {
   switch (estado) {
     case HttpStatus.UNAUTHORIZED:
       return CODIGOS.NO_AUTENTICADO;
@@ -153,7 +153,9 @@ function codigoPorEstado(estado: number): string {
     case HttpStatus.TOO_MANY_REQUESTS:
       return CODIGOS.LIMITE_EXCEDIDO;
     default:
-      return estado >= 500 ? CODIGOS.INTERNO : 'PETICION_INVALIDA';
+      // Number() explicito: comparar un miembro del enum con un literal
+      // numerico dispara no-unsafe-enum-comparison.
+      return Number(estado) >= 500 ? CODIGOS.INTERNO : 'PETICION_INVALIDA';
   }
 }
 
