@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validarEntorno } from './config/index.js';
+import { DatabaseModule } from './database/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AutenticacionModule } from './modules/autenticacion/index.js';
@@ -19,6 +22,13 @@ import { ReportesModule } from './modules/reportes/index.js';
  */
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      // Si el entorno viene incompleto, el proceso no arranca.
+      validate: validarEntorno,
+    }),
+    DatabaseModule,
     AutenticacionModule,
     VacantesModule,
     EjerciciosModule,
