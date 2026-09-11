@@ -31,7 +31,8 @@
     "claves:generar": "node scripts/generar-claves.mjs",
     "test:integracion": "vitest run --config ./vitest.config.integracion.ts",
     "test:integracion:cov": "vitest run --config ./vitest.config.integracion.ts --coverage",
-    "test:total": "vitest run --config ./vitest.config.total.ts --coverage"
+    "test:total": "vitest run --config ./vitest.config.total.ts --coverage",
+    "verificar": "node scripts/verificar.mjs"
   },
   "dependencies": {
     "@nest-lab/throttler-storage-redis": "^1.2.0",
