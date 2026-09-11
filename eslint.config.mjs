@@ -32,15 +32,21 @@ export default tseslint.config(
   //
   // El planteamiento de arquitectura exige que ningun modulo importe una entidad
   // o un repositorio de otro, y que la regla sea "verificable por herramienta".
-  // Esto es esa herramienta: cada modulo solo es alcanzable por el index.ts que
-  // publica, y `npm run lint` falla si alguien se salta la frontera.
+  //
+  // La dificultad esta en que una ruta relativa no dice a que modulo pertenece:
+  // `../dominio/rol.js` desde `autenticacion/servicios/` es DENTRO del propio
+  // modulo, mientras que `../entregas/x.js` desde `evaluacion/` es otro modulo.
+  // Se distinguen por la profundidad del archivo que importa, asi que la regla
+  // se declara una vez por nivel.
   //
   // Se usan globs y no expresiones regulares a proposito: en una cadena de
   // JavaScript '\.' se colapsa a '.', y un regex mal escapado aqui pasaria
   // desapercibido dejando la frontera sin vigilar.
   // ---------------------------------------------------------------------------
+
+  // Archivos en la raiz del modulo: src/modules/<mod>/archivo.ts
   {
-    files: ['src/modules/**/*.ts'],
+    files: ['src/modules/*/*.ts'],
     ignores: ['src/modules/*/index.ts'],
     rules: {
       'no-restricted-imports': [
@@ -48,20 +54,53 @@ export default tseslint.config(
         {
           patterns: [
             {
-              // `../` sube al directorio de modulos; `../../` sale de modules
-              // y llega a common, que si es importable.
               group: ['../*/*', '!../*/index.js', '!../../**'],
               message:
                 'Frontera de modulo: de otro modulo solo se importa su interfaz publica (../<modulo>/index.js). Si necesitas algo que no esta ahi, reexportalo en su index de forma intencionada o comunica por eventos de dominio.',
-            },
-            {
-              group: ['**/modules/*/*', '!**/modules/*/index.js'],
-              message:
-                'Frontera de modulo: no se accede al interior de otro modulo. Usa su index.js o un evento de dominio.',
             },
           ],
         },
       ],
     },
   },
+
+  // Archivos a un nivel: src/modules/<mod>/<sub>/archivo.ts
+  // Aqui `../loquesea` sigue dentro del modulo; otro modulo es `../../<otro>`.
+  {
+    files: ['src/modules/*/*/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../../*/*', '!../../*/index.js', '!../../../**'],
+              message:
+                'Frontera de modulo: de otro modulo solo se importa su interfaz publica (../../<modulo>/index.js).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Archivos a dos niveles: src/modules/<mod>/<sub>/<sub>/archivo.ts
+  {
+    files: ['src/modules/*/*/*/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../../../*/*', '!../../../*/index.js', '!../../../../**'],
+              message:
+                'Frontera de modulo: de otro modulo solo se importa su interfaz publica (../../../<modulo>/index.js).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
 );

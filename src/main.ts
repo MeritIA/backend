@@ -61,10 +61,14 @@ async function bootstrap(): Promise<void> {
     publicarOpenApi(app, documento);
   }
 
-  // El controlador comodin cubre lo que cuelga de /api, pero no lo que queda
-  // fuera del prefijo: eso no llega a Nest y Express lo responde con su pagina
-  // HTML, que rompe el contrato de error y delata el servidor. Se registra un
-  // ultimo manejador despues de que Nest monte sus rutas.
+  // Manejador final para toda ruta que ningun controlador atienda. Va a nivel
+  // de Express y despues de que Nest monte las suyas, que es lo unico que
+  // garantiza que corra el ultimo.
+  //
+  // Antes esto era un controlador comodin de Nest, y estaba MAL: se registraba
+  // junto a los controladores del modulo raiz, es decir ANTES que los de los
+  // modulos importados, asi que capturaba todas sus rutas y devolvia 401 o 404
+  // en endpoints que si existian. El sintoma no apuntaba a la causa.
   await app.init();
   const servidor = app.getHttpAdapter().getInstance() as {
     use: (fn: (req: { url?: string }, res: ResponseMinima) => void) => void;

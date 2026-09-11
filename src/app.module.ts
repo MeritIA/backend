@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { validarEntorno } from './config/index.js';
 import { DatabaseModule } from './database/index.js';
 import { RateLimitModule } from './common/rate-limit/index.js';
-import { RutaNoEncontradaController } from './common/errores/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AutenticacionModule } from './modules/autenticacion/index.js';
@@ -39,8 +38,7 @@ import { ReportesModule } from './modules/reportes/index.js';
     EvaluacionModule,
     ReportesModule,
   ],
-  // El comodin va al final: Nest resuelve en orden de declaracion.
-  controllers: [AppController, RutaNoEncontradaController],
+  controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}

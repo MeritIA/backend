@@ -95,6 +95,17 @@ export class VariablesDeEntorno {
   @IsString()
   @IsNotEmpty({ message: 'ALLOWED_ORIGINS es obligatoria en produccion' })
   ALLOWED_ORIGINS?: string;
+
+  /** Par Ed25519 para PASETO v4, en base64 del PEM. Ver `npm run claves:generar`. */
+  @IsString()
+  @IsNotEmpty({
+    message: 'PASETO_PRIVATE_KEY es obligatoria. Generala con: npm run claves:generar',
+  })
+  PASETO_PRIVATE_KEY!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'PASETO_PUBLIC_KEY es obligatoria. Generala con: npm run claves:generar' })
+  PASETO_PUBLIC_KEY!: string;
 }
 
 export function validarEntorno(configuracion: Record<string, unknown>): VariablesDeEntorno {
