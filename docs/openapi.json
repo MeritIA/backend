@@ -15,6 +15,33 @@
         ]
       }
     },
+    "/salud": {
+      "get": {
+        "description": "Responde 200 si el proceso sirve HTTP. No comprueba base de datos ni dependencias: para eso esta el readiness del paquete 5.5.",
+        "operationId": "SaludController_vida",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "estado": "vivo",
+                    "momento": "2026-09-11T19:30:00.000Z",
+                    "enPieDesdeHaceSegundos": 42
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Senal de vida del proceso",
+        "tags": [
+          "salud"
+        ]
+      }
+    },
     "/autenticacion/registro": {
       "post": {
         "description": "Crea una cuenta de candidato y devuelve la sesion. El rol no se puede elegir: el registro publico solo crea candidatos, y enviar un campo `rol` devuelve 400.",

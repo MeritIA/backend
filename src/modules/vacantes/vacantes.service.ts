@@ -132,7 +132,7 @@ export class VacantesService {
    * invitados sin nada que resolver.
    */
   async publicar(id: string, solicitante: Solicitante): Promise<Vacante> {
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       // Se bloquea la fila mientras dura la operacion: sin esto, dos peticiones
       // simultaneas podrian publicar dos veces, o publicar justo mientras otra
       // quita el ultimo ejercicio.
@@ -161,8 +161,14 @@ export class VacantesService {
       await manager.save(vacante);
 
       this.registrar('vacante_publicada', solicitante, { idVacante: id, ejercicios: cuantos });
-      return this.obtenerCompleta(id);
     });
+
+    // La relectura va FUERA de la transaccion, a proposito. Hacerla dentro
+    // usaria el repositorio normal, ajeno a esa transaccion, y devolveria el
+    // estado anterior al commit: la vacante quedaba publicada en la base pero
+    // la respuesta HTTP decia "borrador". Lo detecto una prueba de integracion
+    // que comprueba el cuerpo y no solo el codigo de estado.
+    return this.obtenerCompleta(id);
   }
 
   async cerrar(id: string, solicitante: Solicitante): Promise<Vacante> {

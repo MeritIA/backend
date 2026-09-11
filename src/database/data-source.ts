@@ -25,7 +25,9 @@ export function opcionesDeConexion(): DataSourceOptions {
     migrationsRun: false,
     migrationsTableName: 'migraciones',
 
-    // Las entidades viven dentro de cada modulo, junto a su logica.
+    // Este patron lo usa SOLO la CLI de TypeORM, para `migration:generate`,
+    // que necesita comparar las entidades contra el esquema. La aplicacion no
+    // lo usa: carga sus entidades con autoLoadEntities (ver database.module.ts).
     entities: ['dist/modules/**/entities/*.entity.js'],
     migrations: ['dist/database/migrations/*.js'],
 

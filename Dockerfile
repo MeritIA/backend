@@ -49,7 +49,11 @@ COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
 
+# Apunta a /api/salud y no a la raiz. La raiz dejo de existir al versionar la
+# API bajo /api/v1, y ademas todo endpoint exige token desde que los guardias
+# son globales: el healthcheck recibia 404 y habria marcado el contenedor
+# enfermo para siempre. /api/salud es publico y sin version a proposito.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/salud').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/main.js"]

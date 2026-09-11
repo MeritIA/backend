@@ -44,6 +44,28 @@ export default tseslint.config(
   // desapercibido dejando la frontera sin vigilar.
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // Pruebas de integracion.
+  //
+  // Excepcion acotada y con motivo, segun la regla de no conformidad: supertest
+  // declara `response.body` como `any` en sus propios tipos, y no hay forma de
+  // estrecharlo sin envolver la libreria entera. Comprobar la respuesta HTTP es
+  // justamente lo que hacen estas pruebas, asi que la alternativa seria
+  // salpicarlas de aserciones de tipo que no aportan seguridad ninguna.
+  //
+  // La excepcion NO alcanza a src/: alli `any` sigue siendo un error.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+
   // Archivos en la raiz del modulo: src/modules/<mod>/archivo.ts
   {
     files: ['src/modules/*/*.ts'],
