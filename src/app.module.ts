@@ -1,9 +1,31 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { AutenticacionModule } from './modules/autenticacion/index.js';
+import { VacantesModule } from './modules/vacantes/index.js';
+import { EjerciciosModule } from './modules/ejercicios/index.js';
+import { EntregasModule } from './modules/entregas/index.js';
+import { EvaluacionModule } from './modules/evaluacion/index.js';
+import { ReportesModule } from './modules/reportes/index.js';
 
+/**
+ * Raiz del monolito modular.
+ *
+ * Los seis modulos de negocio se registran aqui, cada uno con su frontera
+ * explicita. La regla que sostiene el orden es que ningun modulo importa una
+ * entidad o un repositorio de otro: toda interaccion pasa por el servicio de
+ * aplicacion que el modulo reexporta en su index, o por eventos internos.
+ * `npm run lint` falla si se incumple.
+ */
 @Module({
-  imports: [],
+  imports: [
+    AutenticacionModule,
+    VacantesModule,
+    EjerciciosModule,
+    EntregasModule,
+    EvaluacionModule,
+    ReportesModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
