@@ -5,8 +5,10 @@ import {
   IsInt,
   IsNotEmpty,
   IsString,
+  Matches,
   Max,
   Min,
+  ValidateIf,
   validateSync,
 } from 'class-validator';
 
@@ -63,6 +65,36 @@ export class VariablesDeEntorno {
   @Type(() => Boolean)
   @IsBoolean()
   DATABASE_SSL!: boolean;
+
+  @IsString()
+  @IsNotEmpty()
+  REDIS_HOST!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  REDIS_PORT!: number;
+
+  /**
+   * Clave AES-256 en hexadecimal (Plan de Seguridad §5.2). Generarla con:
+   *   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   */
+  @IsString()
+  @Matches(/^[0-9a-fA-F]{64}$/, {
+    message:
+      "ENCRYPTION_KEY debe ser de 64 caracteres hexadecimales (32 bytes). Generala con: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+  })
+  ENCRYPTION_KEY!: string;
+
+  /**
+   * Origenes permitidos por CORS, separados por coma. Obligatorio en
+   * produccion: sin el, se rechazan todas las peticiones cruzadas.
+   */
+  @ValidateIf((v: VariablesDeEntorno) => v.NODE_ENV === Entorno.Produccion)
+  @IsString()
+  @IsNotEmpty({ message: 'ALLOWED_ORIGINS es obligatoria en produccion' })
+  ALLOWED_ORIGINS?: string;
 }
 
 export function validarEntorno(configuracion: Record<string, unknown>): VariablesDeEntorno {

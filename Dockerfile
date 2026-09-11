@@ -8,13 +8,13 @@ ARG NODE_VERSION=24.16-slim
 # ---------- dependencias ----------
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # ---------- build ----------
 FROM node:${NODE_VERSION} AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -27,7 +27,7 @@ WORKDIR /app
 # A diferencia de la etapa de produccion, aqui /app SI pertenece a `node`:
 # el modo watch recompila dentro del contenedor y necesita escribir dist/.
 RUN chown node:node /app
-COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node package.json package-lock.json .npmrc ./
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 USER node
 EXPOSE 3000
@@ -39,7 +39,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Solo dependencias de ejecucion: nada de devDependencies en la imagen final.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Los artefactos quedan propiedad de root y el proceso corre como `node`,
