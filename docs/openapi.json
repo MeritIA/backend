@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "MeritIA API",
+    "description": "API del backend de **MeritIA**, la plataforma de evaluacion de candidatos\nmediante ejercicios practicos calificados con apoyo de inteligencia artificial\nbajo rubricas definidas.\n\n### Como esta organizada\n\nEl backend es un monolito modular con seis modulos de negocio. Cada uno agrupa\nsus endpoints bajo su propia etiqueta:\n\n| Modulo | De que responde |\n|---|---|\n| autenticacion | registro, inicio de sesion, renovacion de token y roles |\n| vacantes | ofertas de trabajo y su asociacion con ejercicios |\n| ejercicios | banco de pruebas tecnicas con sus rubricas y versiones |\n| entregas | intentos de los candidatos y su estado |\n| evaluacion | calificacion de las entregas contra el servicio de IA |\n| reportes | resultados consolidados por vacante o por candidato |\n\n### Autenticacion\n\nLos tokens son **PASETO v4** con firma Ed25519, no JWT. El campo `exp` viaja\ncomo cadena ISO8601. Se envian en la cabecera `Authorization: Bearer <token>`.\n\nHay tres roles: **candidato**, **reclutador** y **administrador**. La\nautorizacion se comprueba por endpoint, por recurso y por operacion: pertenecer\nal rol correcto no basta si el recurso es de otro usuario.\n\n### Limites de peticiones\n\nLa API aplica limites por IP y por usuario autenticado. Los endpoints criticos\ntienen los suyos propios: diez inicios de sesion por minuto y cinco entregas\ncada cinco minutos.\n\nAl superarlos se responde **429** con la cabecera `Retry-After` indicando los\nsegundos que hay que esperar.\n\n### Errores\n\nNinguna respuesta de error incluye trazas de pila ni detalles internos.",
+    "version": "0.0.1",
+    "contact": {
+      "name": "Equipo MeritIA",
+      "url": "https://github.com/MeritIA",
+      "email": ""
+    },
+    "license": {
+      "name": "UNLICENSED",
+      "url": ""
+    }
+  },
+  "tags": [
+    {
+      "name": "autenticacion",
+      "description": "Registro, inicio de sesion, renovacion de token y roles"
+    },
+    {
+      "name": "vacantes",
+      "description": "Ofertas de trabajo y su asociacion con ejercicios"
+    },
+    {
+      "name": "ejercicios",
+      "description": "Banco de pruebas tecnicas con sus rubricas y versiones"
+    },
+    {
+      "name": "entregas",
+      "description": "Intentos de los candidatos y su estado"
+    },
+    {
+      "name": "evaluacion",
+      "description": "Calificacion de las entregas contra el servicio de IA"
+    },
+    {
+      "name": "reportes",
+      "description": "Resultados consolidados por vacante o por candidato"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Entorno local de desarrollo"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "paseto": {
+        "scheme": "bearer",
+        "bearerFormat": "PASETO",
+        "type": "http",
+        "description": "Token PASETO v4 obtenido en el inicio de sesion. Se envia como: Authorization: Bearer v4.public..."
+      }
+    },
+    "schemas": {}
+  }
+}
