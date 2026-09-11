@@ -173,6 +173,263 @@
           "autenticacion"
         ]
       }
+    },
+    "/vacantes": {
+      "post": {
+        "description": "La vacante nace en borrador y a nombre de quien la crea. El estado y el reclutador no se aceptan en el cuerpo: enviarlos devuelve 400.",
+        "operationId": "VacantesController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearVacanteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea una vacante en borrador",
+        "tags": [
+          "vacantes"
+        ]
+      },
+      "get": {
+        "description": "Un reclutador ve las suyas, no las de sus colegas. Un candidato ve unicamente las publicadas a las que fue invitado. Un administrador las ve todas.",
+        "operationId": "VacantesController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lista las vacantes visibles para quien pregunta",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}": {
+      "get": {
+        "operationId": "VacantesController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o quien pregunta no tiene acceso a ella. Se responde lo mismo en ambos casos: distinguirlos permitiria averiguar que vacantes existen probando identificadores."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta una vacante",
+        "tags": [
+          "vacantes"
+        ]
+      },
+      "patch": {
+        "description": "Solo el reclutador dueno. Una vacante cerrada no se edita.",
+        "operationId": "VacantesController_editar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarVacanteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "403": {
+            "description": "El rol no permite editar vacantes."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Edita una vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/ejercicios": {
+      "put": {
+        "description": "Reemplaza la lista completa. Solo mientras la vacante es un borrador: cambiarlos despues dejaria a dos candidatos del mismo proceso resolviendo pruebas distintas, y sus resultados dejarian de ser comparables.",
+        "operationId": "VacantesController_asociarEjercicios",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsociarEjerciciosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Define los ejercicios de la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/candidatos": {
+      "post": {
+        "description": "Es lo que le da acceso a ver la vacante y a resolver sus ejercicios.",
+        "operationId": "VacantesController_asignarCandidato",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsignarCandidatoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Invita a un candidato",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/publicar": {
+      "post": {
+        "description": "Exige al menos un ejercicio asociado: publicarla sin ninguno dejaria a los candidatos invitados sin nada que resolver.",
+        "operationId": "VacantesController_publicar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Publica la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/cerrar": {
+      "post": {
+        "description": "No se reabre: un proceso cerrado debe seguir siendo auditable tal como termino.",
+        "operationId": "VacantesController_cerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Cierra la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
     }
   },
   "info": {
@@ -322,6 +579,77 @@
         },
         "required": [
           "tokenDeRenovacion"
+        ]
+      },
+      "CrearVacanteDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Desarrollador backend junior",
+            "maxLength": 160
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Buscamos una persona para el equipo de plataforma...",
+            "maxLength": 10000
+          },
+          "ubicacion": {
+            "type": "string",
+            "example": "Bogota (hibrido)",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "titulo",
+          "descripcion"
+        ]
+      },
+      "EditarVacanteDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "ubicacion": {
+            "type": "object",
+            "maxLength": 120,
+            "nullable": true
+          }
+        }
+      },
+      "AsociarEjerciciosDto": {
+        "type": "object",
+        "properties": {
+          "idsDeEjercicios": {
+            "description": "Identificadores de los ejercicios, en el orden en que los vera el candidato. Reemplaza la lista anterior.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "idsDeEjercicios"
+        ]
+      },
+      "AsignarCandidatoDto": {
+        "type": "object",
+        "properties": {
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Candidato al que se invita a esta vacante."
+          }
+        },
+        "required": [
+          "idCandidato"
         ]
       }
     }
