@@ -378,20 +378,14 @@ describe('integracion: banco de ejercicios', () => {
       const id = await crearEjercicio();
 
       await Promise.all([
-        api(app)
-          .post(`/api/v1/ejercicios/${id}/versiones`)
-          .set(auth(reclutador))
-          .send({
-            enunciado: 'Primera version simultanea, con texto suficientemente largo.',
-            criterios: rubricaValida,
-          }),
-        api(app)
-          .post(`/api/v1/ejercicios/${id}/versiones`)
-          .set(auth(reclutador))
-          .send({
-            enunciado: 'Segunda version simultanea, con texto suficientemente largo.',
-            criterios: rubricaValida,
-          }),
+        api(app).post(`/api/v1/ejercicios/${id}/versiones`).set(auth(reclutador)).send({
+          enunciado: 'Primera version simultanea, con texto suficientemente largo.',
+          criterios: rubricaValida,
+        }),
+        api(app).post(`/api/v1/ejercicios/${id}/versiones`).set(auth(reclutador)).send({
+          enunciado: 'Segunda version simultanea, con texto suficientemente largo.',
+          criterios: rubricaValida,
+        }),
       ]);
 
       const filas = await consultar<{ numero: number }>(

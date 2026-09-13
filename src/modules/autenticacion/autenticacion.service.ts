@@ -5,7 +5,8 @@ import { Usuario } from './entities/usuario.entity.js';
 import { Rol } from './dominio/rol.js';
 import { PasetoService, TokenRechazadoError } from './servicios/paseto.service.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
-import type { LoginDto, RegistroDto, SesionRespuesta } from './dto/index.js';
+import type { LoginDto, RegistroDto } from './dto/index.js';
+import type { SesionCompleta } from './entrega-de-sesion.js';
 
 /**
  * Servicio de aplicacion del modulo de autenticacion.
@@ -23,7 +24,7 @@ export class AutenticacionService {
     private readonly contrasenas: ContrasenasService,
   ) {}
 
-  async registrar(datos: RegistroDto): Promise<SesionRespuesta> {
+  async registrar(datos: RegistroDto): Promise<SesionCompleta> {
     const correoHash = this.contrasenas.hashDeCorreo(datos.correo);
 
     if (await this.usuarios.exists({ where: { correoHash } })) {
@@ -59,7 +60,7 @@ export class AutenticacionService {
     return this.construirSesion(usuario);
   }
 
-  async iniciarSesion(datos: LoginDto): Promise<SesionRespuesta> {
+  async iniciarSesion(datos: LoginDto): Promise<SesionCompleta> {
     const correoHash = this.contrasenas.hashDeCorreo(datos.correo);
     const usuario = await this.usuarios.findOne({ where: { correoHash } });
 
@@ -86,7 +87,7 @@ export class AutenticacionService {
     return this.construirSesion(usuario);
   }
 
-  async renovar(tokenDeRenovacion: string): Promise<SesionRespuesta> {
+  async renovar(tokenDeRenovacion: string): Promise<SesionCompleta> {
     let contenido;
     try {
       contenido = await this.paseto.verificar(tokenDeRenovacion, 'renovacion');
@@ -134,7 +135,7 @@ export class AutenticacionService {
     this.registrarEvento('sesiones_cerradas', { idUsuario });
   }
 
-  private async construirSesion(usuario: Usuario): Promise<SesionRespuesta> {
+  private async construirSesion(usuario: Usuario): Promise<SesionCompleta> {
     const [tokenDeAcceso, tokenDeRenovacion] = await Promise.all([
       this.paseto.emitirAcceso(usuario.id, usuario.rol),
       this.paseto.emitirRenovacion(usuario.id, usuario.rol),

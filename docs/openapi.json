@@ -44,7 +44,7 @@
     },
     "/autenticacion/registro": {
       "post": {
-        "description": "Crea una cuenta de candidato y devuelve la sesion. El rol no se puede elegir: el registro publico solo crea candidatos, y enviar un campo `rol` devuelve 400.",
+        "description": "Crea una cuenta de candidato. El rol no se puede elegir: el registro publico solo crea candidatos, y enviar un campo `rol` devuelve 400.\n\nLos tokens se entregan segun el campo `cliente`: en **web** (por omision) viajan en cookies HttpOnly y NO aparecen en el cuerpo; en **apk** vienen en el cuerpo para guardarlos en el KeyStore.",
         "operationId": "AutenticacionController_registrar",
         "parameters": [],
         "requestBody": {
@@ -75,7 +75,7 @@
             "description": "Ya existe una cuenta con ese correo."
           },
           "429": {
-            "description": "Limite de peticiones superado. Ver cabecera Retry-After."
+            "description": "Limite superado. Ver cabecera Retry-After."
           }
         },
         "summary": "Registra un candidato",
@@ -86,7 +86,7 @@
     },
     "/autenticacion/login": {
       "post": {
-        "description": "Devuelve un token de acceso y uno de renovacion. Limitado a diez intentos por minuto. La respuesta de error no distingue entre correo inexistente y contrasena incorrecta, para no permitir averiguar que correos estan registrados.",
+        "description": "Limitado a diez intentos por minuto. La respuesta de error no distingue entre correo inexistente y contrasena incorrecta, para no permitir averiguar que correos estan registrados.\n\nEn **web** el token va en cookie HttpOnly y no es legible desde JavaScript; en **apk** viene en el cuerpo.",
         "operationId": "AutenticacionController_iniciarSesion",
         "parameters": [],
         "requestBody": {
@@ -114,7 +114,7 @@
             "description": "Credenciales invalidas."
           },
           "429": {
-            "description": "Limite de peticiones superado. Ver cabecera Retry-After."
+            "description": "Limite superado. Ver cabecera Retry-After."
           }
         },
         "summary": "Inicia sesion",
@@ -125,7 +125,7 @@
     },
     "/autenticacion/renovar": {
       "post": {
-        "description": "Entrega un token de acceso nuevo a partir de uno de renovacion vigente. Un token de acceso no sirve aqui.",
+        "description": "Entrega un token de acceso nuevo. En **web** el token de renovacion se lee de la cookie y no hay que enviarlo; en **apk** va en el cuerpo. Un token de acceso no sirve aqui.",
         "operationId": "AutenticacionController_renovar",
         "parameters": [],
         "requestBody": {
@@ -161,7 +161,7 @@
     },
     "/autenticacion/yo": {
       "get": {
-        "description": "Sirve al frontend para saber quien esta autenticado y con que rol.",
+        "description": "Sirve al frontend para saber quien esta autenticado y con que rol. Acepta el token por cabecera Authorization o por la cookie HttpOnly.",
         "operationId": "AutenticacionController_yo",
         "parameters": [],
         "responses": {
@@ -170,6 +170,9 @@
           }
         },
         "security": [
+          {
+            "meritia_acceso": []
+          },
           {
             "paseto": []
           }
@@ -182,7 +185,7 @@
     },
     "/autenticacion/cerrar-sesiones": {
       "post": {
-        "description": "Invalida todos los tokens emitidos hasta este momento. Es lo que permite cortar un token robado antes de que expire.",
+        "description": "Invalida todos los tokens emitidos hasta este momento y borra las cookies de este navegador. Es lo que permite cortar un token robado antes de que expire.",
         "operationId": "AutenticacionController_cerrarSesiones",
         "parameters": [],
         "responses": {
@@ -191,6 +194,9 @@
           }
         },
         "security": [
+          {
+            "meritia_acceso": []
+          },
           {
             "paseto": []
           }
@@ -682,6 +688,14 @@
             "type": "string",
             "example": "Ana Maria Torres",
             "maxLength": 120
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web"
           }
         },
         "required": [
@@ -695,11 +709,11 @@
         "properties": {
           "tokenDeAcceso": {
             "type": "string",
-            "description": "Token PASETO v4 para consumir la API."
+            "description": "Token PASETO de acceso. SOLO se devuelve cuando el cliente es \"apk\". En web viaja en la cookie HttpOnly meritia_acceso."
           },
           "tokenDeRenovacion": {
             "type": "string",
-            "description": "Token para obtener uno de acceso nuevo sin volver a iniciar sesion."
+            "description": "Token de renovacion. SOLO se devuelve cuando el cliente es \"apk\". En web viaja en la cookie HttpOnly meritia_renovacion."
           },
           "expiraEn": {
             "type": "string",
@@ -719,8 +733,6 @@
           }
         },
         "required": [
-          "tokenDeAcceso",
-          "tokenDeRenovacion",
           "expiraEn",
           "rol",
           "idUsuario"
@@ -736,6 +748,15 @@
           "contrasena": {
             "type": "string",
             "example": "una-frase-larga-y-dificil"
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web",
+            "description": "web: el token viaja en cookie HttpOnly y NO en el cuerpo. apk: viaja en el cuerpo, para guardarlo en el KeyStore."
           }
         },
         "required": [
@@ -748,13 +769,18 @@
         "properties": {
           "tokenDeRenovacion": {
             "type": "string",
-            "description": "Token de renovacion obtenido al iniciar sesion.",
+            "description": "Token de renovacion. Solo lo envia la APK: en la web viaja en la cookie HttpOnly y no hace falta mandarlo.",
             "example": "v4.public.eyJzdWIiOiIuLi4ifQ..."
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web"
           }
-        },
-        "required": [
-          "tokenDeRenovacion"
-        ]
+        }
       },
       "CrearVacanteDto": {
         "type": "object",

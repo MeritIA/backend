@@ -1,6 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
+import { TipoCliente } from '../dominio/tipo-cliente.js';
 
 /**
  * Datos de registro de un candidato.
@@ -40,4 +49,10 @@ export class RegistroDto {
   })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   nombreCompleto!: string;
+
+  /** Como se entrega el token. Ver dominio/tipo-cliente.ts. */
+  @ApiPropertyOptional({ enum: TipoCliente, default: TipoCliente.Web })
+  @IsOptional()
+  @IsEnum(TipoCliente, { message: 'cliente debe ser "web" o "apk"' })
+  cliente?: TipoCliente;
 }

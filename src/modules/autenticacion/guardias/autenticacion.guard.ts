@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AutenticacionService } from '../autenticacion.service.js';
+import { tokenDeLaPeticion } from '../entrega-de-sesion.js';
 import { PasetoService, TokenRechazadoError } from '../servicios/paseto.service.js';
 import type { Rol } from '../dominio/rol.js';
 
@@ -50,12 +51,15 @@ export class AutenticacionGuard implements CanActivate {
 
     const peticion = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
+      cookies?: Record<string, string | undefined>;
       url?: string;
       ip?: string;
       usuario?: UsuarioAutenticado;
     }>();
 
-    const token = extraerToken(peticion.headers.authorization);
+    // Cabecera Authorization (APK) o cookie HttpOnly (web). Aceptar las dos es
+    // lo que permite que ambos clientes usen el mismo backend.
+    const token = tokenDeLaPeticion(peticion);
     if (!token) {
       this.registrarFallo('token_ausente', peticion);
       throw new UnauthorizedException('Falta el token de acceso.');

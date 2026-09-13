@@ -37,6 +37,9 @@ describe('integracion: autenticacion', () => {
           correo: 'ana@ejemplo.com',
           contrasena: 'una-frase-larga-y-dificil',
           nombreCompleto: 'Ana Torres',
+          // Los tokens solo vienen en el cuerpo para la APK; el camino web
+          // tiene sus propias pruebas en tokens-httponly.int-spec.ts.
+          cliente: 'apk',
         })
         .expect(201);
 
@@ -143,7 +146,11 @@ describe('integracion: autenticacion', () => {
     it('entra con las credenciales correctas', async () => {
       const { body } = await api(app)
         .post('/api/v1/autenticacion/login')
-        .send({ correo: 'ana@ejemplo.com', contrasena: 'una-frase-larga-y-dificil' })
+        .send({
+          correo: 'ana@ejemplo.com',
+          contrasena: 'una-frase-larga-y-dificil',
+          cliente: 'apk',
+        })
         .expect(200);
       expect(body.tokenDeAcceso).toMatch(/^v4\.public\./);
     });
@@ -223,6 +230,7 @@ describe('integracion: autenticacion', () => {
           correo: 'ana@ejemplo.com',
           contrasena: 'una-frase-larga-y-dificil',
           nombreCompleto: 'Ana',
+          cliente: 'apk',
         })
         .expect(201);
 

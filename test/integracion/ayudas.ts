@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import cookieParser from 'cookie-parser';
 import { ValidationPipe, VersioningType, type INestApplication } from '@nestjs/common';
 import type { Server } from 'node:http';
 import { Client } from 'pg';
@@ -20,6 +21,12 @@ export async function levantarAplicacion(): Promise<INestApplication<Server>> {
   const app = modulo.createNestApplication<INestApplication<Server>>(
     process.env.PRUEBAS_CON_LOG === 'true' ? {} : { logger: false },
   );
+
+  // Sin esto req.cookies no existe y las pruebas del camino web fallarian con
+  // 401 aunque el codigo estuviera bien. Tiene que ir aqui porque main.ts lo
+  // registra: si los dos montajes divergen, las pruebas verifican una
+  // aplicacion que no es la que se despliega.
+  app.use(cookieParser());
 
   app.setGlobalPrefix(process.env.API_PREFIX ?? 'api');
   app.enableVersioning({
@@ -43,7 +50,16 @@ export interface Sesion {
   readonly correo: string;
 }
 
-/** Registra un candidato y devuelve su sesion. */
+/**
+ * Registra un candidato y devuelve su sesion.
+ *
+ * Pide `cliente: 'apk'` para recibir el token en el cuerpo. Un cliente web
+ * recibiria una cookie HttpOnly y ningun token en el JSON —esa es justamente
+ * la proteccion del paquete 3.5— y estas ayudas necesitan el token para
+ * ponerlo en la cabecera Authorization de las peticiones siguientes.
+ *
+ * El camino de cookies tiene sus propias pruebas en tokens-httponly.int-spec.ts.
+ */
 export async function registrarCandidato(
   app: INestApplication<Server>,
   correo: string,
@@ -51,7 +67,12 @@ export async function registrarCandidato(
 ): Promise<Sesion> {
   const { body } = await api(app)
     .post('/api/v1/autenticacion/registro')
-    .send({ correo, contrasena: 'una-frase-larga-y-dificil', nombreCompleto: nombre })
+    .send({
+      correo,
+      contrasena: 'una-frase-larga-y-dificil',
+      nombreCompleto: nombre,
+      cliente: 'apk',
+    })
     .expect(201);
   return { id: body.idUsuario as string, token: body.tokenDeAcceso as string, correo };
 }
@@ -83,7 +104,7 @@ export async function crearConRol(
 
   const { body } = await api(app)
     .post('/api/v1/autenticacion/login')
-    .send({ correo, contrasena: 'una-frase-larga-y-dificil' })
+    .send({ correo, contrasena: 'una-frase-larga-y-dificil', cliente: 'apk' })
     .expect(200);
 
   return { id: sesion.id, token: body.tokenDeAcceso as string, correo };

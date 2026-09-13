@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
 import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module.js';
@@ -16,6 +17,9 @@ interface ResponseMinima {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+
+  // Sin esto, req.cookies no existe y el token de la web nunca se leeria.
+  app.use(cookieParser());
 
   // Politica de CORS diferenciada por tipo de cliente (Plan de Seguridad §3).
   app.enableCors(construirOpcionesCors());
