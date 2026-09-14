@@ -59,6 +59,10 @@ function entero(valor: string | undefined, porDefecto: number): number {
           host: process.env.REDIS_HOST ?? 'localhost',
           port: entero(process.env.REDIS_PORT, 6379),
           password: process.env.REDIS_PASSWORD || undefined,
+          // Base logica de Redis. Las pruebas de integracion usan otra para que
+          // sus contadores no se mezclen con los del backend de desarrollo, y
+          // para poder vaciarla sin tocar los de nadie.
+          db: Number(process.env.REDIS_DB ?? 0),
         }),
         errorMessage: 'Has superado el limite de peticiones. Intentalo de nuevo mas tarde.',
       }),

@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   Max,
@@ -75,6 +76,14 @@ export class VariablesDeEntorno {
   @Min(1)
   @Max(65535)
   REDIS_PORT!: number;
+
+  /** Base logica de Redis (0-15). Las pruebas de integracion usan otra. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(15)
+  REDIS_DB?: number;
 
   /**
    * Clave AES-256 en hexadecimal (Plan de Seguridad §5.2). Generarla con:

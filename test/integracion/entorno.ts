@@ -18,6 +18,41 @@ import { Client } from 'pg';
 const RAIZ = path.resolve(import.meta.dirname, '..', '..');
 export const BD_DE_PRUEBAS = 'meritia_pruebas';
 
+/**
+ * Base logica de Redis para las pruebas, aparte de la 0 del backend de desarrollo.
+ *
+ * Los contadores del rate limiting sobreviven entre corridas: un bloqueo que
+ * dejo una corrida anterior (de cinco minutos, en el limite de entregas) haria
+ * fallar con 429 la siguiente aunque el codigo estuviera bien. Por eso esta
+ * base se vacia al empezar, y por eso es otra: vaciar la 0 borraria los
+ * contadores de quien este usando la aplicacion.
+ */
+const BD_REDIS_DE_PRUEBAS = '1';
+
+async function vaciarRedisDePruebas(): Promise<void> {
+  const { Redis } = await import('ioredis');
+  const redis = new Redis({
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: Number(process.env.REDIS_PORT ?? 6379),
+    password: process.env.REDIS_PASSWORD || undefined,
+    db: Number(BD_REDIS_DE_PRUEBAS),
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+  });
+  try {
+    await redis.connect();
+    await redis.flushdb();
+  } catch (e) {
+    throw new Error(
+      `No se pudo conectar a Redis en ${process.env.REDIS_HOST}:${process.env.REDIS_PORT}.\n` +
+        'Levanta el entorno antes de correr estas pruebas:  docker compose up -d\n' +
+        `Detalle: ${(e as Error).message}`,
+    );
+  } finally {
+    redis.disconnect();
+  }
+}
+
 /** Lee .env sin depender de dotenv: son cuatro lineas y evita una dependencia. */
 function leerEnv(): Record<string, string> {
   const ruta = path.join(RAIZ, '.env');
@@ -54,6 +89,9 @@ export async function prepararEntorno(): Promise<void> {
   process.env.THROTTLE_IP_LIMIT = '100000';
   process.env.THROTTLE_USER_LIMIT = '100000';
   process.env.THROTTLE_LOGIN_LIMIT = '100000';
+  process.env.THROTTLE_SUBMISSION_LIMIT = '100000';
+  process.env.REDIS_DB = BD_REDIS_DE_PRUEBAS;
+  await vaciarRedisDePruebas();
 
   const admin = new Client({
     host: process.env.DATABASE_HOST,
@@ -105,6 +143,8 @@ export async function vaciarTablas(): Promise<void> {
   await cliente.connect();
   await cliente.query(`
     TRUNCATE
+      "entregas"."historial_estados",
+      "entregas"."entregas",
       "ejercicios"."criterios_rubrica",
       "ejercicios"."ejercicio_versiones",
       "ejercicios"."ejercicios",
