@@ -81,6 +81,14 @@ for (const [nombre, puerto] of [
   ['backend', env.PORT],
 ]) {
   if (!puerto) continue;
+  if (Number(puerto) >= 49152) {
+    // Rango dinamico de Windows: Hyper-V reserva bloques distintos en cada
+    // reinicio, asi que un puerto de aqui funciona hoy y falla manana.
+    aviso(
+      `${nombre} usa el puerto ${puerto}, dentro del rango dinamico (49152+). Usa uno por debajo.`,
+    );
+    problemas++;
+  }
   if (await responde(puerto)) ok(`${nombre} responde en ${puerto}`);
   else aviso(`${nombre} no responde en ${puerto}  (levanta el entorno: docker compose up -d)`);
 }

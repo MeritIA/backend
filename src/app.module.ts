@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { validarEntorno } from './config/index.js';
 import { DatabaseModule } from './database/index.js';
 import { RateLimitModule } from './common/rate-limit/index.js';
+import { AlmacenamientoModule } from './common/almacenamiento/index.js';
 import { SaludController } from './common/salud/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -32,6 +33,7 @@ import { ReportesModule } from './modules/reportes/index.js';
     }),
     DatabaseModule,
     RateLimitModule,
+    AlmacenamientoModule,
     AutenticacionModule,
     VacantesModule,
     EjerciciosModule,

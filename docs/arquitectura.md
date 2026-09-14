@@ -246,8 +246,9 @@ npm run doctor            # comprueba que todo responde
 
 Cuatro servicios separados: backend, PostgreSQL, Redis y MinIO.
 
-**Los puertos publicados están en un rango propio** (55432, 56379, 59000,
-59001) y no en los de cada producto. Una instalación de PostgreSQL en el sistema
+**Los puertos publicados están en un rango propio** (15432, 16379, 19000,
+19001) y no en los de cada producto, y por debajo de 49152: de ahí para arriba
+Windows reserva bloques distintos en cada reinicio. Una instalación de PostgreSQL en el sistema
 se queda con el 5432 y las conexiones acaban en ella en lugar de en el
 contenedor, fallando con un error de contraseña que no apunta a la causa.
 `npm run doctor` detecta exactamente ese caso.

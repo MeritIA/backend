@@ -96,6 +96,23 @@ export class VariablesDeEntorno {
   @IsNotEmpty({ message: 'ALLOWED_ORIGINS es obligatoria en produccion' })
   ALLOWED_ORIGINS?: string;
 
+  /** Almacenamiento de objetos (paquete 3.3). Credenciales como secreto. */
+  @IsString()
+  @IsNotEmpty()
+  S3_ENDPOINT!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  S3_BUCKET!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'S3_ACCESS_KEY es obligatoria' })
+  S3_ACCESS_KEY!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'S3_SECRET_KEY es obligatoria' })
+  S3_SECRET_KEY!: string;
+
   /** Par Ed25519 para PASETO v4, en base64 del PEM. Ver `npm run claves:generar`. */
   @IsString()
   @IsNotEmpty({
