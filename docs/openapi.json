@@ -611,6 +611,181 @@
           "ejercicios"
         ]
       }
+    },
+    "/entregas": {
+      "post": {
+        "description": "Solo candidatos invitados a una vacante publicada. Extensiones admitidas: zip, tar, gz, tgz, pdf, md, txt, ipynb, sql, json; maximo 25 MiB. Cinco entregas cada cinco minutos.",
+        "operationId": "EntregasController_entregar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idVacante",
+                  "idEjercicio",
+                  "archivo"
+                ],
+                "properties": {
+                  "idVacante": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "idEjercicio": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "La vacante no existe o no acepta entregas de este candidato."
+          },
+          "409": {
+            "description": "Se agotaron los intentos permitidos para el ejercicio."
+          },
+          "413": {
+            "description": "El archivo supera 25 MiB."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Entrega un intento de un ejercicio",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/mias": {
+      "get": {
+        "operationId": "EntregasController_mias",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Intentos del candidato autenticado",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/vacante/{idVacante}": {
+      "get": {
+        "operationId": "EntregasController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Entregas de una vacante, para su reclutador o un administrador",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/{id}": {
+      "get": {
+        "description": "Para el candidato que lo entrego, el reclutador de la vacante o un administrador. El historial muestra cada cambio de estado con su momento y su motivo.",
+        "operationId": "EntregasController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No existe, o quien pregunta no tiene acceso."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta un intento con su historial de estados",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/{id}/descarga": {
+      "get": {
+        "description": "El enlace esta firmado y caduca a los cinco minutos.",
+        "operationId": "EntregasController_enlaceDeDescarga",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enlace temporal para descargar el archivo",
+        "tags": [
+          "entregas"
+        ]
+      }
     }
   },
   "info": {
@@ -799,6 +974,13 @@
             "type": "string",
             "example": "Bogota (hibrido)",
             "maxLength": 120
+          },
+          "intentosPermitidos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 1,
+            "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
           }
         },
         "required": [
@@ -821,6 +1003,13 @@
             "type": "object",
             "maxLength": 120,
             "nullable": true
+          },
+          "intentosPermitidos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 1,
+            "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
           }
         }
       },

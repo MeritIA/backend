@@ -30,6 +30,13 @@ export class Vacante {
   @Column({ type: 'varchar', length: 120, nullable: true })
   ubicacion!: string | null;
 
+  /**
+   * Intentos que cada candidato tiene por ejercicio. Por omision 1: dar mas
+   * oportunidades es una decision explicita del reclutador.
+   */
+  @Column({ type: 'int', name: 'intentos_permitidos', default: 1 })
+  intentosPermitidos!: number;
+
   @Column({
     type: 'enum',
     enum: EstadoVacante,

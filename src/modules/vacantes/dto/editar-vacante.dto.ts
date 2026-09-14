@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength, IsInt, Max, Min } from 'class-validator';
 
 /** Todo opcional: se edita solo lo que se envia. */
 export class EditarVacanteDto {
@@ -25,4 +25,17 @@ export class EditarVacanteDto {
   @MaxLength(120)
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   ubicacion?: string | null;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 10,
+    default: 1,
+    description:
+      'Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'intentosPermitidos debe ser un entero' })
+  @Min(1, { message: 'intentosPermitidos debe ser al menos 1' })
+  @Max(10, { message: 'intentosPermitidos no puede superar 10' })
+  intentosPermitidos?: number;
 }

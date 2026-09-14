@@ -74,6 +74,29 @@ Para el flujo que encadena `entregas → evaluacion → reportes` se usan **even
 internos** en lugar de llamadas directas, de modo que cada módulo quede
 desacoplado del siguiente.
 
+El canal es `BusDeEventos` (`src/common/events/`). Quien publica no sabe quién
+escucha: entregas publica `entregas.entrega-completada` con solo identificadores,
+y evaluación (4.5) se suscribirá por ese nombre sin importar nada más de
+entregas que el nombre y el tipo de los datos.
+
+- **Se publica después del commit.** Si se publicara dentro de la transacción,
+  un suscriptor podría buscar una entrega que aún no existe para nadie más.
+- **La entrega es asíncrona.** Un suscriptor lento o que falla no hace lenta ni
+  fallida la petición del candidato; su error se registra y no llega a los demás.
+- **Límite conocido: vive en memoria.** Si el proceso se cae entre el commit y
+  la entrega del evento, ese evento se pierde. La durabilidad llega con la cola
+  del paquete 4.1: el bus seguirá siendo la interfaz y la cola, su transporte.
+
+### 3.1.1 Entregas: intentos, estados y trazabilidad
+
+| Regla | Cómo se garantiza |
+|---|---|
+| No se excede el número de intentos | `intentos_permitidos` en la vacante (1 por omisión, 1–10, solo editable en borrador). Se cuenta por candidato y ejercicio dentro de una transacción con `pg_advisory_xact_lock`; el índice único sobre el número de intento es la red de seguridad. |
+| El estado es consultable y trazable | `recibida → en_evaluacion → evaluada \| fallida`, `fallida → en_evaluacion` (reintento sin gastar intento del candidato). Cada cambio escribe una fila en `historial_estados` con su motivo; `cambiarEstado` bloquea la fila para que dos evaluadores no tomen la misma entrega. |
+| Solo quien corresponde ve una entrega | El candidato autor, el reclutador de la vacante o un administrador. A los demás, 404 y no 403. |
+| El archivo no miente sobre su tipo | El `Content-Type` se deduce de la extensión validada, no del que declara el cliente. El nombre original se guarda cifrado. |
+| No quedan archivos huérfanos | Si la inserción o el commit fallan, el objeto subido se borra. |
+
 ### 3.2 Organización del código
 
 ```
@@ -305,7 +328,6 @@ del token.
 | 2.3 | Banco de ejercicios | — |
 | 2.4 | API versionada, DTOs y filtro global de excepciones | Anderson Fabián García Nieto |
 | 3.3 | Almacenamiento de objetos | Daniel Eduardo Useche Pinilla |
-| 3.4 | Módulo de entregas | — |
 | 4.1 | Cola asíncrona | Daniel Eduardo Useche Pinilla |
 | 4.2 | Filtros anti *prompt injection* | — |
 | 4.3 – 4.5 | Rúbricas, servicio de IA y orquestación | — |

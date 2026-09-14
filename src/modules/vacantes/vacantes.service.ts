@@ -53,6 +53,7 @@ export class VacantesService {
       titulo: datos.titulo,
       descripcion: datos.descripcion,
       ubicacion: datos.ubicacion ?? null,
+      intentosPermitidos: datos.intentosPermitidos ?? 1,
       // El reclutador es quien la crea; no se acepta del cuerpo de la peticion.
       idReclutador: solicitante.id,
       estado: EstadoVacante.Borrador,
@@ -120,6 +121,16 @@ export class VacantesService {
     if (datos.titulo !== undefined) vacante.titulo = datos.titulo;
     if (datos.descripcion !== undefined) vacante.descripcion = datos.descripcion;
     if (datos.ubicacion !== undefined) vacante.ubicacion = datos.ubicacion;
+    if (datos.intentosPermitidos !== undefined) {
+      // Mismo motivo que los ejercicios: con el proceso abierto, cambiar el
+      // limite dejaria a unos candidatos con mas oportunidades que otros.
+      if (vacante.estado !== EstadoVacante.Borrador) {
+        throw new BadRequestException(
+          'El numero de intentos solo se cambia mientras la vacante es un borrador.',
+        );
+      }
+      vacante.intentosPermitidos = datos.intentosPermitidos;
+    }
 
     await this.vacantes.save(vacante);
     this.registrar('vacante_editada', solicitante, { idVacante: id });
@@ -276,6 +287,27 @@ export class VacantesService {
     const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
     if (!vacante || vacante.estado === EstadoVacante.Borrador) return false;
     return this.asignaciones.exists({ where: { idVacante, idCandidato } });
+  }
+
+  /** Un candidato solo entrega en una vacante PUBLICADA a la que fue invitado. */
+  async puedeRecibirEntrega(idVacante: string, idCandidato: string): Promise<boolean> {
+    const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
+    if (vacante?.estado !== EstadoVacante.Publicada) return false;
+    return this.asignaciones.exists({ where: { idVacante, idCandidato } });
+  }
+
+  /** Quien puede ver las entregas de una vacante: su reclutador o un administrador. */
+  async puedeVerEntregasDe(idVacante: string, solicitante: Solicitante): Promise<boolean> {
+    const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
+    if (!vacante) return false;
+    if (solicitante.rol === Rol.Administrador) return true;
+    return solicitante.rol === Rol.Reclutador && vacante.idReclutador === solicitante.id;
+  }
+
+  async intentosPermitidosPara(idVacante: string): Promise<number> {
+    const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
+    if (!vacante) throw new NotFoundException('La vacante no existe.');
+    return vacante.intentosPermitidos;
   }
 
   // --- Interno ---
