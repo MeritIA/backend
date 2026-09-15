@@ -49,6 +49,11 @@ export class EntregaRespuesta {
   @ApiProperty({ format: 'uuid' }) idEjercicio!: string;
   @ApiProperty() numeroIntento!: number;
   @ApiProperty({ enum: EstadoEntrega }) estado!: EstadoEntrega;
+  @ApiProperty({
+    description:
+      'Verdadero mientras la entrega espera en la cola o se esta evaluando. Pasa a falso al terminar, bien o mal.',
+  })
+  enProcesoDeEvaluacion!: boolean;
   @ApiProperty() archivoNombre!: string;
   @ApiProperty() archivoBytes!: number;
   @ApiProperty({ description: 'SHA-256 del archivo, para verificar su integridad.' })
@@ -65,6 +70,8 @@ export function aRespuesta(e: Entrega): EntregaRespuesta {
     idEjercicio: e.idEjercicio,
     numeroIntento: e.numeroIntento,
     estado: e.estado,
+    enProcesoDeEvaluacion:
+      e.estado === EstadoEntrega.Recibida || e.estado === EstadoEntrega.EnEvaluacion,
     archivoNombre: e.archivoNombre,
     archivoBytes: e.archivoBytes,
     archivoSha256: e.archivoSha256,

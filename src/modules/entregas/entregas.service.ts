@@ -31,6 +31,15 @@ export interface ArchivoSubido {
 
 export class TransicionInvalidaError extends Error {}
 
+export interface DatosParaEvaluacion {
+  readonly idEntrega: string;
+  readonly idVacante: string;
+  readonly idCandidato: string;
+  readonly idEjercicio: string;
+  readonly numeroIntento: number;
+  readonly estado: EstadoEntrega;
+}
+
 /**
  * El tipo de contenido se deduce de la extension ya validada, NO del que
  * declara el cliente. La cabecera Content-Type de una subida la escribe quien
@@ -284,6 +293,55 @@ export class EntregasService {
       );
     });
     return this.obtenerConHistorial(idEntrega);
+  }
+
+  /**
+   * Entregas recibidas que llevan mas de `antiguedadMs` sin pasar a evaluacion.
+   *
+   * El evento de entrega completada viaja en memoria: si el proceso cae entre
+   * el commit y el encolado, la entrega quedaria en `recibida` para siempre.
+   * Evaluacion usa esta consulta al arrancar para volver a encolarlas.
+   */
+  async pendientesDeEvaluacion(antiguedadMs: number, limite = 500): Promise<string[]> {
+    const filas = await this.entregas
+      .createQueryBuilder('e')
+      .select('e.id', 'id')
+      .where('e.estado = :estado', { estado: EstadoEntrega.Recibida })
+      .andWhere('e.creadaEn < :corte', { corte: new Date(Date.now() - antiguedadMs) })
+      .orderBy('e.creadaEn', 'ASC')
+      .limit(limite)
+      .getRawMany<{ id: string }>();
+    return filas.map((f) => f.id);
+  }
+
+  /**
+   * Lo que evaluacion necesita de una entrega, sin control de acceso.
+   *
+   * No hay usuario detras: la llama el worker de la cola. Devuelve solo
+   * identificadores y estado, nunca el nombre del archivo ni datos personales.
+   */
+  async datosParaEvaluacion(idEntrega: string): Promise<DatosParaEvaluacion | null> {
+    const e = await this.entregas.findOne({
+      where: { id: idEntrega },
+      select: {
+        id: true,
+        idVacante: true,
+        idCandidato: true,
+        idEjercicio: true,
+        numeroIntento: true,
+        estado: true,
+      },
+    });
+    return e
+      ? {
+          idEntrega: e.id,
+          idVacante: e.idVacante,
+          idCandidato: e.idCandidato,
+          idEjercicio: e.idEjercicio,
+          numeroIntento: e.numeroIntento,
+          estado: e.estado,
+        }
+      : null;
   }
 
   /** Referencia al archivo, para que evaluacion lo descargue. */
