@@ -1,0 +1,63 @@
+# Despliegue en un ambiente. Lo invoca ci.yml; no se ejecuta por si solo.
+#
+# Criterio del paquete 1.2: "Los secretos no se comparten entre ambientes".
+#
+# Como se garantiza:
+#   - El trabajo declara `environment`, asi GitHub le entrega SOLO los secretos
+#     de ese Environment (desarrollo, pruebas o produccion).
+#   - No se usa `secrets: inherit`: los secretos del repositorio no llegan aqui.
+#   - Los secretos de la aplicacion NO deben crearse a nivel de repositorio,
+#     solo por Environment (ver docs/ci-cd.md).
+
+name: Despliegue
+
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        required: true
+        type: string
+      imagen:
+        description: Imagen por digest, ghcr.io/...@sha256:...
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    name: Desplegar en ${{ inputs.ambiente }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ inputs.ambiente }}
+    steps:
+      - name: Comprobar que el ambiente tiene sus propios secretos
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          PASETO_PRIVATE_KEY: ${{ secrets.PASETO_PRIVATE_KEY }}
+          PASETO_PUBLIC_KEY: ${{ secrets.PASETO_PUBLIC_KEY }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+        run: |
+          faltan=0
+          for nombre in DATABASE_PASSWORD ENCRYPTION_KEY PASETO_PRIVATE_KEY PASETO_PUBLIC_KEY S3_ACCESS_KEY S3_SECRET_KEY; do
+            if [ -z "${!nombre}" ]; then
+              echo "::error::Falta el secreto $nombre en el Environment '$AMBIENTE'."
+              faltan=1
+            fi
+          done
+          exit "$faltan"
+
+      # El comando concreto depende del proveedor de nube, que el proyecto aun
+      # no ha elegido. Falla a proposito: activar DESPLIEGUE_HABILITADO sin
+      # implementar este paso debe notarse, no pasar en verde sin desplegar nada.
+      - name: Desplegar la imagen
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+          IMAGEN: ${{ inputs.imagen }}
+        run: |
+          echo "::error::Paso de despliegue pendiente de proveedor de nube. Imagen: $IMAGEN, ambiente: $AMBIENTE."
+          exit 1

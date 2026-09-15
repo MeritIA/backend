@@ -1,0 +1,8 @@
+# Falsos positivos revisados a mano. Cada entrada es la huella EXACTA de un
+# hallazgo (commit:archivo:regla:linea), no un patron: un secreto nuevo en el
+# mismo archivo se sigue detectando.
+#
+# README.md:5 del commit inicial. Es `token=abc123def456`, el valor de ejemplo
+# del badge de CircleCI que trae la plantilla de NestJS. No es una credencial de
+# MeritIA ni de nadie. Revisado el 2026-09-15.
+0eac54eb2deb6d636f2d3959433d29b6d78f0798:README.md:generic-api-key:5

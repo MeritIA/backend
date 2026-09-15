@@ -34,7 +34,8 @@ export default defineConfig({
         'src/database/migrations/**',
         'src/main.ts',
       ],
-      reporter: ['text', 'html'],
+      // lcov lo consume SonarQube en la CI para mostrar la cobertura junto al analisis.
+      reporter: ['text', 'html', 'lcov'],
       // El umbral del Diccionario, aplicado por la herramienta: por debajo, la
       // ejecucion falla. Un criterio de aceptacion que no se comprueba solo es
       // una intencion, no un criterio.

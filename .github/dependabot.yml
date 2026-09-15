@@ -1,0 +1,25 @@
+# Actualizaciones de dependencias (Plan de Seguridad §10). Las propuestas pasan
+# por el mismo pipeline que cualquier cambio: si rompen algo, no se fusionan.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Los parches y menores de desarrollo van juntos para no inundar de PR.
+      desarrollo:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Las acciones van fijadas por SHA; Dependabot mantiene el SHA al dia.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
