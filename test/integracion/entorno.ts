@@ -39,6 +39,9 @@ async function vaciarRedisDePruebas(): Promise<void> {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
+  // Sin oyente, ioredis imprime "Unhandled error event" antes del mensaje
+  // claro de abajo, que es el que dice que hacer.
+  redis.on('error', () => undefined);
   try {
     await redis.connect();
     await redis.flushdb();
