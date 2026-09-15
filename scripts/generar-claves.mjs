@@ -7,20 +7,12 @@
  * proposito: que las claves pasen por los ojos de quien las genera evita
  * sobrescribir sin querer las de un entorno que ya estaba funcionando.
  */
-import { createPublicKey, randomBytes } from 'node:crypto';
-import pkg from 'paseto';
+import { generarClaves } from './lib/claves.mjs';
 
-const { V4 } = pkg;
-const secreta = await V4.generateKey('public');
-const privada = Buffer.from(secreta.export({ type: 'pkcs8', format: 'pem' })).toString('base64');
-const publica = Buffer.from(
-  createPublicKey(secreta).export({ type: 'spki', format: 'pem' }),
-).toString('base64');
+const claves = await generarClaves();
 
 console.log('\nPega estas lineas en tu .env (y NUNCA las subas a Git):\n');
-console.log(`PASETO_PRIVATE_KEY=${privada}`);
-console.log(`PASETO_PUBLIC_KEY=${publica}`);
-console.log(`ENCRYPTION_KEY=${randomBytes(32).toString('hex')}`);
+for (const [nombre, valor] of Object.entries(claves)) console.log(`${nombre}=${valor}`);
 console.log(
   '\nRotacion: anual o ante sospecha de compromiso (Plan de Seguridad §8).\n' +
     'Al rotar ENCRYPTION_KEY hay que re-cifrar los datos ya guardados.\n',
