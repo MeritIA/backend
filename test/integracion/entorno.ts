@@ -91,6 +91,11 @@ export async function prepararEntorno(): Promise<void> {
   process.env.THROTTLE_LOGIN_LIMIT = '100000';
   process.env.THROTTLE_SUBMISSION_LIMIT = '100000';
   process.env.REDIS_DB = BD_REDIS_DE_PRUEBAS;
+  // El worker de la cola, apagado salvo en la suite que lo prueba: en las
+  // demas cambiaria el estado de las entregas por detras de las aserciones.
+  process.env.COLA_WORKER_HABILITADO = 'false';
+  process.env.COLA_REINTENTOS = '3';
+  process.env.COLA_BACKOFF_MS = '20';
   await vaciarRedisDePruebas();
 
   const admin = new Client({

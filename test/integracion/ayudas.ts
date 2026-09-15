@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe, VersioningType, type INestApplication } from '@nestjs/common';
 import type { Server } from 'node:http';
@@ -13,11 +13,15 @@ import { BD_DE_PRUEBAS } from './entorno.js';
  * estas pruebas verificarian una aplicacion que no existe: el caso clasico es
  * olvidar el ValidationPipe y creer que la validacion funciona.
  */
-export async function levantarAplicacion(): Promise<INestApplication<Server>> {
+export async function levantarAplicacion(
+  ajustar: (m: TestingModuleBuilder) => TestingModuleBuilder = (m) => m,
+): Promise<INestApplication<Server>> {
   const { AppModule } = await import('../../src/app.module.js');
   const { TodasLasExcepcionesFilter } = await import('../../src/common/errores/index.js');
 
-  const modulo = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  // `ajustar` solo sustituye dependencias EXTERNAS (el servicio de IA). El
+  // montaje de la aplicacion sigue siendo el mismo que en produccion.
+  const modulo = await ajustar(Test.createTestingModule({ imports: [AppModule] })).compile();
   const app = modulo.createNestApplication<INestApplication<Server>>(
     process.env.PRUEBAS_CON_LOG === 'true' ? {} : { logger: false },
   );

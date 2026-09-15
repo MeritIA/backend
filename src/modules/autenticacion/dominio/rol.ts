@@ -43,6 +43,7 @@ export const PERMISOS = {
   'evaluaciones:leerPropias': [Rol.Candidato],
   'evaluaciones:leerDeLaVacante': [Rol.Reclutador, Rol.Administrador],
   'evaluaciones:reintentar': [Rol.Administrador],
+  'evaluaciones:verCola': [Rol.Administrador],
 
   'reportes:verDeLaVacante': [Rol.Reclutador, Rol.Administrador],
 

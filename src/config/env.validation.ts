@@ -2,6 +2,7 @@ import { plainToInstance, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -84,6 +85,37 @@ export class VariablesDeEntorno {
   @Min(0)
   @Max(15)
   REDIS_DB?: number;
+
+  /** Cola de evaluacion (paquete 4.1). Todas opcionales, con valores por omision. */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  COLA_WORKER_HABILITADO?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  COLA_CONCURRENCIA?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  COLA_REINTENTOS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(10)
+  COLA_BACKOFF_MS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  COLA_TIMEOUT_MS?: number;
 
   /**
    * Clave AES-256 en hexadecimal (Plan de Seguridad §5.2). Generarla con:

@@ -786,6 +786,77 @@
           "entregas"
         ]
       }
+    },
+    "/evaluaciones/cola": {
+      "get": {
+        "description": "Para administradores. Una cola que crece sin parar indica que el servicio de IA no da abasto o esta caido.",
+        "operationId": "EvaluacionesController_metricas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasDeColaRespuesta"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Longitud y estado de la cola de evaluacion",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/{idEntrega}/reintentar": {
+      "post": {
+        "description": "No consume un intento del candidato: el fallo fue de la evaluacion, no suyo.",
+        "operationId": "EvaluacionesController_reintentar",
+        "parameters": [
+          {
+            "name": "idEntrega",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReintentoRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La entrega no existe."
+          },
+          "409": {
+            "description": "La entrega no esta en estado fallida."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Reintenta la evaluacion de una entrega fallida",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
     }
   },
   "info": {
@@ -1128,6 +1199,60 @@
         "required": [
           "enunciado",
           "criterios"
+        ]
+      },
+      "MetricasDeColaRespuesta": {
+        "type": "object",
+        "properties": {
+          "enEspera": {
+            "type": "number",
+            "description": "Esperando un worker libre."
+          },
+          "activos": {
+            "type": "number",
+            "description": "Evaluandose ahora."
+          },
+          "reprogramados": {
+            "type": "number",
+            "description": "Esperando su siguiente reintento."
+          },
+          "fallidos": {
+            "type": "number",
+            "description": "Agotaron los reintentos; se conservan 30 dias."
+          },
+          "completados": {
+            "type": "number",
+            "description": "Completados en las ultimas 24 horas."
+          },
+          "workerActivo": {
+            "type": "boolean",
+            "description": "Si este proceso consume la cola."
+          }
+        },
+        "required": [
+          "enEspera",
+          "activos",
+          "reprogramados",
+          "fallidos",
+          "completados",
+          "workerActivo"
+        ]
+      },
+      "ReintentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estado": {
+            "type": "string",
+            "example": "encolada"
+          }
+        },
+        "required": [
+          "idEntrega",
+          "estado"
         ]
       }
     }

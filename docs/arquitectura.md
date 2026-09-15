@@ -83,9 +83,34 @@ entregas que el nombre y el tipo de los datos.
   un suscriptor podría buscar una entrega que aún no existe para nadie más.
 - **La entrega es asíncrona.** Un suscriptor lento o que falla no hace lenta ni
   fallida la petición del candidato; su error se registra y no llega a los demás.
-- **Límite conocido: vive en memoria.** Si el proceso se cae entre el commit y
-  la entrega del evento, ese evento se pierde. La durabilidad llega con la cola
-  del paquete 4.1: el bus seguirá siendo la interfaz y la cola, su transporte.
+- **Vive en memoria.** Si el proceso se cae entre el commit y la entrega del
+  evento, ese evento se pierde. Desde el paquete 4.1 eso no pierde la
+  evaluación: un barrido cada cinco minutos vuelve a encolar las entregas que
+  llevan más de dos minutos en `recibida` (ver 3.1.2).
+
+### 3.1.2 Cola de evaluación (paquete 4.1)
+
+Evaluación escucha `entregas.entrega-completada` y encola un trabajo en BullMQ
+sobre Redis. La petición del candidato ya respondió cuando eso ocurre.
+
+| Pregunta | Respuesta |
+|---|---|
+| ¿Qué viaja por Redis? | Solo el UUID de la entrega. Nada personal: Redis no cifra en reposo. |
+| ¿Y si el servicio de IA falla? | 5 intentos con backoff exponencial y jitter (15 s, 30 s, 60 s, 120 s) y 120 s de tiempo máximo por intento. Configurable con `COLA_*`. |
+| ¿Y si agota los intentos? | La entrega pasa a `fallida` con un motivo genérico (el detalle técnico va solo al log), el trabajo se conserva 30 días y un administrador lo reintenta con `POST /api/v1/evaluaciones/{idEntrega}/reintentar`, sin gastar intento del candidato. |
+| ¿Y si el error no se arregla reintentando? | `EvaluacionNoReintentableError` la marca `fallida` al primer fallo. |
+| ¿Y si muere el worker a mitad? | BullMQ detecta el bloqueo vencido y devuelve el trabajo a la cola; a los dos abandonos seguidos se da por fallido. |
+| ¿Y si se reinicia Redis? | Redis corre con AOF (`compose.yaml`): pierde como mucho el último segundo, y el barrido recupera lo que falte. |
+| ¿Se puede evaluar dos veces? | No. El id del trabajo es el de la entrega, y una entrega ya `evaluada` termina sin llamar al servicio de IA. |
+| ¿Qué ve el candidato? | `estado` (`recibida` → `en_evaluacion` → `evaluada`/`fallida`) y `enProcesoDeEvaluacion`. |
+| ¿Cómo se vigila? | `GET /api/v1/evaluaciones/cola` (administradores): en espera, activos, reprogramados, fallidos, completados. |
+
+`COLA_WORKER_HABILITADO=false` apaga el consumo en un proceso, para que en
+producción las instancias que atienden la API no carguen con las evaluaciones.
+
+Mientras no exista el servicio de IA (4.4), el evaluador registrado falla de
+forma honesta: las entregas agotan sus intentos y quedan `fallida`, listas para
+reintentarse cuando el adaptador esté conectado. No se inventa ninguna nota.
 
 ### 3.1.1 Entregas: intentos, estados y trazabilidad
 
@@ -328,7 +353,6 @@ del token.
 | 2.3 | Banco de ejercicios | — |
 | 2.4 | API versionada, DTOs y filtro global de excepciones | Anderson Fabián García Nieto |
 | 3.3 | Almacenamiento de objetos | Daniel Eduardo Useche Pinilla |
-| 4.1 | Cola asíncrona | Daniel Eduardo Useche Pinilla |
 | 4.2 | Filtros anti *prompt injection* | — |
 | 4.3 – 4.5 | Rúbricas, servicio de IA y orquestación | — |
 | 5.5 | Observabilidad y *health check* | Daniel Eduardo Useche Pinilla |
