@@ -128,9 +128,13 @@ describe('PasetoService', () => {
 
     it('rechaza un token manipulado', async () => {
       const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
+      // El caracter de reemplazo se elige distinto del original a proposito: con
+      // una 'X' fija, un token que ya terminara en 'X' quedaba intacto y la
+      // prueba fallaba una de cada sesenta y pico ejecuciones.
+      const distinto = (c: string) => (c === 'X' ? 'Y' : 'X');
       for (const roto of [
-        t.slice(0, -1) + 'X',
-        'X' + t.slice(1),
+        t.slice(0, -1) + distinto(t.at(-1) ?? ''),
+        distinto(t[0]) + t.slice(1),
         t.replace('v4.public.', 'v4.local.'),
       ]) {
         expect(await motivoDe(servicio.verificar(roto, 'acceso'))).toBe('firma_invalida');
