@@ -315,6 +315,20 @@ export class VacantesService {
     return solicitante.rol !== Rol.Candidato && vacante.idEmpresa === solicitante.idEmpresa;
   }
 
+  /**
+   * Empresa dueña de una vacante, o null si ya no existe.
+   *
+   * La usa evaluacion para guardar cada resultado con su empresa: es lo que
+   * permite que un reporte no mezcle datos de dos clientes.
+   */
+  async empresaDeLaVacante(idVacante: string): Promise<string | null> {
+    const vacante = await this.vacantes.findOne({
+      where: { id: idVacante },
+      select: { id: true, idEmpresa: true },
+    });
+    return vacante?.idEmpresa ?? null;
+  }
+
   async intentosPermitidosPara(idVacante: string): Promise<number> {
     const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
     if (!vacante) throw new NotFoundException('La vacante no existe.');

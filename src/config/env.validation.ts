@@ -164,6 +164,25 @@ export class VariablesDeEntorno {
   @IsString()
   @IsNotEmpty({ message: 'PASETO_PUBLIC_KEY es obligatoria. Generala con: npm run claves:generar' })
   PASETO_PUBLIC_KEY!: string;
+
+  /**
+   * Servicio de evaluacion con IA (paquetes 4.4 y 4.5). Solo el modulo de
+   * evaluacion habla con el, y siempre desde la cola.
+   */
+  @IsOptional()
+  @IsString()
+  AI_SERVICE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  AI_SERVICE_API_KEY?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  @Max(600_000)
+  AI_REQUEST_TIMEOUT_MS?: number;
 }
 
 export function validarEntorno(configuracion: Record<string, unknown>): VariablesDeEntorno {
