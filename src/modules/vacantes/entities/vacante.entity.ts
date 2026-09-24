@@ -57,6 +57,14 @@ export class Vacante {
   @Column({ type: 'uuid', name: 'id_reclutador' })
   idReclutador!: string;
 
+  /**
+   * Empresa dueña de la vacante. Se copia del reclutador al crearla y no
+   * cambia: es la frontera que impide que una empresa vea los datos de otra.
+   */
+  @Index('ix_vacantes_empresa')
+  @Column({ type: 'uuid', name: 'id_empresa' })
+  idEmpresa!: string;
+
   @OneToMany('VacanteEjercicio', 'vacante', { cascade: true })
   ejercicios!: VacanteEjercicio[];
 
