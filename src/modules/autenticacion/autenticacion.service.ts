@@ -41,6 +41,8 @@ export class AutenticacionService {
       nombreCompleto: datos.nombreCompleto,
       // El registro publico solo crea candidatos. El DTO no admite `rol`.
       rol: Rol.Candidato,
+      // Un candidato no pertenece a ninguna empresa: es una persona invitada.
+      idEmpresa: null,
       activo: true,
     });
 
@@ -137,8 +139,8 @@ export class AutenticacionService {
 
   private async construirSesion(usuario: Usuario): Promise<SesionCompleta> {
     const [tokenDeAcceso, tokenDeRenovacion] = await Promise.all([
-      this.paseto.emitirAcceso(usuario.id, usuario.rol),
-      this.paseto.emitirRenovacion(usuario.id, usuario.rol),
+      this.paseto.emitirAcceso(usuario.id, usuario.rol, usuario.idEmpresa),
+      this.paseto.emitirRenovacion(usuario.id, usuario.rol, usuario.idEmpresa),
     ]);
 
     const { exp } = await this.paseto.verificar(tokenDeAcceso, 'acceso');

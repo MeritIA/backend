@@ -32,12 +32,12 @@ describe('PasetoService', () => {
 
   describe('emision', () => {
     it('emite un token v4.public', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
       expect(t.startsWith('v4.public.')).toBe(true);
     });
 
     it('pone exp como cadena ISO8601 y no como timestamp Unix', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
       const { exp } = await servicio.verificar(t, 'acceso');
       // El riesgo que señala el Diccionario en este paquete: un exp mal
       // implementado deja tokens validos indefinidamente.
@@ -47,15 +47,15 @@ describe('PasetoService', () => {
     });
 
     it('distingue el token de acceso del de renovacion', async () => {
-      const acceso = await servicio.emitirAcceso('u-1', Rol.Candidato);
-      const renov = await servicio.emitirRenovacion('u-1', Rol.Candidato);
+      const acceso = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
+      const renov = await servicio.emitirRenovacion('u-1', Rol.Candidato, null);
 
       await expect(servicio.verificar(renov, 'acceso')).rejects.toThrow(TokenRechazadoError);
       await expect(servicio.verificar(acceso, 'renovacion')).rejects.toThrow(TokenRechazadoError);
     });
 
     it('conserva sujeto y rol', async () => {
-      const t = await servicio.emitirAcceso('u-42', Rol.Reclutador);
+      const t = await servicio.emitirAcceso('u-42', Rol.Reclutador, null);
       const c = await servicio.verificar(t, 'acceso');
       expect(c.sub).toBe('u-42');
       expect(c.rol).toBe(Rol.Reclutador);
@@ -127,7 +127,7 @@ describe('PasetoService', () => {
     });
 
     it('rechaza un token manipulado', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
       for (const roto of [
         t.slice(0, -1) + 'X',
         'X' + t.slice(1),
@@ -153,7 +153,7 @@ describe('PasetoService', () => {
 
     it('no revela el motivo en el mensaje que veria un cliente', async () => {
       // El motivo va al log; el guardia traduce todo a un 401 generico.
-      const t = await servicio.emitirRenovacion('u-1', Rol.Candidato);
+      const t = await servicio.emitirRenovacion('u-1', Rol.Candidato, null);
       try {
         await servicio.verificar(t, 'acceso');
       } catch (e) {

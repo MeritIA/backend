@@ -24,6 +24,8 @@ export interface ContenidoToken {
   /** Identificador del usuario. */
   readonly sub: string;
   readonly rol: Rol;
+  /** Empresa del usuario, o null si no tiene (candidato, o admin de plataforma). */
+  readonly emp: string | null;
   readonly tipo: TipoDeToken;
   /** Expiracion en ISO8601. */
   readonly exp: string;
@@ -79,17 +81,18 @@ export class PasetoService {
     this.diasDeRenovacion = Number(env.REFRESH_TOKEN_EXPIRATION_DAYS ?? 7);
   }
 
-  async emitirAcceso(idUsuario: string, rol: Rol): Promise<string> {
-    return this.emitir(idUsuario, rol, 'acceso', this.horasDeAcceso * 3600_000);
+  async emitirAcceso(idUsuario: string, rol: Rol, idEmpresa: string | null): Promise<string> {
+    return this.emitir(idUsuario, rol, idEmpresa, 'acceso', this.horasDeAcceso * 3600_000);
   }
 
-  async emitirRenovacion(idUsuario: string, rol: Rol): Promise<string> {
-    return this.emitir(idUsuario, rol, 'renovacion', this.diasDeRenovacion * 86_400_000);
+  async emitirRenovacion(idUsuario: string, rol: Rol, idEmpresa: string | null): Promise<string> {
+    return this.emitir(idUsuario, rol, idEmpresa, 'renovacion', this.diasDeRenovacion * 86_400_000);
   }
 
   private async emitir(
     sub: string,
     rol: Rol,
+    idEmpresa: string | null,
     tipo: TipoDeToken,
     duracionMs: number,
   ): Promise<string> {
@@ -97,6 +100,7 @@ export class PasetoService {
     const contenido: ContenidoToken = {
       sub,
       rol,
+      emp: idEmpresa,
       tipo,
       // ISO8601, como exige el Plan §2.2. El riesgo que el Diccionario señala en
       // este paquete es precisamente este: un `exp` mal implementado deja
@@ -140,12 +144,17 @@ export class PasetoService {
       throw this.rechazar('firma_invalida');
     }
 
-    const { sub, rol, tipo, exp, iat } = bruto as Partial<ContenidoToken>;
+    const { sub, rol, emp, tipo, exp, iat } = bruto as Partial<ContenidoToken>;
 
     if (typeof sub !== 'string' || !sub || typeof rol !== 'string' || typeof iat !== 'string') {
       throw this.rechazar('contenido_incompleto');
     }
     if (!(Object.values(Rol) as string[]).includes(rol)) {
+      throw this.rechazar('contenido_incompleto');
+    }
+    // La empresa puede faltar (candidato o admin de plataforma), pero si viene
+    // tiene que ser una cadena: un objeto ahi seria un token manipulado.
+    if (emp !== undefined && emp !== null && typeof emp !== 'string') {
       throw this.rechazar('contenido_incompleto');
     }
     if (exp === undefined || exp === null) {
@@ -169,7 +178,7 @@ export class PasetoService {
       throw this.rechazar('tipo_incorrecto');
     }
 
-    return { sub, rol, tipo, exp, iat };
+    return { sub, rol, emp: emp ?? null, tipo, exp, iat };
   }
 
   /** Registro estructurado del fallo (Plan §9.1), sin exponer nada al cliente. */
