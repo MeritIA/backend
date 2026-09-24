@@ -14,6 +14,849 @@
           "App"
         ]
       }
+    },
+    "/salud": {
+      "get": {
+        "description": "Responde 200 si el proceso sirve HTTP. No comprueba base de datos ni dependencias: para eso esta el readiness del paquete 5.5.",
+        "operationId": "SaludController_vida",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "estado": "vivo",
+                    "momento": "2026-09-11T19:30:00.000Z",
+                    "enPieDesdeHaceSegundos": 42
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Senal de vida del proceso",
+        "tags": [
+          "salud"
+        ]
+      }
+    },
+    "/autenticacion/registro": {
+      "post": {
+        "description": "Crea una cuenta de candidato. El rol no se puede elegir: el registro publico solo crea candidatos, y enviar un campo `rol` devuelve 400.\n\nLos tokens se entregan segun el campo `cliente`: en **web** (por omision) viajan en cookies HttpOnly y NO aparecen en el cuerpo; en **apk** vienen en el cuerpo para guardarlos en el KeyStore.",
+        "operationId": "AutenticacionController_registrar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistroDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo invalido. El detalle viene agrupado por campo."
+          },
+          "409": {
+            "description": "Ya existe una cuenta con ese correo."
+          },
+          "429": {
+            "description": "Limite superado. Ver cabecera Retry-After."
+          }
+        },
+        "summary": "Registra un candidato",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/autenticacion/login": {
+      "post": {
+        "description": "Limitado a diez intentos por minuto. La respuesta de error no distingue entre correo inexistente y contrasena incorrecta, para no permitir averiguar que correos estan registrados.\n\nEn **web** el token va en cookie HttpOnly y no es legible desde JavaScript; en **apk** viene en el cuerpo.",
+        "operationId": "AutenticacionController_iniciarSesion",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionRespuesta"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciales invalidas."
+          },
+          "429": {
+            "description": "Limite superado. Ver cabecera Retry-After."
+          }
+        },
+        "summary": "Inicia sesion",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/autenticacion/renovar": {
+      "post": {
+        "description": "Entrega un token de acceso nuevo. En **web** el token de renovacion se lee de la cookie y no hay que enviarlo; en **apk** va en el cuerpo. Un token de acceso no sirve aqui.",
+        "operationId": "AutenticacionController_renovar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenovarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionRespuesta"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token de renovacion invalido o vencido."
+          }
+        },
+        "summary": "Renueva la sesion",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/autenticacion/yo": {
+      "get": {
+        "description": "Sirve al frontend para saber quien esta autenticado y con que rol. Acepta el token por cabecera Authorization o por la cookie HttpOnly.",
+        "operationId": "AutenticacionController_yo",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Token de acceso invalido o vencido."
+          }
+        },
+        "security": [
+          {
+            "meritia_acceso": []
+          },
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Devuelve la identidad de la sesion actual",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/autenticacion/cerrar-sesiones": {
+      "post": {
+        "description": "Invalida todos los tokens emitidos hasta este momento y borra las cookies de este navegador. Es lo que permite cortar un token robado antes de que expire.",
+        "operationId": "AutenticacionController_cerrarSesiones",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Token de acceso invalido o vencido."
+          }
+        },
+        "security": [
+          {
+            "meritia_acceso": []
+          },
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Cierra la sesion en todos los dispositivos",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/vacantes": {
+      "post": {
+        "description": "La vacante nace en borrador y a nombre de quien la crea. El estado y el reclutador no se aceptan en el cuerpo: enviarlos devuelve 400.",
+        "operationId": "VacantesController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearVacanteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea una vacante en borrador",
+        "tags": [
+          "vacantes"
+        ]
+      },
+      "get": {
+        "description": "Un reclutador ve las suyas, no las de sus colegas. Un candidato ve unicamente las publicadas a las que fue invitado. Un administrador las ve todas.",
+        "operationId": "VacantesController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lista las vacantes visibles para quien pregunta",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}": {
+      "get": {
+        "operationId": "VacantesController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o quien pregunta no tiene acceso a ella. Se responde lo mismo en ambos casos: distinguirlos permitiria averiguar que vacantes existen probando identificadores."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta una vacante",
+        "tags": [
+          "vacantes"
+        ]
+      },
+      "patch": {
+        "description": "Solo el reclutador dueno. Una vacante cerrada no se edita.",
+        "operationId": "VacantesController_editar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarVacanteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "403": {
+            "description": "El rol no permite editar vacantes."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Edita una vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/ejercicios": {
+      "put": {
+        "description": "Reemplaza la lista completa. Solo mientras la vacante es un borrador: cambiarlos despues dejaria a dos candidatos del mismo proceso resolviendo pruebas distintas, y sus resultados dejarian de ser comparables.",
+        "operationId": "VacantesController_asociarEjercicios",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsociarEjerciciosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Define los ejercicios de la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/candidatos": {
+      "post": {
+        "description": "Es lo que le da acceso a ver la vacante y a resolver sus ejercicios.",
+        "operationId": "VacantesController_asignarCandidato",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsignarCandidatoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Invita a un candidato",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/publicar": {
+      "post": {
+        "description": "Exige al menos un ejercicio asociado: publicarla sin ninguno dejaria a los candidatos invitados sin nada que resolver.",
+        "operationId": "VacantesController_publicar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Publica la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/cerrar": {
+      "post": {
+        "description": "No se reabre: un proceso cerrado debe seguir siendo auditable tal como termino.",
+        "operationId": "VacantesController_cerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Cierra la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/ejercicios": {
+      "post": {
+        "description": "Crea el ejercicio y su version 1 en una sola operacion. Los pesos de los criterios deben sumar 100: con otra suma la nota final no seria comparable entre ejercicios, y se devuelve 400.",
+        "operationId": "EjerciciosController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEjercicioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea un ejercicio con su rubrica",
+        "tags": [
+          "ejercicios"
+        ]
+      },
+      "get": {
+        "description": "Un reclutador ve los suyos; un administrador, todos.",
+        "operationId": "EjerciciosController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lista el banco de ejercicios",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
+    "/ejercicios/{id}": {
+      "get": {
+        "description": "Las versiones llegan de la mas reciente a la mas antigua, con su rubrica.",
+        "operationId": "EjerciciosController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "El ejercicio no existe, o no es de quien pregunta. Se responde lo mismo en ambos casos."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta un ejercicio con todas sus versiones",
+        "tags": [
+          "ejercicios"
+        ]
+      },
+      "delete": {
+        "description": "No lo borra: deja de poder asociarse a vacantes nuevas, pero se conserva para que las evaluaciones ya emitidas sigan siendo auditables.",
+        "operationId": "EjerciciosController_retirar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Retira el ejercicio del banco",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
+    "/ejercicios/{id}/versiones": {
+      "post": {
+        "description": "Las versiones anteriores NO se modifican: es la unica forma de que una calificacion emitida hace un mes siga mostrando el enunciado y los pesos con los que se calculo. Corregir un enunciado significa versionar, nunca editar.",
+        "operationId": "EjerciciosController_nuevaVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NuevaVersionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea la version siguiente",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
+    "/entregas": {
+      "post": {
+        "description": "Solo candidatos invitados a una vacante publicada. Extensiones admitidas: zip, tar, gz, tgz, pdf, md, txt, ipynb, sql, json; maximo 25 MiB. Cinco entregas cada cinco minutos.",
+        "operationId": "EntregasController_entregar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idVacante",
+                  "idEjercicio",
+                  "archivo"
+                ],
+                "properties": {
+                  "idVacante": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "idEjercicio": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "La vacante no existe o no acepta entregas de este candidato."
+          },
+          "409": {
+            "description": "Se agotaron los intentos permitidos para el ejercicio."
+          },
+          "413": {
+            "description": "El archivo supera 25 MiB."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Entrega un intento de un ejercicio",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/mias": {
+      "get": {
+        "operationId": "EntregasController_mias",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Intentos del candidato autenticado",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/vacante/{idVacante}": {
+      "get": {
+        "operationId": "EntregasController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Entregas de una vacante, para su reclutador o un administrador",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/{id}": {
+      "get": {
+        "description": "Para el candidato que lo entrego, el reclutador de la vacante o un administrador. El historial muestra cada cambio de estado con su momento y su motivo.",
+        "operationId": "EntregasController_obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No existe, o quien pregunta no tiene acceso."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Consulta un intento con su historial de estados",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/{id}/descarga": {
+      "get": {
+        "description": "El enlace esta firmado y caduca a los cinco minutos.",
+        "operationId": "EntregasController_enlaceDeDescarga",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enlace temporal para descargar el archivo",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/evaluaciones/cola": {
+      "get": {
+        "description": "Para administradores. Una cola que crece sin parar indica que el servicio de IA no da abasto o esta caido.",
+        "operationId": "EvaluacionesController_metricas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasDeColaRespuesta"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Longitud y estado de la cola de evaluacion",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/{idEntrega}/reintentar": {
+      "post": {
+        "description": "No consume un intento del candidato: el fallo fue de la evaluacion, no suyo.",
+        "operationId": "EvaluacionesController_reintentar",
+        "parameters": [
+          {
+            "name": "idEntrega",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReintentoRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La entrega no existe."
+          },
+          "409": {
+            "description": "La entrega no esta en estado fallida."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Reintenta la evaluacion de una entrega fallida",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
     }
   },
   "info": {
@@ -71,6 +914,347 @@
         "description": "Token PASETO v4 obtenido en el inicio de sesion. Se envia como: Authorization: Bearer v4.public..."
       }
     },
-    "schemas": {}
+    "schemas": {
+      "RegistroDto": {
+        "type": "object",
+        "properties": {
+          "correo": {
+            "type": "string",
+            "example": "candidata@ejemplo.com",
+            "maxLength": 254
+          },
+          "contrasena": {
+            "type": "string",
+            "example": "una-frase-larga-y-dificil",
+            "minLength": 12,
+            "maxLength": 128,
+            "description": "Minimo 12 caracteres. Se exige longitud antes que simbolos raros: una frase larga resiste mas que \"P@ssw0rd!\"."
+          },
+          "nombreCompleto": {
+            "type": "string",
+            "example": "Ana Maria Torres",
+            "maxLength": 120
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web"
+          }
+        },
+        "required": [
+          "correo",
+          "contrasena",
+          "nombreCompleto"
+        ]
+      },
+      "SesionRespuesta": {
+        "type": "object",
+        "properties": {
+          "tokenDeAcceso": {
+            "type": "string",
+            "description": "Token PASETO de acceso. SOLO se devuelve cuando el cliente es \"apk\". En web viaja en la cookie HttpOnly meritia_acceso."
+          },
+          "tokenDeRenovacion": {
+            "type": "string",
+            "description": "Token de renovacion. SOLO se devuelve cuando el cliente es \"apk\". En web viaja en la cookie HttpOnly meritia_renovacion."
+          },
+          "expiraEn": {
+            "type": "string",
+            "description": "Expiracion del token de acceso, en ISO8601."
+          },
+          "rol": {
+            "type": "string",
+            "enum": [
+              "candidato",
+              "reclutador",
+              "administrador"
+            ]
+          },
+          "idUsuario": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "expiraEn",
+          "rol",
+          "idUsuario"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "correo": {
+            "type": "string",
+            "example": "candidata@ejemplo.com"
+          },
+          "contrasena": {
+            "type": "string",
+            "example": "una-frase-larga-y-dificil"
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web",
+            "description": "web: el token viaja en cookie HttpOnly y NO en el cuerpo. apk: viaja en el cuerpo, para guardarlo en el KeyStore."
+          }
+        },
+        "required": [
+          "correo",
+          "contrasena"
+        ]
+      },
+      "RenovarDto": {
+        "type": "object",
+        "properties": {
+          "tokenDeRenovacion": {
+            "type": "string",
+            "description": "Token de renovacion. Solo lo envia la APK: en la web viaja en la cookie HttpOnly y no hace falta mandarlo.",
+            "example": "v4.public.eyJzdWIiOiIuLi4ifQ..."
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web"
+          }
+        }
+      },
+      "CrearVacanteDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Desarrollador backend junior",
+            "maxLength": 160
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Buscamos una persona para el equipo de plataforma...",
+            "maxLength": 10000
+          },
+          "ubicacion": {
+            "type": "string",
+            "example": "Bogota (hibrido)",
+            "maxLength": 120
+          },
+          "intentosPermitidos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 1,
+            "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
+          }
+        },
+        "required": [
+          "titulo",
+          "descripcion"
+        ]
+      },
+      "EditarVacanteDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "descripcion": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "ubicacion": {
+            "type": "object",
+            "maxLength": 120,
+            "nullable": true
+          },
+          "intentosPermitidos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 1,
+            "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
+          }
+        }
+      },
+      "AsociarEjerciciosDto": {
+        "type": "object",
+        "properties": {
+          "idsDeEjercicios": {
+            "description": "Identificadores de los ejercicios, en el orden en que los vera el candidato. Reemplaza la lista anterior.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "idsDeEjercicios"
+        ]
+      },
+      "AsignarCandidatoDto": {
+        "type": "object",
+        "properties": {
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Candidato al que se invita a esta vacante."
+          }
+        },
+        "required": [
+          "idCandidato"
+        ]
+      },
+      "CriterioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Correccion funcional",
+            "maxLength": 120
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "La solucion resuelve todos los casos del enunciado, incluidos los limite.",
+            "description": "Texto que el motor de IA recibe como referencia de que significa cada nota. Una descripcion vaga produce calificaciones poco fiables.",
+            "maxLength": 1000
+          },
+          "peso": {
+            "type": "number",
+            "example": 40,
+            "description": "Aporte a la nota final. Los pesos deben sumar 100."
+          },
+          "escalaMaxima": {
+            "type": "number",
+            "example": 5,
+            "description": "El criterio se puntua de 0 a este valor."
+          }
+        },
+        "required": [
+          "nombre",
+          "descripcion",
+          "peso",
+          "escalaMaxima"
+        ]
+      },
+      "CrearEjercicioDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Concurrencia: contador seguro entre hilos",
+            "maxLength": 160
+          },
+          "tecnologia": {
+            "type": "string",
+            "example": "Java",
+            "maxLength": 80
+          },
+          "enunciado": {
+            "type": "string",
+            "maxLength": 20000,
+            "description": "Enunciado que vera el candidato."
+          },
+          "criterios": {
+            "description": "Criterios de la rubrica. Sus pesos suman 100.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDto"
+            }
+          }
+        },
+        "required": [
+          "titulo",
+          "enunciado",
+          "criterios"
+        ]
+      },
+      "NuevaVersionDto": {
+        "type": "object",
+        "properties": {
+          "enunciado": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "criterios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDto"
+            }
+          },
+          "motivoDelCambio": {
+            "type": "string",
+            "example": "Se aclara el caso limite de la lista vacia, que confundia a los candidatos.",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "enunciado",
+          "criterios"
+        ]
+      },
+      "MetricasDeColaRespuesta": {
+        "type": "object",
+        "properties": {
+          "enEspera": {
+            "type": "number",
+            "description": "Esperando un worker libre."
+          },
+          "activos": {
+            "type": "number",
+            "description": "Evaluandose ahora."
+          },
+          "reprogramados": {
+            "type": "number",
+            "description": "Esperando su siguiente reintento."
+          },
+          "fallidos": {
+            "type": "number",
+            "description": "Agotaron los reintentos; se conservan 30 dias."
+          },
+          "completados": {
+            "type": "number",
+            "description": "Completados en las ultimas 24 horas."
+          },
+          "workerActivo": {
+            "type": "boolean",
+            "description": "Si este proceso consume la cola."
+          }
+        },
+        "required": [
+          "enEspera",
+          "activos",
+          "reprogramados",
+          "fallidos",
+          "completados",
+          "workerActivo"
+        ]
+      },
+      "ReintentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estado": {
+            "type": "string",
+            "example": "encolada"
+          }
+        },
+        "required": [
+          "idEntrega",
+          "estado"
+        ]
+      }
+    }
   }
 }

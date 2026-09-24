@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { Logger } from '@nestjs/common';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { construirOpcionesCors, origenesPermitidos } from './cors.config.js';
 
 /** Ejecuta la funcion `origin` de las opciones y devuelve si permitio el origen. */
@@ -16,6 +17,13 @@ function permite(origen: string | undefined, entorno: string, configurados?: str
 }
 
 describe('politica de CORS', () => {
+  beforeEach(() => {
+    // El caso de produccion sin ALLOWED_ORIGINS registra un error a proposito.
+    // Se silencia: una salida ruidosa esconde los fallos de verdad.
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
   describe('produccion', () => {
     const CONF = 'https://meritia.app,capacitor://localhost';
 

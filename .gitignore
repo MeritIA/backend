@@ -40,3 +40,5 @@ Thumbs.db
 # Cache de herramientas
 .eslintcache
 .cache/
+
+# Base de datos de las pruebas de integracion (se crea sola)
