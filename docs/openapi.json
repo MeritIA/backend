@@ -941,6 +941,120 @@
         ]
       }
     },
+    "/evaluaciones/mias": {
+      "get": {
+        "description": "Con el desglose por criterio y la evidencia de cada puntaje.",
+        "operationId": "EvaluacionesController_mias",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluacionRespuesta"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluaciones del candidato autenticado",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/vacante/{idVacante}": {
+      "get": {
+        "description": "Solo para la empresa dueña de la vacante. Es la base del reporte del paquete 5.1.",
+        "operationId": "EvaluacionesController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluacionRespuesta"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluaciones de una vacante, de mayor a menor nota",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/entrega/{idEntrega}": {
+      "get": {
+        "description": "Para el candidato que la entrego o para la empresa dueña de la vacante. Incluye la version de rubrica con la que se califico.",
+        "operationId": "EvaluacionesController_deEntrega",
+        "parameters": [
+          {
+            "name": "idEntrega",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluacionRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe, aun no se evalua, o quien pregunta no tiene acceso."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluacion de una entrega",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
     "/evaluaciones/{idEntrega}/reintentar": {
       "post": {
         "description": "No consume un intento del candidato: el fallo fue de la evaluacion, no suyo.",
@@ -1469,6 +1583,102 @@
           "fallidos",
           "completados",
           "workerActivo"
+        ]
+      },
+      "CalificacionRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "puntaje": {
+            "type": "number"
+          },
+          "escalaMaxima": {
+            "type": "number"
+          },
+          "peso": {
+            "type": "number",
+            "description": "Cuanto aporta el criterio a la nota final. Suman 100."
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Por que ese puntaje, con referencia a la entrega."
+          }
+        },
+        "required": [
+          "criterio",
+          "puntaje",
+          "escalaMaxima",
+          "peso",
+          "evidencia"
+        ]
+      },
+      "EvaluacionRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idVacante": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEjercicio": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idVersion": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Version de la rubrica con la que se califico. La rubrica puede cambiar despues; la nota se explica con esta."
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "criterios": {
+            "description": "En el orden de la rubrica.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalificacionRespuesta"
+            }
+          },
+          "proveedor": {
+            "type": "string",
+            "example": "gemini"
+          },
+          "modelo": {
+            "type": "string",
+            "example": "gemini-2.5-flash"
+          },
+          "creadaEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "idEntrega",
+          "idVacante",
+          "idCandidato",
+          "idEjercicio",
+          "idVersion",
+          "notaFinal",
+          "criterios",
+          "proveedor",
+          "modelo",
+          "creadaEn"
         ]
       },
       "ReintentoRespuesta": {

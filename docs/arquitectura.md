@@ -143,6 +143,56 @@ src/
         └── <modulo>.service.ts
 ```
 
+### 3.1.3 Evaluación: del evento a la nota (paquete 4.5)
+
+El módulo de evaluación es el único que habla con el servicio de IA, y lo hace
+siempre desde la cola. El recorrido de una entrega:
+
+1. Entregas publica `entregas.entrega-completada`; evaluación lo encola.
+2. El worker toma el trabajo y marca la entrega `en_evaluacion`.
+3. Descarga el archivo y **extrae el texto en el backend**.
+4. Pide al banco la **versión vigente** de la rúbrica del ejercicio.
+5. Llama al servicio de IA con enunciado, rúbrica y texto.
+6. Valida la respuesta, la guarda en una transacción y publica
+   `evaluacion.evaluacion-finalizada` después del commit.
+
+**La extracción de texto vive aquí, no en el servicio de IA.** Decisión del
+equipo (2026-09-23): el servicio de IA no procesa archivos no confiables. Abrir
+un comprimido que subió un desconocido es superficie de ataque; el servicio solo
+recibe texto, que es lo único que necesita para calificar.
+
+| Defensa al extraer | Límite |
+|---|---|
+| Bomba de descompresión | Máximo 200 archivos, 500 KB por archivo y 1,5 MB en total, leyendo entrada por entrada |
+| Zip slip | yauzl rechaza el comprimido entero ante una ruta con `..` o absoluta; el filtro propio se mantiene como defensa en profundidad |
+| Binario disfrazado | Solo extensiones de texto, y se descarta lo que traiga bytes nulos |
+
+**Qué pasa cuando la entrega no se puede leer.** Un `.pdf`, un `.tar`, un `.zip`
+corrupto o uno sin archivos de texto no son un fallo del servicio de IA: la
+entrega queda **`fallida`** con un motivo entendible para el candidato, **no se
+reintenta** (repetir no cambia el archivo) y **no se gasta ni una llamada al
+modelo**. Los `.pdf` se admiten al subir pero todavía no se evalúan de forma
+automática; leerlos es trabajo pendiente.
+
+**No se confía en la respuesta del servicio de IA.** Aunque él ya valida la
+salida del modelo, el backend la vuelve a comprobar antes de tocar la base:
+identificador que corresponde a la petición, nota entre 0 y 100, un criterio por
+cada uno de la rúbrica, puntajes dentro de su escala y evidencia no vacía. El
+peso y la escala se toman de **nuestra** rúbrica, nunca de la respuesta.
+
+**Qué se guarda.** Una fila por evaluación con la **versión de rúbrica aplicada**
+(la rúbrica puede cambiar; la nota tiene que poder explicarse con el texto
+exacto contra el que se calificó), el proveedor y el modelo usados, y una fila
+por criterio con su puntaje y su evidencia. El índice único sobre la entrega es
+lo que hace idempotente al worker: reencolar una entrega ya evaluada no vuelve a
+llamar al modelo ni duplica la nota.
+
+**Quién puede verla.** El candidato que entregó, y la empresa dueña de la
+vacante. A los demás, 404.
+
+**Sin servicio de IA configurado** (`AI_SERVICE_URL` y `AI_SERVICE_API_KEY`), la
+cola usa el evaluador honesto del paquete 4.4: falla en vez de inventar una nota.
+
 ## 4. Datos
 
 **PostgreSQL, un clúster, un esquema por módulo.** No hay un `public`
