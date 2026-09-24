@@ -159,7 +159,8 @@ export async function vaciarTablas(): Promise<void> {
       "vacantes"."vacante_candidatos",
       "vacantes"."vacante_ejercicios",
       "vacantes"."vacantes",
-      "autenticacion"."usuarios"
+      "autenticacion"."usuarios",
+      "autenticacion"."empresas"
     RESTART IDENTITY CASCADE
   `);
   await cliente.end();

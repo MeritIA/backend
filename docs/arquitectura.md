@@ -267,6 +267,48 @@ usuario`. El contenido de usuario nunca modifica instrucciones privilegiadas.
 
 > **Pendiente**: es el paquete 4.2 y todavía no está implementado.
 
+### 5.7 Aislamiento por empresa
+
+El criterio de aceptación del paquete 5.1 exige que **ningún reporte muestre
+datos de una empresa distinta a la del reclutador autenticado**. Un reporte solo
+puede aislar lo que ya viene aislado, así que la frontera está en la raíz.
+
+> **Decisión propia, no de los documentos.** Ninguno define la empresa como
+> entidad: el Charter habla de «empresa cliente» y la EDT solo fija ese criterio
+> de los reportes. El modelo de abajo lo decidió el equipo el 2026-09-23.
+
+**Dónde vive.** En el esquema `autenticacion`, junto a los usuarios: la empresa
+es parte de la identidad de quien entra. No se creó un séptimo módulo porque la
+arquitectura aprobada en el paquete 1.4 tiene seis.
+
+**Quién pertenece a una empresa.**
+
+| Rol | Empresa | Por qué |
+|---|---|---|
+| Reclutador | Obligatoria | Sin ella no se sabría de quién es lo que crea |
+| Candidato | Nunca | Es una persona externa invitada a una vacante |
+| Administrador | Opcional | Con empresa, es administrador de ella; sin empresa, de la plataforma |
+
+Las tres reglas son un `CHECK` en la base, no solo código.
+
+**Qué queda aislado.**
+
+- **Vacantes:** la empresa se copia del reclutador al crearla y no cambia. Dos
+  reclutadores de la misma empresa llevan el mismo proceso; los de otra reciben
+  404, nunca 403.
+- **Banco de ejercicios:** es propiedad intelectual de la empresa. Sin esto, un
+  reclutador podría asociar a su vacante un ejercicio de la competencia.
+- **Entregas, evaluaciones y reportes:** heredan el aislamiento por la vacante.
+
+**Alta de usuarios.** El registro público solo crea candidatos. Reclutadores y
+administradores se crean con `POST /api/v1/empresas/{id}/usuarios`, que es el
+onboarding del paquete 5.3. Un administrador de empresa solo puede crear
+usuarios en la suya.
+
+**La sesión.** El token lleva la empresa, pero quien manda es la base: el
+guardia la lee en cada petición, de modo que mover a alguien de empresa surte
+efecto en la sesión que ya tenía abierta.
+
 ## 6. Configuración
 
 Toda la configuración vive fuera del código, en variables de entorno, con

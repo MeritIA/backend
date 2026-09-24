@@ -122,7 +122,7 @@ describe('integracion: entregas', () => {
   beforeEach(async () => {
     await vaciarTablas();
     reclutador = await crearConRol(app, 'recl1@ejemplo.com', 'reclutador');
-    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador');
+    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador', 'Empresa rival');
     candidato = await registrarCandidato(app, 'cand1@ejemplo.com');
     otroCandidato = await registrarCandidato(app, 'cand2@ejemplo.com');
 
