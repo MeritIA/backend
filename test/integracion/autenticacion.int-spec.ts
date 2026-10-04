@@ -189,7 +189,15 @@ describe('integracion: autenticacion', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      for (const roto of [`${token.slice(0, -1)}X`, `X${token.slice(1)}`, 'v4.public.inventado']) {
+      // El caracter de reemplazo se elige distinto del original: con una 'X'
+      // fija, un token que ya empezara o terminara en 'X' quedaba intacto y la
+      // prueba fallaba una de cada sesenta y pico ejecuciones.
+      const distinto = (c) => (c === 'X' ? 'Y' : 'X');
+      for (const roto of [
+        `${token.slice(0, -1)}${distinto(token.at(-1))}`,
+        `${distinto(token[0])}${token.slice(1)}`,
+        'v4.public.inventado',
+      ]) {
         await api(app)
           .get('/api/v1/autenticacion/yo')
           .set('Authorization', `Bearer ${roto}`)

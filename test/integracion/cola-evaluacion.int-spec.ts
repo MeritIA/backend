@@ -203,8 +203,11 @@ describe('integracion: cola de evaluacion', () => {
       expect(body.estado).toBe('recibida');
       expect(body.enProcesoDeEvaluacion).toBe(true);
 
+      // Se espera a la LLAMADA, no solo al estado: el worker marca
+      // `en_evaluacion` ANTES de invocar al evaluador, asi que comprobar el
+      // estado y acto seguido las llamadas era una carrera que fallaba sola.
+      await vi.waitFor(() => expect(falso.llamadas).toEqual([id]));
       await esperarEstado(id, 'en_evaluacion');
-      expect(falso.llamadas).toEqual([id]);
 
       abrirPuerta?.();
       await esperarEstado(id, 'evaluada');

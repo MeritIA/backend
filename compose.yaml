@@ -22,6 +22,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       S3_ENDPOINT: http://minio:9000
+      # El servicio de IA corre en su propio proyecto de compose, con su propia
+      # red: desde aqui no se alcanza por "localhost", que seria este mismo
+      # contenedor. En local se llega por el host; en produccion, por el nombre
+      # del servicio en la red donde se despliegue.
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:13100}
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:?definelo en .env, igual que CLAVE_DE_ACCESO del servicio de IA}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
@@ -32,6 +38,8 @@ services:
       - ./tsconfig.json:/app/tsconfig.json
       - ./tsconfig.build.json:/app/tsconfig.build.json
       - ./nest-cli.json:/app/nest-cli.json
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
         condition: service_healthy

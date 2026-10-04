@@ -190,6 +190,31 @@ llamar al modelo ni duplica la nota.
 **Quién puede verla.** El candidato que entregó, y la empresa dueña de la
 vacante. A los demás, 404.
 
+**Probarlo con IA real.** Las pruebas de integracion usan un doble del
+servicio de IA: son repetibles y no gastan cuota. Para ver una calificacion de
+verdad hay un guion aparte, que no corre en la integracion continua porque
+necesita API key y cuesta dinero:
+
+```bash
+cd ../ai-service && docker compose up -d --wait
+cd ../backend && node --env-file=.env scripts/humo-evaluacion.mjs
+```
+
+Crea empresa, reclutador, ejercicio con rubrica, vacante, candidato y entrega, y
+espera la nota. Verificado el 2026-10-03: una entrega con un error real
+(`reverse()` que muta la lista original) saco 1/5 en correccion funcional con
+evidencia concreta, y 32/100 de nota ponderada.
+
+Dos cosas que costaron encontrar y quedan escritas:
+
+- **El modelo por omision es `gemini-3.5-flash`.** El `gemini-2.5-flash` que usa
+  el README del SDK ya no se sirve a cuentas nuevas (404). Los mas nuevos (3.6
+  en adelante) devolvian 503 por demanda.
+- **`AI_SERVICE_URL` apunta a `127.0.0.1`, no a `localhost`.** `localhost`
+  resuelve primero a IPv6 y los puertos que publica Docker escuchan en IPv4, asi
+  que `fetch` fallaba con un `TypeError` sin causa visible. El cliente registra
+  ahora el codigo de errno, que es lo que permitio verlo.
+
 **Sin servicio de IA configurado** (`AI_SERVICE_URL` y `AI_SERVICE_API_KEY`), la
 cola usa el evaluador honesto del paquete 4.4: falla en vez de inventar una nota.
 
@@ -446,7 +471,7 @@ del token.
 | 2.4 | API versionada, DTOs y filtro global de excepciones | Anderson Fabián García Nieto |
 | 3.3 | Almacenamiento de objetos | Daniel Eduardo Useche Pinilla |
 | 4.2 | Filtros anti *prompt injection* | — |
-| 4.3 – 4.5 | Rúbricas, servicio de IA y orquestación | — |
+| 4.2 – 4.3 | Filtros anti *prompt injection* y calibración de rúbricas | Juana Lozano Chaves |
 | 5.5 | Observabilidad y *health check* | Daniel Eduardo Useche Pinilla |
 
 También falta localizar la **Declaración de Alcance v1.0**, que la EDT cita como

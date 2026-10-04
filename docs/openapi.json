@@ -1660,7 +1660,7 @@
           },
           "modelo": {
             "type": "string",
-            "example": "gemini-2.5-flash"
+            "example": "gemini-3.5-flash"
           },
           "creadaEn": {
             "format": "date-time",

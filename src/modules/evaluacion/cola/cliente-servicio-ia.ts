@@ -89,9 +89,19 @@ export class ClienteServicioIa {
         signal: senalCombinada,
       });
     } catch (e) {
-      // Red caida, DNS, o tiempo agotado: transitorio.
+      // Red caida, DNS, o tiempo agotado: transitorio. Se registra la CAUSA
+      // (el codigo de errno de Node) porque sin ella un fallo de red es
+      // indistinguible de otro: "TypeError" a secas no dice si fue el puerto,
+      // el DNS o el certificado.
+      const causa = e instanceof Error && e.cause instanceof Error ? e.cause : undefined;
+      const detalle = [
+        e instanceof Error ? e.name : 'error de red',
+        (causa as { code?: string } | undefined)?.code ?? causa?.message,
+      ]
+        .filter(Boolean)
+        .join(': ');
       throw new ServicioDeIaNoDisponibleError(
-        `No se pudo contactar al servicio de IA: ${e instanceof Error ? e.name : 'error de red'}.`,
+        `No se pudo contactar al servicio de IA en ${this.url}: ${detalle}.`,
       );
     }
 
