@@ -17,7 +17,7 @@
     },
     "/salud": {
       "get": {
-        "description": "Responde 200 si el proceso sirve HTTP. No comprueba base de datos ni dependencias: para eso esta el readiness del paquete 5.5.",
+        "description": "Responde 200 si el proceso sirve HTTP. No comprueba dependencias: para eso esta /api/salud/listo.",
         "operationId": "SaludController_vida",
         "parameters": [],
         "responses": {
@@ -28,7 +28,7 @@
                 "schema": {
                   "example": {
                     "estado": "vivo",
-                    "momento": "2026-09-11T19:30:00.000Z",
+                    "momento": "2026-10-04T19:30:00.000Z",
                     "enPieDesdeHaceSegundos": 42
                   }
                 }
@@ -37,6 +37,61 @@
           }
         },
         "summary": "Senal de vida del proceso",
+        "tags": [
+          "salud"
+        ]
+      }
+    },
+    "/salud/listo": {
+      "get": {
+        "description": "Comprueba base de datos, almacenamiento de objetos, cola de trabajos y servicio de IA, en paralelo y con tiempo maximo de 3 s cada una.\n\nDevuelve **200** si todo esta en pie o si solo falla algo no critico (estado `degradado`), y **503** si cae una dependencia critica: sin base de datos no se puede servir nada, pero sin servicio de IA se siguen recibiendo entregas para evaluarlas despues.",
+        "operationId": "SaludController_listo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "estado": "listo",
+                    "momento": "2026-10-04T19:30:00.000Z",
+                    "dependencias": [
+                      {
+                        "nombre": "base_de_datos",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 3
+                      },
+                      {
+                        "nombre": "almacenamiento",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 12
+                      },
+                      {
+                        "nombre": "cola",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 4
+                      },
+                      {
+                        "nombre": "servicio_ia",
+                        "estado": "ok",
+                        "critica": false,
+                        "duracionMs": 25
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Una dependencia critica esta caida. El cuerpo dice cual."
+          }
+        },
+        "summary": "Disponibilidad de las dependencias",
         "tags": [
           "salud"
         ]
@@ -1614,6 +1669,64 @@
           "evidencia"
         ]
       },
+      "BanderaRespuesta": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "example": "evasion_de_instrucciones"
+          },
+          "archivo": {
+            "type": "string"
+          },
+          "ocurrencias": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "codigo",
+          "archivo",
+          "ocurrencias"
+        ]
+      },
+      "SeguridadRespuesta": {
+        "type": "object",
+        "properties": {
+          "riesgo": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ]
+          },
+          "puntaje": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "banderas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BanderaRespuesta"
+            }
+          },
+          "versionReglas": {
+            "type": "string"
+          },
+          "versionListaNegra": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "riesgo",
+          "puntaje",
+          "banderas",
+          "versionReglas",
+          "versionListaNegra"
+        ]
+      },
       "EvaluacionRespuesta": {
         "type": "object",
         "properties": {
@@ -1665,6 +1778,14 @@
           "creadaEn": {
             "format": "date-time",
             "type": "string"
+          },
+          "seguridad": {
+            "description": "Solo para el reclutador de la vacante o un administrador.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SeguridadRespuesta"
+              }
+            ]
           }
         },
         "required": [

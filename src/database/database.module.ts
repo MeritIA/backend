@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { opcionesDeConexion } from './data-source.js';
+import { ComprobadorDeBaseDeDatos } from './comprobador-de-base-de-datos.js';
 
 /**
  * Conexion a PostgreSQL para toda la aplicacion.
@@ -24,5 +25,6 @@ import { opcionesDeConexion } from './data-source.js';
       autoLoadEntities: true,
     }),
   ],
+  providers: [ComprobadorDeBaseDeDatos],
 })
 export class DatabaseModule {}

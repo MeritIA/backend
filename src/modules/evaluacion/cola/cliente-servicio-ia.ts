@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SaludService } from '../../../common/salud/index.js';
 import { EvaluacionNoReintentableError, ServicioDeIaNoDisponibleError } from './evaluador.js';
 
 /**
@@ -59,17 +60,42 @@ export interface RespuestaDeEvaluacion {
 const TIEMPO_POR_OMISION_MS = 120_000;
 
 @Injectable()
-export class ClienteServicioIa {
+export class ClienteServicioIa implements OnModuleInit {
   private readonly logger = new Logger('ServicioIA');
   private readonly url: string | undefined;
   private readonly clave: string | undefined;
   private readonly tiempoMaximoMs: number;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly salud: SaludService,
+  ) {
     this.url = config.get<string>('AI_SERVICE_URL')?.replace(/\/+$/, '');
     this.clave = config.get<string>('AI_SERVICE_API_KEY');
     this.tiempoMaximoMs =
       Number(config.get<number>('AI_REQUEST_TIMEOUT_MS')) || TIEMPO_POR_OMISION_MS;
+  }
+
+  /**
+   * Paquete 5.5: el servicio de IA es la cuarta dependencia del criterio, y se
+   * comprueba "con timeout controlado", como pide el Plan de Seguridad §9.
+   *
+   * NO es critica: sin servicio de IA se siguen recibiendo entregas y la cola
+   * las evaluara cuando vuelva. Marcarla critica apagaria el backend entero
+   * por algo de lo que el candidato no depende para entregar.
+   */
+  onModuleInit(): void {
+    this.salud.registrar('servicio_ia', false, async () => {
+      if (!this.url) {
+        return { estado: 'sin_configurar', detalle: 'falta AI_SERVICE_URL' };
+      }
+      const respuesta = await fetch(`${this.url}/api/salud`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      return respuesta.ok
+        ? { estado: 'ok' }
+        : { estado: 'caido', detalle: `respondio ${respuesta.status}` };
+    });
   }
 
   /** Si el servicio esta configurado. Sin esto, la cola falla con un motivo claro. */

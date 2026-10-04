@@ -5,7 +5,7 @@ import { DatabaseModule } from './database/index.js';
 import { RateLimitModule } from './common/rate-limit/index.js';
 import { AlmacenamientoModule } from './common/almacenamiento/index.js';
 import { EventosModule } from './common/events/index.js';
-import { SaludController } from './common/salud/index.js';
+import { SaludController, SaludModule } from './common/salud/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AutenticacionModule } from './modules/autenticacion/index.js';
@@ -32,6 +32,8 @@ import { ReportesModule } from './modules/reportes/index.js';
       // Si el entorno viene incompleto, el proceso no arranca.
       validate: validarEntorno,
     }),
+    // Va primero: cada parte registra en el su propia comprobacion al arrancar.
+    SaludModule,
     DatabaseModule,
     RateLimitModule,
     AlmacenamientoModule,
