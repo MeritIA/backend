@@ -422,6 +422,74 @@ usuarios en la suya.
 guardia la lee en cada petición, de modo que mover a alguien de empresa surte
 efecto en la sesión que ya tenía abierta.
 
+### 5.8 Observabilidad y alertas (paquete 5.5)
+
+**Vida y disponibilidad son dos cosas distintas**, y mezclarlas es un error
+operativo conocido:
+
+| Ruta | Qué dice | Quién la mira |
+|---|---|---|
+| `GET /api/salud` | El proceso sirve HTTP. No toca ninguna dependencia | El `HEALTHCHECK` del contenedor |
+| `GET /api/salud/listo` | Estado de las cuatro dependencias | El balanceador, para decidir si mandar tráfico |
+
+Si la señal de vida fallara porque la base de datos está caída, el orquestador
+reiniciaría el contenedor una y otra vez sin arreglar nada.
+
+**Las cuatro dependencias del criterio**, comprobadas en paralelo con 3 s de
+tope cada una:
+
+| Dependencia | Cómo | ¿Crítica? |
+|---|---|---|
+| Base de datos | `select 1` | Sí |
+| Almacenamiento | `HeadBucket` | Sí |
+| Cola de trabajos | Contadores en Redis | Sí |
+| Servicio de IA | `GET /api/salud` con 2 s de tope | **No** |
+
+El servicio de IA no es crítico a propósito: sin él se siguen recibiendo
+entregas y la cola las evalúa cuando vuelva. Marcarlo crítico apagaría el
+backend entero por algo de lo que el candidato no depende para entregar. Con una
+dependencia crítica caída, `/listo` devuelve **503**; si solo falla algo no
+crítico, **200** con estado `degradado`. El cuerpo lleva siempre el detalle por
+dependencia, también en el 503: es lo que convierte una alerta en un
+diagnóstico.
+
+**Cada parte registra su propia comprobación** al arrancar. El servicio de salud
+vive en `common` y las fronteras del monolito le prohíben importar módulos de
+negocio: si el comprobador de la cola viviera ahí, `common` tendría que conocer
+el módulo de evaluación, y la regla que sostiene la arquitectura se habría roto
+por una pantalla de monitorización.
+
+**Alertas por correo** (canal elegido por el equipo), con dos decisiones:
+
+1. **Umbral, no cada evento.** Un fallo de login es la vida normal de cualquier
+   sistema; avisar de cada uno garantiza que nadie lea los avisos.
+2. **Silencio tras avisar.** Un ataque genera miles de eventos y, sin freno,
+   miles de correos. Tras un aviso, esa regla y esa clave callan un rato, y el
+   siguiente correo dice cuántas veces pasó mientras callaba.
+
+| Evento | Dispara con | Silencio |
+|---|---|---|
+| Fallos de autenticación | 5 en 5 min | 15 min |
+| Rate limit excedido | 10 en 5 min | 15 min |
+| Intento de inyección (riesgo alto) | 1, de inmediato | 5 min |
+
+**Se cuenta por usuario cuando hay sesión, y por IP cuando no.** Contar los
+fallos de todo el mundo en un solo contador haría que una oficina entera
+disparara la alerta de una sola persona.
+
+**Los 401 y los 429 se publican desde el filtro global de excepciones**, no
+desde cada guardia: ese filtro ve todas las respuestas de error con su IP, su
+ruta y su usuario, así que un origen nuevo de 401 queda cubierto sin tocar nada.
+Los intentos de inyección los publica el módulo de evaluación al persistir.
+
+**Sin SMTP configurado el proceso arranca igual**: la alerta se registra con un
+aviso de que no hay canal. Un entorno de desarrollo sin credenciales tiene que
+poder arrancar, y uno de producción sin canal tiene que decirlo en voz alta.
+
+**Límite conocido:** los contadores de las alertas viven en memoria. Con varias
+instancias, cada una cuenta las suyas y los umbrales se alcanzan más tarde.
+Llevarlos a Redis es el paso natural; queda escrito antes que resuelto a medias.
+
 ## 6. Configuración
 
 Toda la configuración vive fuera del código, en variables de entorno, con

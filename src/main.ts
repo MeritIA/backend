@@ -5,6 +5,7 @@ import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { construirOpcionesCors, origenesPermitidos } from './common/cors/index.js';
 import { TodasLasExcepcionesFilter } from './common/errores/index.js';
+import { BusDeEventos } from './common/events/index.js';
 import {
   construirDocumentoOpenApi,
   debePublicarseLaInterfaz,
@@ -55,7 +56,9 @@ async function bootstrap(): Promise<void> {
   );
 
   // Ultimo recurso: ninguna excepcion llega al cliente con su traza.
-  app.useGlobalFilters(new TodasLasExcepcionesFilter());
+  // Con el bus: los 401 y los 429 se publican como eventos de seguridad y
+  // el servicio de alertas decide cuando avisar (paquete 5.5).
+  app.useGlobalFilters(new TodasLasExcepcionesFilter(app.get(BusDeEventos)));
 
   // OpenAPI generada desde el codigo (paquete 5.2). Se construye siempre, para
   // que el script de exportacion la obtenga sin levantar el servidor, y solo se

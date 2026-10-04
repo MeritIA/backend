@@ -13,6 +13,7 @@ import {
 import { ClienteServicioIa, type PeticionDeEvaluacion } from './cliente-servicio-ia.js';
 import { EntregaIlegibleError, extraerTexto } from './extraer-texto.js';
 import { BusDeEventos } from '../../../common/events/index.js';
+import { EVENTO_DE_SEGURIDAD, type EventoDeSeguridad } from '../../../common/alertas/index.js';
 import { AlmacenamientoService } from '../../../common/almacenamiento/index.js';
 import { EntregasService } from '../../entregas/index.js';
 import { EjerciciosService } from '../../ejercicios/index.js';
@@ -143,6 +144,26 @@ export class EvaluadorQuePersiste implements Evaluador {
       riesgoInyeccion: resultado.seguridad.riesgo,
       banderas: resultado.seguridad.banderas.length,
     });
+
+    // Riesgo alto: hay que mirarlo a mano, asi que se avisa (paquete 5.5).
+    if (resultado.seguridad.riesgo === 'alto') {
+      this.bus.publicar<EventoDeSeguridad>({
+        name: EVENTO_DE_SEGURIDAD,
+        occurredAt: new Date(),
+        payload: {
+          tipo: 'inyeccion_detectada',
+          clave: `entrega:${trabajo.idEntrega}`,
+          momento: new Date().toISOString(),
+          userId: trabajo.idCandidato,
+          metadata: {
+            idEntrega: trabajo.idEntrega,
+            idVacante: trabajo.idVacante,
+            puntaje: resultado.seguridad.puntaje,
+            banderas: resultado.seguridad.banderas.map((b) => b.codigo),
+          },
+        },
+      });
+    }
 
     // Despues del commit: reportes no debe buscar una fila que aun no existe.
     this.bus.publicar<EventoEvaluacionFinalizada>({

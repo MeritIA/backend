@@ -183,6 +183,39 @@ export class VariablesDeEntorno {
   @Min(1000)
   @Max(600_000)
   AI_REQUEST_TIMEOUT_MS?: number;
+
+  /**
+   * Canal de alertas de seguridad (paquete 5.5). Sin SMTP_HOST ni
+   * ALERTAS_DESTINO, las alertas se registran en el log y se avisa de que no
+   * hay canal; el proceso arranca igual.
+   */
+  @IsOptional()
+  @IsString()
+  SMTP_HOST?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  SMTP_PORT?: number;
+
+  @IsOptional()
+  @IsString()
+  SMTP_USUARIO?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_CONTRASENA?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_DESDE?: string;
+
+  /** Destinatarios separados por coma. */
+  @IsOptional()
+  @IsString()
+  ALERTAS_DESTINO?: string;
 }
 
 export function validarEntorno(configuracion: Record<string, unknown>): VariablesDeEntorno {

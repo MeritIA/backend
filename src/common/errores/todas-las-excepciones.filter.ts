@@ -7,6 +7,12 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { BusDeEventos } from '../events/index.js';
+import {
+  EVENTO_DE_SEGURIDAD,
+  type EventoDeSeguridad,
+  type TipoDeEventoDeSeguridad,
+} from '../alertas/index.js';
 import { CODIGOS, type DetalleValidacion, type RespuestaError } from './respuesta-error.js';
 
 /**
@@ -25,12 +31,25 @@ import { CODIGOS, type DetalleValidacion, type RespuestaError } from './respuest
 export class TodasLasExcepcionesFilter implements ExceptionFilter {
   private readonly logger = new Logger('Excepciones');
 
+  /**
+   * El bus es opcional porque este filtro se instancia a mano en el
+   * arranque, no por inyeccion. Sin el, todo sigue funcionando y solo se
+   * pierden las alertas, que es el comportamiento correcto para un filtro de
+   * errores: nunca puede ser el motivo de que una peticion falle.
+   */
+  constructor(private readonly bus?: BusDeEventos) {}
+
   catch(excepcion: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const respuesta = ctx.getResponse<{
       status: (c: number) => { json: (b: unknown) => void };
     }>();
-    const peticion = ctx.getRequest<{ url?: string; method?: string; ip?: string }>();
+    const peticion = ctx.getRequest<{
+      url?: string;
+      method?: string;
+      ip?: string;
+      usuario?: { id?: string };
+    }>();
 
     const referencia = randomUUID();
     const { estado, codigo, mensaje, errores } = this.interpretar(excepcion);
@@ -46,7 +65,50 @@ export class TodasLasExcepcionesFilter implements ExceptionFilter {
     };
 
     this.registrar(excepcion, cuerpo, peticion);
+    this.publicarSiEsDeSeguridad(cuerpo, peticion);
     respuesta.status(estado).json(cuerpo);
+  }
+
+  /**
+   * Publica los 401 y los 429 como eventos de seguridad (paquete 5.5).
+   *
+   * Aqui y no en cada guardia: este filtro ve TODAS las respuestas de error
+   * con su IP, su ruta y su usuario, asi que un origen nuevo de 401 queda
+   * cubierto sin tocar nada. Las reglas de cuando avisar son del servicio de
+   * alertas; esto solo cuenta lo que paso.
+   */
+  private publicarSiEsDeSeguridad(
+    cuerpo: RespuestaError,
+    peticion: { url?: string; method?: string; ip?: string; usuario?: { id?: string } } | undefined,
+  ): void {
+    if (!this.bus) return;
+
+    const tipo: TipoDeEventoDeSeguridad | undefined =
+      cuerpo.estado === 401
+        ? 'auth_failure'
+        : cuerpo.estado === 429
+          ? 'rate_limit_exceeded'
+          : undefined;
+    if (!tipo) return;
+
+    const userId = peticion?.usuario?.id;
+    this.bus.publicar<EventoDeSeguridad>({
+      name: EVENTO_DE_SEGURIDAD,
+      occurredAt: new Date(),
+      payload: {
+        tipo,
+        // Por usuario cuando hay sesion, y si no por IP: contar los fallos
+        // de todo el mundo en un mismo contador haria que una oficina
+        // entera disparara la alerta de una sola persona.
+        clave: userId ? `usuario:${userId}` : `ip:${peticion?.ip ?? 'desconocida'}`,
+        momento: cuerpo.momento,
+        ...(userId ? { userId } : {}),
+        ...(peticion?.ip ? { ip: peticion.ip } : {}),
+        ...(peticion?.url ? { ruta: peticion.url } : {}),
+        ...(peticion?.method ? { metodo: peticion.method } : {}),
+        metadata: { codigo: cuerpo.codigo, referencia: cuerpo.referencia },
+      },
+    });
   }
 
   /**

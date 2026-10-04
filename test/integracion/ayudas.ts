@@ -18,6 +18,7 @@ export async function levantarAplicacion(
 ): Promise<INestApplication<Server>> {
   const { AppModule } = await import('../../src/app.module.js');
   const { TodasLasExcepcionesFilter } = await import('../../src/common/errores/index.js');
+  const { BusDeEventos } = await import('../../src/common/events/index.js');
 
   // `ajustar` solo sustituye dependencias EXTERNAS (el servicio de IA). El
   // montaje de la aplicacion sigue siendo el mismo que en produccion.
@@ -40,7 +41,7 @@ export async function levantarAplicacion(
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
-  app.useGlobalFilters(new TodasLasExcepcionesFilter());
+  app.useGlobalFilters(new TodasLasExcepcionesFilter(app.get(BusDeEventos)));
 
   await app.init();
   return app;
