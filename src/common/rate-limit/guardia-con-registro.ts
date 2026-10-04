@@ -19,6 +19,26 @@ import type { ExecutionContext } from '@nestjs/common';
 export class GuardiaDeLimitesConRegistro extends ThrottlerGuard {
   private readonly logger = new Logger('RateLimit');
 
+  /**
+   * A quien se le cuentan las peticiones.
+   *
+   * Por omision, @nestjs/throttler cuenta por IP, y con eso el limitador que
+   * llamamos "usuario" contaba tambien por IP: dos candidatos en la misma red
+   * corporativa compartian cupo y se castigaban entre ellos, y una cuenta con
+   * varias IP tenia cupo multiplicado.
+   *
+   * Con una sesion abierta se cuenta por identificador de usuario, que es lo
+   * que piden el Plan de Seguridad §6.2 y el criterio del paquete 4.2 ("por
+   * usuario"). Sin sesion —registro, login— se sigue contando por IP, que es
+   * lo unico que hay.
+   */
+  protected override getTracker(peticion: Record<string, unknown>): Promise<string> {
+    const usuario = peticion.usuario as { id?: string } | undefined;
+    if (typeof usuario?.id === 'string') return Promise.resolve(`usuario:${usuario.id}`);
+    const ip = typeof peticion.ip === 'string' ? peticion.ip : 'desconocida';
+    return Promise.resolve(`ip:${ip}`);
+  }
+
   protected override async throwThrottlingException(
     context: ExecutionContext,
     detalle: ThrottlerLimitDetail,

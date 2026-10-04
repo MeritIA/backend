@@ -39,6 +39,21 @@ export const LimiteLogin = () =>
  * Cada entrega dispara una evaluacion con IA, que cuesta dinero y tiempo de
  * computo. Este limite protege el presupuesto tanto como el servicio.
  */
+/**
+ * Diez evaluaciones por minuto y POR USUARIO (Plan de Seguridad §6.2 y
+ * criterio del paquete 4.2).
+ *
+ * Va contra el limitador `usuario` y no contra `ip`: dos candidatos en la
+ * misma red corporativa comparten IP, y limitar por IP los castigaria juntos.
+ */
+export const LimiteEvaluacion = () =>
+  Throttle({
+    usuario: {
+      limit: entero(process.env.THROTTLE_EVALUACION_LIMIT, 10),
+      ttl: seconds(entero(process.env.THROTTLE_EVALUACION_TTL, 60)),
+    },
+  });
+
 export const LimiteEntrega = () =>
   Throttle({
     ip: {

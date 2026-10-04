@@ -218,6 +218,44 @@ Dos cosas que costaron encontrar y quedan escritas:
 **Sin servicio de IA configurado** (`AI_SERVICE_URL` y `AI_SERVICE_API_KEY`), la
 cola usa el evaluador honesto del paquete 4.4: falla en vez de inventar una nota.
 
+### 3.1.4 Auditoría anti inyección (paquete 4.2)
+
+El servicio de IA detecta y marca; el backend **persiste y expone**, porque es
+el único con base de datos.
+
+Cada evaluación guarda el riesgo, el puntaje, las banderas y las **versiones**
+de las reglas y de la lista negra con las que se analizó. El criterio del
+paquete pide un registro de auditoría con «prompt original, prompt sanitizado,
+banderas y respuesta del modelo»; esto es lo que se guarda y por qué:
+
+| Pieza | Dónde está |
+|---|---|
+| Prompt original | El archivo de la entrega, en el almacenamiento de objetos, con su hash |
+| Prompt sanitizado | Reproducible: mismo original y misma versión de reglas dan el mismo texto. Se guarda su **SHA-256** como prueba de lo enviado |
+| Banderas de seguridad | Columnas `riesgo_inyeccion`, `puntaje_inyeccion`, `banderas` |
+| Respuesta del modelo | La nota y las calificaciones por criterio, con su evidencia |
+
+**No se duplica el texto de la entrega.** Hacerlo significaría mantener dos
+copias de información personal, cifrarlas y rotarlas las dos, y borrarlas las
+dos cuando alguien ejerza su derecho de supresión.
+
+**Quién ve el análisis.** El reclutador de la vacante y los administradores. Al
+candidato **no**: saber qué patrón se detectó y con qué puntaje es justo lo que
+necesitaría para afinar el siguiente intento.
+
+**Si el servicio no devuelve el análisis** (un despliegue desfasado), la
+evaluación no se pierde: se guarda con versión `ausente`, que deja constancia
+de que esa entrega no pasó por la detección. Guardar «ninguno» sin más haría
+indistinguible «no había indicios» de «no se miró».
+
+**Límite de diez evaluaciones por minuto y por usuario** (Plan §6.2). De paso se
+corrigió un hueco: el limitador que llamábamos «usuario» contaba por IP, porque
+`@nestjs/throttler` rastrea por IP salvo que se le diga otra cosa. Dos
+candidatos en la misma red corporativa compartían cupo y una cuenta con varias
+IP lo multiplicaba. Ahora, con sesión abierta se cuenta por identificador de
+usuario; sin sesión —registro, login— se sigue contando por IP, que es lo único
+que hay.
+
 ## 4. Datos
 
 **PostgreSQL, un clúster, un esquema por módulo.** No hay un `public`

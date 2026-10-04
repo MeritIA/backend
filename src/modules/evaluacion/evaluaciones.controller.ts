@@ -21,7 +21,8 @@ import {
 import { ColaDeEvaluacionService } from './cola/cola-de-evaluacion.service.js';
 import { EvaluacionService } from './evaluacion.service.js';
 import { EvaluacionRespuesta, aRespuesta } from './dto/evaluacion.dto.js';
-import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
+import { RequierePermiso, Rol, type UsuarioAutenticado } from '../autenticacion/index.js';
+import { LimiteEvaluacion } from '../../common/rate-limit/index.js';
 import type { Solicitante } from '../vacantes/index.js';
 
 class MetricasDeColaRespuesta {
@@ -79,7 +80,8 @@ export class EvaluacionesController {
   })
   @ApiOkResponse({ type: [EvaluacionRespuesta] })
   async mias(@Req() p: Peticion): Promise<EvaluacionRespuesta[]> {
-    return (await this.evaluacion.mias(solicitanteDe(p))).map(aRespuesta);
+    // Sin el analisis: al candidato no se le dice que patron se detecto.
+    return (await this.evaluacion.mias(solicitanteDe(p))).map((e) => aRespuesta(e));
   }
 
   @Get('vacante/:idVacante')
@@ -95,7 +97,9 @@ export class EvaluacionesController {
     @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
     @Req() p: Peticion,
   ): Promise<EvaluacionRespuesta[]> {
-    return (await this.evaluacion.deVacante(idVacante, solicitanteDe(p))).map(aRespuesta);
+    return (await this.evaluacion.deVacante(idVacante, solicitanteDe(p))).map((e) =>
+      aRespuesta(e, { conSeguridad: true }),
+    );
   }
 
   @Get('entrega/:idEntrega')
@@ -112,11 +116,15 @@ export class EvaluacionesController {
     @Param('idEntrega', new ParseUUIDPipe({ version: '4' })) idEntrega: string,
     @Req() p: Peticion,
   ): Promise<EvaluacionRespuesta> {
-    return aRespuesta(await this.evaluacion.deEntrega(idEntrega, solicitanteDe(p)));
+    const evaluacion = await this.evaluacion.deEntrega(idEntrega, solicitanteDe(p));
+    return aRespuesta(evaluacion, { conSeguridad: p.usuario.rol !== Rol.Candidato });
   }
 
   @Post(':idEntrega/reintentar')
   @RequierePermiso('evaluaciones:reintentar')
+  // Diez por minuto y por usuario: cada reintento gasta cuota del proveedor
+  // (Plan de Seguridad §6.2, criterio del paquete 4.2).
+  @LimiteEvaluacion()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Reintenta la evaluacion de una entrega fallida',

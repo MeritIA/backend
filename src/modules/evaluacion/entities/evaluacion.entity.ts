@@ -8,6 +8,9 @@ import {
 } from 'typeorm';
 import type { CalificacionCriterio } from './calificacion-criterio.entity.js';
 
+export const RIESGOS_DE_INYECCION = ['ninguno', 'bajo', 'medio', 'alto'] as const;
+export type RiesgoDeInyeccion = (typeof RIESGOS_DE_INYECCION)[number];
+
 /**
  * Resultado de evaluar una entrega (paquete 4.5).
  *
@@ -70,6 +73,44 @@ export class Evaluacion {
   /** Cuantos archivos de texto se le enviaron al modelo. Sirve para auditar. */
   @Column({ type: 'int' })
   archivos!: number;
+
+  /**
+   * Auditoria anti inyeccion (paquete 4.2).
+   *
+   * El riesgo y las banderas que detecto el servicio de IA, con las versiones
+   * de las reglas aplicadas: una nota se puede disputar meses despues, y hay
+   * que poder decir con que reglas se marco esta entrega.
+   */
+  @Column({
+    type: 'enum',
+    enum: RIESGOS_DE_INYECCION,
+    enumName: 'riesgo_inyeccion',
+    name: 'riesgo_inyeccion',
+    default: 'ninguno',
+  })
+  riesgoInyeccion!: RiesgoDeInyeccion;
+
+  @Column({ type: 'int', name: 'puntaje_inyeccion', default: 0 })
+  puntajeInyeccion!: number;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  banderas!: { codigo: string; archivo: string; ocurrencias: number }[];
+
+  @Column({ type: 'varchar', length: 20, name: 'version_reglas', default: 'desconocida' })
+  versionReglas!: string;
+
+  @Column({ type: 'varchar', length: 20, name: 'version_lista_negra', default: 'desconocida' })
+  versionListaNegra!: string;
+
+  /**
+   * SHA-256 del texto que se envio al modelo.
+   *
+   * No se guarda el texto: el original ya esta en el almacenamiento de
+   * objetos y duplicarlo seria mantener dos copias de datos personales. El
+   * hash permite demostrar que lo enviado fue exactamente eso.
+   */
+  @Column({ type: 'char', length: 64, name: 'texto_sha256', nullable: true })
+  textoSha256!: string | null;
 
   @OneToMany('CalificacionCriterio', 'evaluacion', { cascade: true })
   criterios!: CalificacionCriterio[];

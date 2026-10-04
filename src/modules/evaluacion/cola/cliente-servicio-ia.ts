@@ -34,12 +34,26 @@ export interface CalificacionRecibida {
   readonly evidencia: string;
 }
 
+/** Analisis anti inyeccion que hace el servicio de IA (paquete 4.2). */
+export interface SeguridadRecibida {
+  readonly riesgo: 'ninguno' | 'bajo' | 'medio' | 'alto';
+  readonly puntaje: number;
+  readonly banderas: readonly {
+    readonly codigo: string;
+    readonly archivo: string;
+    readonly ocurrencias: number;
+  }[];
+  readonly versionReglas: string;
+  readonly versionListaNegra: string;
+}
+
 export interface RespuestaDeEvaluacion {
   readonly idEvaluacion: string;
   readonly notaFinal: number;
   readonly criterios: readonly CalificacionRecibida[];
   readonly proveedor: string;
   readonly modelo: string;
+  readonly seguridad: SeguridadRecibida;
 }
 
 const TIEMPO_POR_OMISION_MS = 120_000;
@@ -212,6 +226,65 @@ export class ClienteServicioIa {
       criterios,
       proveedor: r.proveedor,
       modelo: r.modelo,
+      seguridad: this.validarSeguridad(r.seguridad),
+    };
+  }
+
+  /**
+   * Comprueba el analisis anti inyeccion que viene del servicio.
+   *
+   * Si no viene —un servicio desplegado por detras del backend— NO se pierde
+   * la evaluacion: se guarda con version 'ausente', que deja constancia de
+   * que esa entrega no paso por la deteccion. Mentir con "ninguno" a secas
+   * seria peor: nadie podria distinguir "no habia indicios" de "no se miro".
+   */
+  private validarSeguridad(bruto: unknown): SeguridadRecibida {
+    const RIESGOS = ['ninguno', 'bajo', 'medio', 'alto'] as const;
+    const ausente: SeguridadRecibida = {
+      riesgo: 'ninguno',
+      puntaje: 0,
+      banderas: [],
+      versionReglas: 'ausente',
+      versionListaNegra: 'ausente',
+    };
+
+    if (typeof bruto !== 'object' || bruto === null) {
+      this.logger.warn(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'warn',
+          eventType: 'analisis_de_inyeccion_ausente',
+          metadata: { motivo: 'el servicio de IA no devolvio el bloque de seguridad' },
+        }),
+      );
+      return ausente;
+    }
+
+    const s = bruto as Record<string, unknown>;
+    const riesgo = RIESGOS.find((r) => r === s.riesgo);
+    const puntaje = typeof s.puntaje === 'number' && Number.isFinite(s.puntaje) ? s.puntaje : 0;
+    const banderas = Array.isArray(s.banderas) ? s.banderas : [];
+
+    return {
+      riesgo: riesgo ?? ausente.riesgo,
+      puntaje: Math.min(100, Math.max(0, Math.round(puntaje))),
+      // Solo los campos conocidos, y recortados: el servicio promete no incluir
+      // el texto del candidato, pero esto es lo que lo garantiza aqui.
+      banderas: banderas.flatMap((b: unknown) => {
+        if (typeof b !== 'object' || b === null) return [];
+        const x = b as Record<string, unknown>;
+        if (typeof x.codigo !== 'string' || typeof x.archivo !== 'string') return [];
+        return [
+          {
+            codigo: x.codigo.slice(0, 60),
+            archivo: x.archivo.slice(0, 500),
+            ocurrencias: typeof x.ocurrencias === 'number' ? Math.round(x.ocurrencias) : 1,
+          },
+        ];
+      }),
+      versionReglas: typeof s.versionReglas === 'string' ? s.versionReglas.slice(0, 20) : 'ausente',
+      versionListaNegra:
+        typeof s.versionListaNegra === 'string' ? s.versionListaNegra.slice(0, 20) : 'ausente',
     };
   }
 }

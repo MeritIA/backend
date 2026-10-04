@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Evaluacion } from '../entities/evaluacion.entity.js';
 import { CalificacionCriterio } from '../entities/calificacion-criterio.entity.js';
 import { EVALUACION_FINALIZADA, type EventoEvaluacionFinalizada } from '../dominio/eventos.js';
@@ -106,6 +106,15 @@ export class EvaluadorQuePersiste implements Evaluador {
           proveedor: resultado.proveedor,
           modelo: resultado.modelo,
           archivos: archivos.length,
+          riesgoInyeccion: resultado.seguridad.riesgo,
+          puntajeInyeccion: resultado.seguridad.puntaje,
+          banderas: resultado.seguridad.banderas.map((b) => ({ ...b })),
+          versionReglas: resultado.seguridad.versionReglas,
+          versionListaNegra: resultado.seguridad.versionListaNegra,
+          // Prueba de que se envio exactamente ese texto, sin duplicarlo.
+          textoSha256: createHash('sha256')
+            .update(archivos.map((a) => `${a.ruta}\n${a.contenido}`).join('\n'))
+            .digest('hex'),
         }),
       );
 
@@ -131,6 +140,8 @@ export class EvaluadorQuePersiste implements Evaluador {
       notaFinal: resultado.notaFinal,
       proveedor: resultado.proveedor,
       modelo: resultado.modelo,
+      riesgoInyeccion: resultado.seguridad.riesgo,
+      banderas: resultado.seguridad.banderas.length,
     });
 
     // Despues del commit: reportes no debe buscar una fila que aun no existe.
