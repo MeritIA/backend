@@ -122,6 +122,78 @@ reintentarse cuando el adaptador esté conectado. No se inventa ninguna nota.
 | El archivo no miente sobre su tipo | El `Content-Type` se deduce de la extensión validada, no del que declara el cliente. El nombre original se guarda cifrado. |
 | No quedan archivos huérfanos | Si la inserción o el commit fallan, el objeto subido se borra. |
 
+### 3.1.5 Reportes consolidados (paquete 5.1)
+
+El reclutador consulta el ranking de una vacante, el detalle de un candidato y
+una exportación en CSV. Tres rutas, todas colgadas de una vacante.
+
+**Este módulo no es dueño de ningún dato.** No tiene entidades, ni
+repositorios, ni migración: compone lo que ya existe en evaluación, entregas,
+vacantes y autenticación, cada uno por su puerta pública.
+
+Es una **divergencia consciente con el Diccionario de la EDT**, que lista
+"esquema de reportes" entre los recursos del paquete. El motivo: una tabla
+propia sería una copia de las notas, y una copia se desincroniza —un evento
+perdido, un reinicio a medias— y entonces el reporte contradice a la
+evaluación, que es el dato que un candidato puede disputar. Para el MVP no hace
+falta: el ranking de una vacante son decenas de filas, no millones. Si el
+piloto pide analítica que no aguante esta vía, el paso natural es proyectar por
+el evento `evaluacion.evaluacion-finalizada`, que el paquete 4.5 ya publica
+justo para esto.
+
+**Qué intento puntúa: el mejor.** Un candidato puede entregar varias veces, y el
+ranking lleva una fila por persona. Ningún documento define cuál de sus notas
+cuenta. Se toma la más alta porque los reintentos existen para que el candidato
+muestre lo que sabe: puntuar el último intento convertiría cada intento extra en
+un riesgo, y la gente dejaría de usarlos. El detalle por candidato devuelve
+**todos** los intentos, así que nada queda escondido: el reclutador ve de dónde
+sale la nota del ranking. **Queda anotado para la Declaración de Alcance.**
+
+**El promedio de la vacante es por candidato, no por evaluación.** Quien entregó
+cinco veces no pesa cinco veces en el promedio.
+
+**El promedio por criterio va en porcentaje logrado**, no en puntos crudos: dos
+criterios con escalas distintas no se comparan en bruto. Se ordena del criterio
+más flojo al más logrado, que es donde está el hallazgo para el reclutador.
+
+**El aislamiento por empresa no se reimplementa aquí.** Toda lectura entra por
+`VacantesService.obtenerPara` o `EvaluacionService.deVacante`, que ya exigen el
+acceso y responden 404. Comprobarlo otra vez en reportes crearía un segundo
+sitio donde la regla puede quedarse vieja. Y no existe un reporte "de un
+candidato" suelto: ese mostraría su historial en otras empresas, que es justo lo
+que el tercer criterio del paquete prohíbe.
+
+**El reporte identifica a las personas.** Para eso autenticación expone
+`identidadesDe`, que devuelve nombre y correo en lote y nada más —no el usuario
+entero, que llevaría el hash de la contraseña por todo el monolito—. Que el
+reclutador vea el correo no abre nada: es el correo con el que él mismo invitó al
+candidato.
+
+**Las entregas se cuentan en la base, agrupadas por estado.** El reporte
+necesita saber si el ranking está completo o si falta gente por evaluar, pero no
+necesita las entregas: su nombre de archivo está cifrado en reposo, y cargarlas
+para contarlas obligaría a descifrar un dato personal que al reporte no le hace
+ninguna falta.
+
+#### El CSV y la inyección de fórmulas
+
+Una celda que empieza por `=`, `+`, `-`, `@`, tabulador o retorno de carro no es
+texto para Excel, LibreOffice ni Sheets: es una fórmula, y se ejecuta al abrir
+el archivo. Hay fórmulas que leen otras celdas y las envían a una URL
+(`HYPERLINK`, `WEBSERVICE`, `IMPORTDATA`), y otras que lanzan un ejecutable por
+DDE.
+
+Aquí el riesgo no es teórico. **El nombre del candidato lo escribe el candidato**
+y la validación del registro admite guiones y puntos, así que `-Sara Gomez` es
+un nombre válido que llega al CSV. La evidencia, además, la escribe un modelo a
+partir de los archivos que subió un tercero. Se neutraliza anteponiendo un
+apóstrofo, que es lo que recomienda OWASP: la hoja lo trata como texto y no lo
+muestra en la celda. Hay una prueba de integración que lo comprueba de extremo a
+extremo, con un candidato registrado con ese nombre.
+
+El CSV empieza con BOM porque Excel en Windows, sin él, lee el archivo como ANSI
+y destroza cualquier acento. El equipo trabaja en español.
+
 ### 3.2 Organización del código
 
 ```
@@ -553,7 +625,7 @@ cambio en la API aparezca en el diff de la revisión por pares.
 | Lista blanca CORS en todo entorno | El ejemplo del Plan abre CORS fuera de producción | Desviación, §5.4 |
 | ESLint en vez de oxlint | El encuadre lo exige y lo incluye en los criterios | Encuadre del proyecto |
 
-## 10. Contradicción abierta entre documentos
+## 10. Contradicciones y divergencias abiertas
 
 **Frontend: Next.js o Angular.** El *Project Charter* (v1.0, aprobado) dice
 Next.js. El *Plan de Seguridad* (v1.0, aprobado) dedica su §7 entero a Angular y
@@ -567,18 +639,39 @@ aplicación móvil en ningún punto, mientras que el Plan y la EDT sí.
 formalmente.** Afecta al backend en la lista de orígenes CORS y en el transporte
 del token.
 
+**Esquema de reportes.** El *Diccionario de la EDT* lista "esquema de reportes"
+entre los recursos del paquete 5.1. El módulo se implementó **sin esquema
+propio**, porque no es dueño de ningún dato y una copia de las notas se
+desincroniza. El razonamiento está en §3.1.5. **Si el equipo quiere conservar el
+documento tal como está, hay que decidirlo explícitamente**, no dejar que el
+código y el diccionario digan cosas distintas.
+
+**Qué intento puntúa en el ranking.** Ningún documento lo define. El código toma
+el mejor intento de cada candidato, y el porqué está en §3.1.5. Es una decisión
+de producto y le corresponde a la **Declaración de Alcance**.
+
 ## 11. Lo que todavía no existe
+
+Esta tabla se actualiza al cerrar cada paquete. Lo que no aparece aquí y sí en
+el Diccionario de la EDT, está construido y probado.
 
 | Paquete | Qué falta | Responsable |
 |---|---|---|
-| 2.1 | Módulo de autenticación (PASETO, roles) | Anderson Fabián García Nieto |
-| 2.2 | CRUD de vacantes | — |
-| 2.3 | Banco de ejercicios | — |
-| 2.4 | API versionada, DTOs y filtro global de excepciones | Anderson Fabián García Nieto |
-| 3.3 | Almacenamiento de objetos | Daniel Eduardo Useche Pinilla |
-| 4.2 | Filtros anti *prompt injection* | — |
-| 4.2 – 4.3 | Filtros anti *prompt injection* y calibración de rúbricas | Juana Lozano Chaves |
-| 5.5 | Observabilidad y *health check* | Daniel Eduardo Useche Pinilla |
+| 3.1 – 3.2 | Frontend Angular y la APK con Capacitor | Laura Alejandra Venegas Pirabán |
+| 4.3 | Calibración de las rúbricas con entregas de referencia | Juana Lozano Chaves |
+| 5.2 | Documentación técnica del paquete (el contrato OpenAPI ya se genera) | Hildebrando Peña Quezada |
+| 5.3 | Onboarding del cliente piloto | Hildebrando Peña Quezada |
+| 5.4 | Manual de uso básico | Laura Alejandra Venegas Pirabán |
+| 5.6 | Operación del piloto y reporte de resultados | Hildebrando Peña Quezada |
+
+Y dentro del backend, tres cosas concretas:
+
+- **Extracción de texto de PDF.** Hoy se leen los archivos de texto del `.zip`;
+  un PDF se rechaza con un motivo claro en vez de evaluarse a medias.
+- **Pruebas de carga.** El Plan de Seguridad fija objetivos de latencia y
+  concurrencia que todavía no se han medido.
+- **Contadores de alertas en Redis.** Ahora viven en memoria, así que con varias
+  instancias cada una cuenta las suyas (§5.8).
 
 También falta localizar la **Declaración de Alcance v1.0**, que la EDT cita como
 fuente de las funcionalidades por módulo y de los criterios de aceptación.

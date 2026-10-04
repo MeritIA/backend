@@ -246,6 +246,44 @@ export class EntregasService {
     return this.entregas.find({ where: { idVacante }, order: { creadaEn: 'DESC' } });
   }
 
+  /**
+   * Cuantas entregas hay de la vacante en cada estado.
+   *
+   * Lo pide el reporte del paquete 5.1, que necesita saber si el ranking esta
+   * completo o si todavia falta gente por evaluar.
+   *
+   * Cuenta en la base y no cargando las filas: el nombre del archivo esta
+   * cifrado en reposo, asi que traer cada entrega para contarlas obligaria a
+   * descifrar un dato personal que al reporte no le hace ninguna falta. Ademas
+   * una vacante con cientos de entregas no tiene por que viajar entera para
+   * producir cuatro numeros.
+   */
+  async conteosPorEstado(
+    idVacante: string,
+    solicitante: Solicitante,
+  ): Promise<Record<EstadoEntrega, number>> {
+    if (!(await this.vacantes.puedeVerEntregasDe(idVacante, solicitante))) {
+      this.registrar('acceso_denegado_por_recurso', solicitante, { idVacante });
+      throw new NotFoundException('La vacante no existe.');
+    }
+
+    const filas = await this.entregas
+      .createQueryBuilder('e')
+      .select('e.estado', 'estado')
+      .addSelect('count(*)::int', 'total')
+      .where('e.id_vacante = :idVacante', { idVacante })
+      .groupBy('e.estado')
+      .getRawMany<{ estado: EstadoEntrega; total: number }>();
+
+    // Todos los estados presentes aunque esten en cero: asi quien lee el
+    // reporte no tiene que distinguir "cero" de "no vino el dato".
+    const conteos = Object.fromEntries(
+      Object.values(EstadoEntrega).map((estado) => [estado, 0]),
+    ) as Record<EstadoEntrega, number>;
+    for (const fila of filas) conteos[fila.estado] = Number(fila.total);
+    return conteos;
+  }
+
   async obtenerPara(id: string, solicitante: Solicitante): Promise<Entrega> {
     const entrega = await this.obtenerConHistorial(id);
     await this.exigirAcceso(entrega, solicitante);

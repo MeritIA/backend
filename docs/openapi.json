@@ -1152,6 +1152,127 @@
           "evaluaciones"
         ]
       }
+    },
+    "/reportes/vacantes/{idVacante}": {
+      "get": {
+        "description": "Ranking de candidatos de mayor a menor nota, con sus cifras consolidadas y el promedio por criterio. El ranking lleva una fila por candidato, con la nota de su mejor intento.",
+        "operationId": "ReportesController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteDeVacanteRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Reporte consolidado de una vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/candidatos/{idCandidato}": {
+      "get": {
+        "description": "Todos sus intentos evaluados, cada uno con el desglose por criterio y la evidencia que sustenta el puntaje. Es de donde sale la nota del ranking.",
+        "operationId": "ReportesController_deCandidato",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteDeCandidatoRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante es de otra empresa, o ese candidato no tiene evaluaciones en ella."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Detalle de un candidato en la vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/exportar": {
+      "get": {
+        "description": "Exportacion basica del entregable. Una fila por candidato; el desglose completo se consulta en el detalle. Las celdas van neutralizadas contra inyeccion de formulas.",
+        "operationId": "ReportesController_exportar",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El CSV, como descarga."
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Exporta el ranking de la vacante en CSV",
+        "tags": [
+          "reportes"
+        ]
+      }
     }
   },
   "info": {
@@ -1817,6 +1938,339 @@
         "required": [
           "idEntrega",
           "estado"
+        ]
+      },
+      "VacanteDelReporteRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "example": "publicada"
+          }
+        },
+        "required": [
+          "id",
+          "titulo",
+          "estado"
+        ]
+      },
+      "PromedioDeCriterioRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "promedioLogrado": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Promedio del porcentaje logrado en ese criterio. En porcentaje y no en puntos crudos, porque dos criterios con escalas distintas no se comparan en bruto."
+          },
+          "peso": {
+            "type": "number",
+            "description": "Cuanto aporta el criterio a la nota final."
+          },
+          "evaluaciones": {
+            "type": "number",
+            "description": "Sobre cuantas evaluaciones se calculo."
+          }
+        },
+        "required": [
+          "criterio",
+          "promedioLogrado",
+          "peso",
+          "evaluaciones"
+        ]
+      },
+      "ResumenRespuesta": {
+        "type": "object",
+        "properties": {
+          "candidatosEvaluados": {
+            "type": "number",
+            "description": "Cuantas personas distintas tienen al menos una nota."
+          },
+          "entregasEvaluadas": {
+            "type": "number"
+          },
+          "entregasEnProceso": {
+            "type": "number",
+            "description": "Recibidas o evaluandose. Dice si el ranking todavia esta incompleto."
+          },
+          "entregasFallidas": {
+            "type": "number",
+            "description": "Fallo la evaluacion, no el candidato. Se pueden reintentar."
+          },
+          "notaPromedio": {
+            "type": "object",
+            "nullable": true,
+            "description": "Una nota por candidato: quien entrego cinco veces no pesa cinco veces."
+          },
+          "notaMediana": {
+            "type": "object",
+            "nullable": true
+          },
+          "notaMaxima": {
+            "type": "object",
+            "nullable": true
+          },
+          "notaMinima": {
+            "type": "object",
+            "nullable": true
+          },
+          "porCriterio": {
+            "description": "Del criterio mas flojo al mas logrado: donde se cae la gente.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromedioDeCriterioRespuesta"
+            }
+          },
+          "entregasConRiesgoAlto": {
+            "type": "number",
+            "description": "Entregas marcadas con riesgo alto de inyeccion (paquete 4.2)."
+          }
+        },
+        "required": [
+          "candidatosEvaluados",
+          "entregasEvaluadas",
+          "entregasEnProceso",
+          "entregasFallidas",
+          "notaPromedio",
+          "notaMediana",
+          "notaMaxima",
+          "notaMinima",
+          "porCriterio",
+          "entregasConRiesgoAlto"
+        ]
+      },
+      "CandidatoRespuesta": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Ana Maria Rojas"
+          },
+          "correo": {
+            "type": "string",
+            "example": "ana@ejemplo.com",
+            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
+          }
+        },
+        "required": [
+          "nombre",
+          "correo"
+        ]
+      },
+      "FilaDeRankingRespuesta": {
+        "type": "object",
+        "properties": {
+          "posicion": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Dos candidatos empatados comparten posicion."
+          },
+          "candidato": {
+            "$ref": "#/components/schemas/CandidatoRespuesta"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "La del mejor intento evaluado. El detalle del candidato muestra todos."
+          },
+          "intentosEvaluados": {
+            "type": "number",
+            "minimum": 1
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEvaluacion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evaluadaEn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "riesgoInyeccion": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ],
+            "description": "Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano."
+          }
+        },
+        "required": [
+          "posicion",
+          "candidato",
+          "idCandidato",
+          "notaFinal",
+          "intentosEvaluados",
+          "idEntrega",
+          "idEvaluacion",
+          "evaluadaEn",
+          "riesgoInyeccion"
+        ]
+      },
+      "ReporteDeVacanteRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacante": {
+            "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
+          },
+          "resumen": {
+            "$ref": "#/components/schemas/ResumenRespuesta"
+          },
+          "ranking": {
+            "description": "De mayor a menor nota.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaDeRankingRespuesta"
+            }
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string",
+            "description": "El reporte se calcula al pedirlo; no hay copia que se desactualice."
+          }
+        },
+        "required": [
+          "vacante",
+          "resumen",
+          "ranking",
+          "generadoEn"
+        ]
+      },
+      "CriterioDelIntentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "puntaje": {
+            "type": "number"
+          },
+          "escalaMaxima": {
+            "type": "number"
+          },
+          "peso": {
+            "type": "number"
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Por que ese puntaje, con referencia a la entrega."
+          }
+        },
+        "required": [
+          "criterio",
+          "puntaje",
+          "escalaMaxima",
+          "peso",
+          "evidencia"
+        ]
+      },
+      "IntentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idEvaluacion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEjercicio": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "creadaEn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "riesgoInyeccion": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ]
+          },
+          "criterios": {
+            "description": "En el orden de la rubrica.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDelIntentoRespuesta"
+            }
+          }
+        },
+        "required": [
+          "idEvaluacion",
+          "idEntrega",
+          "idEjercicio",
+          "notaFinal",
+          "creadaEn",
+          "riesgoInyeccion",
+          "criterios"
+        ]
+      },
+      "ReporteDeCandidatoRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacante": {
+            "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
+          },
+          "candidato": {
+            "$ref": "#/components/schemas/CandidatoRespuesta"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "posicionEnLaVacante": {
+            "type": "object",
+            "nullable": true,
+            "description": "Su puesto en el ranking de la vacante."
+          },
+          "intentos": {
+            "description": "Del mas reciente al mas viejo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntentoRespuesta"
+            }
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vacante",
+          "candidato",
+          "idCandidato",
+          "intentos",
+          "generadoEn"
         ]
       }
     }

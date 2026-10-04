@@ -1,12 +1,18 @@
 import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Usuario } from './entities/usuario.entity.js';
 import { Rol } from './dominio/rol.js';
 import { PasetoService, TokenRechazadoError } from './servicios/paseto.service.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
 import type { LoginDto, RegistroDto } from './dto/index.js';
 import type { SesionCompleta } from './entrega-de-sesion.js';
+
+/** Lo que otro modulo puede saber de un usuario: como se llama y su correo. */
+export interface Identidad {
+  readonly nombre: string;
+  readonly correo: string;
+}
 
 /**
  * Servicio de aplicacion del modulo de autenticacion.
@@ -129,6 +135,30 @@ export class AutenticacionService {
       throw new UnauthorizedException('Sesion no valida.');
     }
     return usuario;
+  }
+
+  /**
+   * Nombre y correo de un grupo de usuarios, para que otro modulo pueda
+   * mostrar de quien habla.
+   *
+   * Lo necesita el reporte del paquete 5.1: su criterio es que "el reclutador
+   * consulta el ranking de candidatos", y un ranking de identificadores no es
+   * un ranking de candidatos.
+   *
+   * SOLO NOMBRE Y CORREO, y en lote. Devolver el Usuario entero repartiria por
+   * el monolito el hash de la contrasena y el estado de la cuenta, que no le
+   * hacen falta a nadie de fuera. En lote porque la alternativa es una consulta
+   * por fila del ranking.
+   *
+   * Que el reclutador vea el correo no abre nada: es el correo con el que el
+   * mismo invito al candidato a la vacante.
+   */
+  async identidadesDe(ids: readonly string[]): Promise<Map<string, Identidad>> {
+    if (ids.length === 0) return new Map();
+    // Sin duplicados: el ranking puede traer el mismo candidato en dos filas.
+    const unicos = [...new Set(ids)];
+    const usuarios = await this.usuarios.find({ where: { id: In(unicos) } });
+    return new Map(usuarios.map((u) => [u.id, { nombre: u.nombreCompleto, correo: u.correo }]));
   }
 
   /** Invalida todos los tokens del usuario emitidos hasta ahora. */
