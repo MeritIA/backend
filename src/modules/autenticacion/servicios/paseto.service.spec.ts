@@ -128,13 +128,21 @@ describe('PasetoService', () => {
 
     it('rechaza un token manipulado', async () => {
       const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
-      // El caracter de reemplazo se elige distinto del original a proposito: con
-      // una 'X' fija, un token que ya terminara en 'X' quedaba intacto y la
-      // prueba fallaba una de cada sesenta y pico ejecuciones.
-      const distinto = (c: string) => (c === 'X' ? 'Y' : 'X');
+      // Se altera un caracter del MEDIO, no el ultimo.
+      //
+      // El intento anterior cambiaba el ultimo evitando la 'X'. Eso bajaba la
+      // intermitencia sin quitarla: en base64url el ultimo caracter arrastra
+      // bits sobrantes y, segun la longitud, varios caracteres distintos
+      // decodifican los MISMOS bytes. Cuando tocaba uno de esos, el token
+      // seguia siendo valido. Un caracter del medio usa sus seis bits.
+      const enMedio = (t: string): string => {
+        const i = Math.floor(t.length / 2);
+        return t.slice(0, i) + (t[i] === 'a' ? 'b' : 'a') + t.slice(i + 1);
+      };
+      const primeroDistinto = (c: string): string => (c === 'X' ? 'Y' : 'X');
       for (const roto of [
-        t.slice(0, -1) + distinto(t.at(-1) ?? ''),
-        distinto(t[0]) + t.slice(1),
+        enMedio(t),
+        primeroDistinto(t[0]) + t.slice(1),
         t.replace('v4.public.', 'v4.local.'),
       ]) {
         expect(await motivoDe(servicio.verificar(roto, 'acceso'))).toBe('firma_invalida');
