@@ -104,13 +104,21 @@ describe('integracion: entrega de tokens por tipo de cliente', () => {
         .expect(201);
       const acceso = cookie(r, 'meritia_acceso')!.split(';')[0];
 
-      // El caracter de reemplazo se elige distinto del original: con una 'X'
-      // fija, una cookie que ya terminara en 'X' quedaba intacta y la prueba
-      // fallaba una de cada sesenta y pico ejecuciones.
-      const ultimo = acceso.at(-1);
+      // Se altera un caracter del MEDIO del token, no el ultimo.
+      //
+      // El intento anterior cambiaba el ultimo y solo evitaba la 'X'. Eso
+      // bajaba la intermitencia sin quitarla: en base64url el ultimo caracter
+      // arrastra bits sobrantes y, segun la longitud, hasta cuatro caracteres
+      // distintos decodifican los MISMOS bytes. Cuando tocaba uno de esos, el
+      // token seguia siendo valido y la respuesta era 200. Un caracter del
+      // medio usa sus seis bits, asi que cambiarlo siempre cambia la firma.
+      const [nombre, valor] = acceso.split('=');
+      const medio = Math.floor(valor.length / 2);
+      const alterado =
+        valor.slice(0, medio) + (valor[medio] === 'a' ? 'b' : 'a') + valor.slice(medio + 1);
       await api(app)
         .get('/api/v1/autenticacion/yo')
-        .set('Cookie', [`${acceso.slice(0, -1)}${ultimo === 'X' ? 'Y' : 'X'}`])
+        .set('Cookie', [`${nombre}=${alterado}`])
         .expect(401);
     });
 
