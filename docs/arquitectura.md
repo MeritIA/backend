@@ -578,6 +578,32 @@ Configuracion de entorno invalida. Revisa tu .env:
 
 Los secretos **nunca** van a Git: `.gitignore` bloquea `.env`, `*.pem` y `*.key`.
 
+### 6.1 Excepciones de dependencias, y por qué son dos y no una global
+
+El proyecto tenía `legacy-peer-deps=true` en un `.npmrc`, puesto porque
+`@nestjs/throttler` 6.5 no declaraba soporte para NestJS 12. Esa bandera
+**relaja la comprobación de peers en todo el proyecto**, así que una
+incompatibilidad real de cualquier otro paquete pasaba sin aviso. El propio
+comentario del archivo decía que había que quitarla en cuanto se pudiera.
+
+Se quitó. `@nestjs/throttler` 6.7.1 ya declara `^12.0.0`, y al quitarla
+aparecieron **dos conflictos que la bandera estaba tapando**:
+
+| Paquete | Qué pide | Por qué se puede forzar |
+|---|---|---|
+| `@nest-lab/throttler-storage-redis` 1.2.0 | NestJS ≤ 11 | Es la última versión publicada y usa solo la API de `ThrottlerStorage`, estable entre la 11 y la 12. No hay alternativa publicada. |
+| `typeorm` 1.1.1 | `ioredis` 5 | Ese peer es para la **caché de consultas de TypeORM, que el proyecto no usa**: el `cache: true` del `app.module` es del `ConfigModule` y cachea variables de entorno, no consultas. |
+
+Las dos quedan como `overrides` **acotados a esos paquetes** en `package.json`.
+La diferencia con la bandera global es la que importa: si mañana otra
+dependencia declara una incompatibilidad real, `npm ci` lo dice en vez de
+callarse.
+
+**Si `@nest-lab/throttler-storage-redis` publica una versión que soporte NestJS
+12, su override sobra.** Y si alguna vez se activa la caché de consultas de
+TypeORM, hay que revisar el de `ioredis` antes, porque entonces el peer sí
+aplica.
+
 ## 7. Entorno local
 
 ```bash
