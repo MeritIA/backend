@@ -17,7 +17,15 @@ import type { ExecutionContext } from '@nestjs/common';
  */
 @Injectable()
 export class GuardiaDeLimitesConRegistro extends ThrottlerGuard {
-  private readonly logger = new Logger('RateLimit');
+  /**
+   * Se SOBREESCRIBE el logger de ThrottlerGuard en vez de declarar otro.
+   *
+   * Desde @nestjs/throttler 6.7 la clase base expone `protected logger`, y un
+   * campo propio y privado con el mismo nombre no compila (TS2415). Mejor asi:
+   * un solo logger, y los avisos de la libreria salen con el mismo contexto
+   * que los nuestros en vez de con dos nombres distintos para lo mismo.
+   */
+  protected override logger = new Logger('RateLimit');
 
   /**
    * A quien se le cuentan las peticiones.
