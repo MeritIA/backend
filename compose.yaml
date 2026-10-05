@@ -21,7 +21,7 @@ services:
       DATABASE_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://almacenamiento:8333
       # El servicio de IA corre en su propio proyecto de compose, con su propia
       # red: desde aqui no se alcanza por "localhost", que seria este mismo
       # contenedor. En local se llega por el host; en produccion, por el nombre
@@ -55,7 +55,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      almacenamiento:
         condition: service_healthy
     restart: unless-stopped
 
@@ -106,19 +106,62 @@ services:
 
   # Almacenamiento de objetos compatible con S3, para entregas de candidatos y
   # evidencias. Los binarios no van a PostgreSQL.
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: ['server', '/data', '--console-address', ':9001']
+  # Almacenamiento de objetos compatible con S3.
+  #
+  # ESTO ERA MinIO, Y DEJO DE PODER SER
+  #
+  # MinIO borro minio/minio y minio/mc de Docker Hub el 11 de septiembre de
+  # 2026. Su documentacion remite a quay.io, pero ahi la imagen exige cuenta:
+  # devuelve 401 incluso pidiendo un token anonimo. En una maquina con la
+  # imagen en cache todo seguia funcionando, asi que el problema solo se vio
+  # cuando se miro la CI: ahi no hay cache y el paso de levantar servicios no
+  # podia descargarla.
+  #
+  # SE MIDIERON LOS SUSTITUTOS CONTRA LAS 14 PRUEBAS DE ALMACENAMIENTO
+  #
+  #   - adobe/s3mock: descartado sin llegar a probarlo. No valida firmas, asi
+  #     que volveria verde y mentirosa la prueba de que un enlace prefirmado
+  #     alterado no sirve.
+  #   - localstack/localstack:4: 11 de 14. Sirve objetos SIN firma —200 donde
+  #     tiene que dar 403— y da el bucket por publico. Valida firmas, pero no
+  #     deniega el acceso anonimo, que es medio criterio del paquete 3.3.
+  #   - zenko/cloudserver: 14 de 14 y las 184 de integracion, pero su imagen
+  #     se actualizo por ultima vez el 22/04/2022 y sus tags de version son de
+  #     2022 y 2023. Para un proyecto con plan de seguridad, no.
+  #   - chrislusf/seaweedfs:4.48: 14 de 14 y las 184 de integracion. Release
+  #     del 28/09/2026, mantenido, y con version que se puede fijar. Es este.
+  #
+  # Produccion no cambia: la aplicacion habla S3 por el SDK de AWS, asi que
+  # alla puede seguir MinIO con licencia o S3 de verdad. Lo que cambia es el
+  # contenedor de desarrollo y de CI. Queda como divergencia con el Blueprint
+  # tecnico, anotada en docs/arquitectura.md §10.
+  almacenamiento:
+    image: chrislusf/seaweedfs:4.48
+    # Las credenciales se escriben al arrancar desde las mismas variables que
+    # ya usa la aplicacion. SeaweedFS las pide en un archivo de configuracion,
+    # y un archivo con credenciales no se versiona: se arma aqui en /tmp.
+    entrypoint:
+      - sh
+      - -c
+      - >
+        printf '{"identities":[{"name":"meritia","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -s3 -s3.config=/tmp/s3.json -dir=/data -ip=0.0.0.0
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-meritia}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?definelo en .env}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-meritia}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?definelo en .env}
     ports:
-      - '${S3_PORT:-19000}:9000'
-      - '${S3_CONSOLE_PORT:-19001}:9001'
+      # El puerto publicado no cambia: ningun .env del equipo necesita tocarse.
+      - '${S3_PORT:-19000}:8333'
     volumes:
-      - minio-data:/data
+      - almacenamiento-data:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      # Un 403 sin firmar es la respuesta correcta, y comprueba las dos cosas
+      # de una vez: que el S3 escucha y que exige credenciales. Un 200 aqui
+      # seria una alarma, no una señal de salud.
+      test:
+        - CMD-SHELL
+        - test "$$(curl -s -o /dev/null -w %{http_code} --max-time 3 http://localhost:8333/)" = 403
       interval: 10s
       timeout: 5s
       retries: 5
@@ -127,4 +170,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
+  almacenamiento-data:

@@ -25,7 +25,7 @@ explícitas, más **un servicio de IA separado desde el primer día**.
 ```
    Angular (web)  ─┐
                    ├─ HTTPS ─→  backend MeritIA  ─→  PostgreSQL   (datos estructurados)
-   APK Capacitor  ─┘             (monolito)       ─→  S3 / MinIO   (entregas, evidencias)
+   APK Capacitor  ─┘             (monolito)       ─→  S3 compatible (entregas, evidencias)
                                       │
                                       └─ cola (Redis) ─→  servicio de IA  ─→  proveedor LLM
 ```
@@ -336,7 +336,7 @@ nombres y deja que las migraciones de cada módulo avancen por separado.
 
 **Los binarios no van a la base de datos.** Las entregas de los candidatos y las
 evidencias de evaluación viven en almacenamiento de objetos compatible con S3
-(MinIO en local).
+(SeaweedFS en local; ver §10).
 
 **Toda modificación estructural pasa por una migración versionada.**
 `synchronize` está en `false` de forma permanente: con él activo, TypeORM altera
@@ -587,7 +587,7 @@ npm run migration:run
 npm run doctor            # comprueba que todo responde
 ```
 
-Cuatro servicios separados: backend, PostgreSQL, Redis y MinIO.
+Cuatro servicios separados: backend, PostgreSQL, Redis y el almacenamiento de objetos.
 
 **Los puertos publicados están en un rango propio** (15432, 16379, 19000,
 19001) y no en los de cada producto, y por debajo de 49152: de ahí para arriba
@@ -638,6 +638,29 @@ aplicación móvil en ningún punto, mientras que el Plan y la EDT sí.
 **El Charter queda desactualizado en ese punto y el equipo debería corregirlo
 formalmente.** Afecta al backend en la lista de orígenes CORS y en el transporte
 del token.
+
+**Almacenamiento de objetos: el Blueprint dice MinIO y ya no se puede.** MinIO
+borró `minio/minio` y `minio/mc` de Docker Hub el **11 de septiembre de 2026**.
+Su documentación remite a quay.io, pero allí la imagen exige cuenta: devuelve
+401 incluso pidiendo un token anónimo. En una máquina con la imagen en caché
+todo seguía funcionando, así que el problema solo apareció al mirar la
+integración continua, donde no hay caché.
+
+Se midieron los sustitutos **contra las 14 pruebas de almacenamiento del
+proyecto**, no contra su folleto:
+
+| Imagen | Resultado | Decisión |
+|---|---|---|
+| `adobe/s3mock` | no valida firmas | descartada sin probar: volvería verde y mentirosa la prueba del enlace prefirmado alterado |
+| `localstack/localstack:4` | **11 de 14** | sirve objetos sin firma —200 donde debe dar 403— y da el *bucket* por público |
+| `zenko/cloudserver` | 14 de 14 y las 184 de integración | imagen sin actualizar desde el 22/04/2022 |
+| `chrislusf/seaweedfs:4.48` | 14 de 14 y las 184 de integración | **elegida**: release del 28/09/2026, mantenida y con versión fijable |
+
+**Producción no cambia**: la aplicación habla S3 por el SDK de AWS, así que allá
+puede seguir MinIO con licencia o S3 de verdad. Lo que cambia es el contenedor
+de desarrollo y de CI. **El Blueprint queda desactualizado en este punto y el
+equipo debería corregirlo**, o decidir pagar MinIO si quiere que dev y
+producción usen el mismo servidor.
 
 **Esquema de reportes.** El *Diccionario de la EDT* lista "esquema de reportes"
 entre los recursos del paquete 5.1. El módulo se implementó **sin esquema
