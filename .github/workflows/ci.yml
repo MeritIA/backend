@@ -112,7 +112,7 @@ jobs:
 
       # Las mismas imagenes y versiones que el entorno local (compose.yaml):
       # lo que pasa aqui es lo que pasa en la maquina de cada integrante.
-      - name: Levantar PostgreSQL, Redis y MinIO
+      - name: Levantar PostgreSQL, Redis y el almacenamiento
         run: docker compose up -d --wait postgres redis almacenamiento
 
       # Unitarias e integracion en una sola corrida, con el umbral de cobertura
