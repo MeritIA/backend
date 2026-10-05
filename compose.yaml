@@ -27,7 +27,17 @@ services:
       # contenedor. En local se llega por el host; en produccion, por el nombre
       # del servicio en la red donde se despliegue.
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:13100}
-      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:?definelo en .env, igual que CLAVE_DE_ACCESO del servicio de IA}
+      # Sin valor por omision y NO obligatoria. Dos razones:
+      #
+      # 1. La aplicacion ya trata el servicio de IA como opcional: sin clave
+      #    entra el evaluador honesto del paquete 4.4, que falla con un motivo
+      #    claro en vez de inventar una nota, y el health check lo reporta como
+      #    "sin_configurar" sin tumbar el backend. Exigirla aqui contradecia su
+      #    propio diseno.
+      # 2. Con `:?`, docker compose interpola el archivo entero en CUALQUIER
+      #    comando: `compose up postgres` moria pidiendo una clave de IA que no
+      #    tiene nada que ver. Es lo que tenia la CI en rojo.
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
