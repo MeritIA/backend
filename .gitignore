@@ -42,3 +42,11 @@ Thumbs.db
 .cache/
 
 # Base de datos de las pruebas de integracion (se crea sola)
+
+# Pruebas de carga (seccion 11). Lo generado por preparar-datos.mjs no se
+# versiona: datos-de-carga.json lleva TOKENS DE SESION REALES, el .zip y los
+# resultados son derivados y cambian en cada corrida.
+test/carga/datos-de-carga.json
+test/carga/entrega-de-carga.zip
+test/carga/resultados/
+.env.carga

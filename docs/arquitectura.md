@@ -713,14 +713,23 @@ el Diccionario de la EDT, está construido y probado.
 | 5.4 | Manual de uso básico | Laura Alejandra Venegas Pirabán |
 | 5.6 | Operación del piloto y reporte de resultados | Hildebrando Peña Quezada |
 
+**Las pruebas de carga ya existen** (sección 11 del encuadre): cuatro
+escenarios con Grafana k6, el doble del servicio de IA y el muestreo de CPU,
+memoria y conexiones. Las cifras, el punto de caída y los requisitos que se
+derivaron de ellas están en [`rendimiento.md`](rendimiento.md).
+
 Y dentro del backend, tres cosas concretas:
 
 - **Extracción de texto de PDF.** Hoy se leen los archivos de texto del `.zip`;
   un PDF se rechaza con un motivo claro en vez de evaluarse a medias.
-- **Pruebas de carga.** El Plan de Seguridad fija objetivos de latencia y
-  concurrencia que todavía no se han medido.
 - **Contadores de alertas en Redis.** Ahora viven en memoria, así que con varias
-  instancias cada una cuenta las suyas (§5.8).
+  instancias cada una cuenta las suyas (§5.8). Dejó de ser una mejora opcional:
+  las mediciones de carga señalan escalar a varias instancias como el segundo
+  paso de mayor retorno, y esto va **antes**. Ver
+  [`rendimiento.md`](rendimiento.md) §6 P2.
+- **Control de admisión.** Pasado su punto de caída el backend no rechaza: se
+  ahoga y rinde menos con más carga. Es el requisito **RNF-4**, el único
+  incumplido de los seis. Ver [`rendimiento.md`](rendimiento.md) §6 P1.
 
 También falta localizar la **Declaración de Alcance v1.0**, que la EDT cita como
 fuente de las funcionalidades por módulo y de los criterios de aceptación.
