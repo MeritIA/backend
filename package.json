@@ -67,7 +67,7 @@
     "@swc/core": "^1.16.2",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.4",
     "@types/nodemailer": "7.0.4",
     "@types/supertest": "^7.0.0",
     "@types/yauzl": "3.4.0",
