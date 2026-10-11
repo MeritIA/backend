@@ -53,7 +53,8 @@ export class AdmisionMiddleware implements NestMiddleware {
       respuesta.status(503).json({
         estado: 503,
         codigo: 'SERVICIO_SATURADO',
-        mensaje: 'El servicio esta recibiendo mas peticiones de las que puede atender. Reintenta en unos segundos.',
+        mensaje:
+          'El servicio esta recibiendo mas peticiones de las que puede atender. Reintenta en unos segundos.',
         momento: new Date().toISOString(),
         ruta: this.rutaDe(peticion),
         referencia: randomUUID(),

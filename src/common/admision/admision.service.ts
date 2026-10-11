@@ -111,7 +111,11 @@ export class AdmisionService {
     };
   }
 
-  private registrar(evento: string, nivel: 'warn' | 'log', metadata: Record<string, unknown>): void {
+  private registrar(
+    evento: string,
+    nivel: 'warn' | 'log',
+    metadata: Record<string, unknown>,
+  ): void {
     const linea = JSON.stringify({
       timestamp: new Date().toISOString(),
       level: nivel === 'warn' ? 'warn' : 'info',
