@@ -35,6 +35,15 @@ export class Ejercicio {
   idAutor!: string;
 
   /**
+   * Empresa dueña del ejercicio. El banco de pruebas tecnicas es propiedad
+   * intelectual de cada empresa: sin esto, un reclutador podria asociar a su
+   * vacante un ejercicio de la competencia.
+   */
+  @Index('ix_ejercicios_empresa')
+  @Column({ type: 'uuid', name: 'id_empresa' })
+  idEmpresa!: string;
+
+  /**
    * Un ejercicio retirado no se puede asociar a vacantes nuevas, pero se
    * conserva: las evaluaciones ya emitidas tienen que seguir siendo auditables.
    */

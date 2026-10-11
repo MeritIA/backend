@@ -33,7 +33,11 @@ import { TAMANO_MAXIMO_BYTES } from '../../common/almacenamiento/index.js';
 interface Peticion {
   usuario: UsuarioAutenticado;
 }
-const solicitanteDe = (p: Peticion): Solicitante => ({ id: p.usuario.id, rol: p.usuario.rol });
+const solicitanteDe = (p: Peticion): Solicitante => ({
+  id: p.usuario.id,
+  rol: p.usuario.rol,
+  idEmpresa: p.usuario.idEmpresa,
+});
 
 @ApiTags('entregas')
 @ApiBearerAuth('paseto')

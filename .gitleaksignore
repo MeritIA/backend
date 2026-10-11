@@ -2,7 +2,16 @@
 # hallazgo (commit:archivo:regla:linea), no un patron: un secreto nuevo en el
 # mismo archivo se sigue detectando.
 #
-# README.md:5 del commit inicial. Es `token=abc123def456`, el valor de ejemplo
-# del badge de CircleCI que trae la plantilla de NestJS. No es una credencial de
-# MeritIA ni de nadie. Revisado el 2026-09-15.
+# Si Gitleaks encuentra un secreto REAL, excluirlo no basta: hay que rotarlo,
+# porque ya esta en el historial de todos los clones.
+#
+# 1. README.md:5 del commit inicial. Es el valor de ejemplo del badge de
+#    CircleCI que trae la plantilla de NestJS, no una credencial de nadie.
+#    Revisado el 2026-09-15.
 0eac54eb2deb6d636f2d3959433d29b6d78f0798:README.md:generic-api-key:5
+#
+# 2. Este mismo fichero, en el commit que lo creo: el comentario de la entrada
+#    anterior citaba el valor de ejemplo, y Gitleaks lo detectaba aqui. El texto
+#    ya no lo repite, pero ese commit sigue en el historial.
+#    Revisado el 2026-09-23.
+842c360f764ada914101defec06f7387edb4440c:.gitleaksignore:generic-api-key:5

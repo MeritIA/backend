@@ -19,6 +19,7 @@ import {
   claveEsValida,
   validarTamano,
 } from './politica-de-nombres.js';
+import { SaludService } from '../salud/index.js';
 
 /** Lo que se guarda en PostgreSQL: la referencia, nunca el contenido. */
 export interface ReferenciaDeObjeto {
@@ -36,7 +37,7 @@ export class ClaveInvalidaError extends Error {}
 const SEGUNDOS_ENLACE = 5 * 60;
 
 /**
- * Almacenamiento de objetos (S3 o MinIO), paquete 3.3.
+ * Almacenamiento de objetos compatible con S3, paquete 3.3.
  *
  * Criterios de aceptacion y como se cumple cada uno:
  *
@@ -60,13 +61,14 @@ export class AlmacenamientoService implements OnModuleInit {
   private readonly s3: S3Client;
   readonly bucket: string;
 
-  constructor() {
+  constructor(private readonly salud: SaludService) {
     this.bucket = process.env.S3_BUCKET ?? 'meritia-entregas';
     this.s3 = new S3Client({
       endpoint: process.env.S3_ENDPOINT,
       region: process.env.S3_REGION ?? 'us-east-1',
-      // MinIO sirve los buckets por ruta (host/bucket/clave) y no por
-      // subdominio; S3 real acepta ambos.
+      // Los servidores compatibles que se usan en desarrollo sirven los
+      // buckets por ruta (host/bucket/clave) y no por subdominio; S3 real
+      // acepta ambos, asi que esto vale en los dos sitios.
       forcePathStyle: true,
       credentials: {
         accessKeyId: process.env.S3_ACCESS_KEY ?? '',
@@ -77,13 +79,21 @@ export class AlmacenamientoService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.asegurarBucket();
+
+    // Paquete 5.5. HeadBucket y no una subida de prueba: dice si el
+    // almacenamiento responde y si las credenciales valen, sin escribir
+    // basura en cada sondeo. Es critico: sin el no se reciben entregas.
+    this.salud.registrar('almacenamiento', true, async () => {
+      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      return { estado: 'ok' };
+    });
   }
 
   /**
    * Crea el bucket si falta y le aplica la politica de retencion.
    *
    * No se le pone ninguna politica de acceso: un bucket nuevo es privado por
-   * omision tanto en S3 como en MinIO, y cualquier politica anadida aqui solo
+   * omision en S3 y en los servidores compatibles, y cualquier politica solo
    * podria abrirlo.
    */
   async asegurarBucket(): Promise<void> {

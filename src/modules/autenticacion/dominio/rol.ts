@@ -48,6 +48,7 @@ export const PERMISOS = {
   'reportes:verDeLaVacante': [Rol.Reclutador, Rol.Administrador],
 
   'usuarios:administrar': [Rol.Administrador],
+  'empresas:administrar': [Rol.Administrador],
 } as const satisfies Record<string, readonly Rol[]>;
 
 export type Permiso = keyof typeof PERMISOS;

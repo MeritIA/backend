@@ -18,6 +18,7 @@ export async function levantarAplicacion(
 ): Promise<INestApplication<Server>> {
   const { AppModule } = await import('../../src/app.module.js');
   const { TodasLasExcepcionesFilter } = await import('../../src/common/errores/index.js');
+  const { BusDeEventos } = await import('../../src/common/events/index.js');
 
   // `ajustar` solo sustituye dependencias EXTERNAS (el servicio de IA). El
   // montaje de la aplicacion sigue siendo el mismo que en produccion.
@@ -40,7 +41,7 @@ export async function levantarAplicacion(
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
-  app.useGlobalFilters(new TodasLasExcepcionesFilter());
+  app.useGlobalFilters(new TodasLasExcepcionesFilter(app.get(BusDeEventos)));
 
   await app.init();
   return app;
@@ -92,8 +93,11 @@ export async function crearConRol(
   app: INestApplication<Server>,
   correo: string,
   rol: 'reclutador' | 'administrador',
+  empresa: string | null = 'Empresa de pruebas',
 ): Promise<Sesion> {
   const sesion = await registrarCandidato(app, correo);
+  // `empresa: null` crea un administrador de plataforma, que no tiene empresa.
+  const idEmpresa = empresa === null ? null : await idDeEmpresa(empresa);
 
   const cliente = new Client({
     host: process.env.DATABASE_HOST,
@@ -103,7 +107,11 @@ export async function crearConRol(
     database: BD_DE_PRUEBAS,
   });
   await cliente.connect();
-  await cliente.query('update autenticacion.usuarios set rol = $1 where id = $2', [rol, sesion.id]);
+  await cliente.query('update autenticacion.usuarios set rol = $1, id_empresa = $2 where id = $3', [
+    rol,
+    idEmpresa,
+    sesion.id,
+  ]);
   await cliente.end();
 
   const { body } = await api(app)
@@ -130,6 +138,17 @@ export async function consultar<T = Record<string, unknown>>(
   const { rows } = await cliente.query(sql, parametros);
   await cliente.end();
   return rows as T[];
+}
+
+/** Crea la empresa si no existe y devuelve su identificador. */
+export async function idDeEmpresa(nombre: string): Promise<string> {
+  const [fila] = await consultar<{ id: string }>(
+    `insert into autenticacion.empresas (nombre) values ($1)
+     on conflict (lower(nombre)) do update set actualizada_en = now()
+     returning id`,
+    [nombre],
+  );
+  return fila.id;
 }
 
 export const uuid = (): string => crypto.randomUUID();

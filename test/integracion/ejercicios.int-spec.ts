@@ -65,7 +65,10 @@ describe('integracion: banco de ejercicios', () => {
   beforeEach(async () => {
     await vaciarTablas();
     reclutador = await crearConRol(app, 'recl1@ejemplo.com', 'reclutador');
-    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador');
+    // En OTRA empresa: el banco es de la empresa, y dos reclutadores de la
+    // misma lo comparten. Lo que no puede cruzarse es la frontera entre
+    // empresas, que es lo que comprueban las pruebas de acceso de abajo.
+    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador', 'Empresa rival');
     candidato = await registrarCandidato(app, 'cand1@ejemplo.com');
   });
 
@@ -288,7 +291,7 @@ describe('integracion: banco de ejercicios', () => {
   });
 
   describe('acceso por recurso', () => {
-    it('otro reclutador no ve ni versiona un ejercicio ajeno', async () => {
+    it('un reclutador de otra empresa no ve ni versiona un ejercicio ajeno', async () => {
       const id = await crearEjercicio();
 
       await api(app).get(`/api/v1/ejercicios/${id}`).set(auth(otroReclutador)).expect(404);
@@ -313,7 +316,7 @@ describe('integracion: banco de ejercicios', () => {
         .expect(403);
     });
 
-    it('el listado de un reclutador no incluye los de sus colegas', async () => {
+    it('el listado de un reclutador no incluye los de otra empresa', async () => {
       await crearEjercicio(reclutador);
       await crearEjercicio(otroReclutador);
 

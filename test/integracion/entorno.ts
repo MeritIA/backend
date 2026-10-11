@@ -93,6 +93,7 @@ export async function prepararEntorno(): Promise<void> {
   process.env.THROTTLE_USER_LIMIT = '100000';
   process.env.THROTTLE_LOGIN_LIMIT = '100000';
   process.env.THROTTLE_SUBMISSION_LIMIT = '100000';
+  process.env.THROTTLE_EVALUACION_LIMIT = '100000';
   process.env.REDIS_DB = BD_REDIS_DE_PRUEBAS;
   // El worker de la cola, apagado salvo en la suite que lo prueba: en las
   // demas cambiaria el estado de las entregas por detras de las aserciones.
@@ -127,11 +128,58 @@ export async function prepararEntorno(): Promise<void> {
 }
 
 /** Aplica las migraciones sobre la base de pruebas. */
+/**
+ * Las migraciones, leidas del codigo fuente y no de dist/.
+ *
+ * ESTO TENIA LA CI EN ROJO Y NO SE VEIA EN LOCAL
+ *
+ * `data-source.ts` declara `migrations: ['dist/database/migrations/*.js']`
+ * porque ese data source lo consume la CLI de TypeORM. Las pruebas usaban el
+ * mismo, asi que cargaban las migraciones COMPILADAS. En una maquina de
+ * desarrollo dist/ existe de cualquier `npm run build` anterior y todo
+ * parecia funcionar. En la CI, el trabajo de pruebas no compila —eso pasa en
+ * otro trabajo y en otra maquina—, asi que dist/ no existia, runMigrations no
+ * encontraba NINGUNA migracion, no fallaba, y las pruebas se estrellaban
+ * despues contra tablas que nadie habia creado.
+ *
+ * Aqui se leen del fuente, que es lo que las pruebas ejecutan de verdad.
+ */
+type ClaseDeMigracion = new () => object;
+
+function migracionesDelFuente(): ClaseDeMigracion[] {
+  const modulos = import.meta.glob('../../src/database/migrations/*.ts', {
+    eager: true,
+  }) as Record<string, Record<string, unknown>>;
+
+  const clases = Object.values(modulos)
+    .flatMap((modulo) => Object.values(modulo))
+    .filter((v): v is ClaseDeMigracion => typeof v === 'function');
+
+  // Una lista vacia es justo el fallo que estuvo escondido: sin esto,
+  // runMigrations no hace nada y no se queja.
+  if (clases.length === 0) {
+    throw new Error(
+      'No se encontro ninguna migracion en src/database/migrations. ' +
+        'Sin migraciones las pruebas fallarian despues contra tablas inexistentes.',
+    );
+  }
+  return clases;
+}
+
 export async function migrar(): Promise<void> {
-  const { default: dataSource } = await import('../../src/database/data-source.js');
-  if (!dataSource.isInitialized) await dataSource.initialize();
-  await dataSource.runMigrations();
-  await dataSource.destroy();
+  const { DataSource } = await import('typeorm');
+  const { opcionesDeConexion } = await import('../../src/database/data-source.js');
+
+  const dataSource = new DataSource({
+    ...opcionesDeConexion(),
+    migrations: migracionesDelFuente(),
+  });
+  await dataSource.initialize();
+  try {
+    await dataSource.runMigrations();
+  } finally {
+    await dataSource.destroy();
+  }
 }
 
 /**
@@ -151,6 +199,8 @@ export async function vaciarTablas(): Promise<void> {
   await cliente.connect();
   await cliente.query(`
     TRUNCATE
+      "evaluacion"."calificaciones_criterio",
+      "evaluacion"."evaluaciones",
       "entregas"."historial_estados",
       "entregas"."entregas",
       "ejercicios"."criterios_rubrica",
@@ -159,7 +209,8 @@ export async function vaciarTablas(): Promise<void> {
       "vacantes"."vacante_candidatos",
       "vacantes"."vacante_ejercicios",
       "vacantes"."vacantes",
-      "autenticacion"."usuarios"
+      "autenticacion"."usuarios",
+      "autenticacion"."empresas"
     RESTART IDENTITY CASCADE
   `);
   await cliente.end();

@@ -19,7 +19,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ColaDeEvaluacionService } from './cola/cola-de-evaluacion.service.js';
-import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
+import { EvaluacionService } from './evaluacion.service.js';
+import { EvaluacionRespuesta, aRespuesta } from './dto/evaluacion.dto.js';
+import { RequierePermiso, Rol, type UsuarioAutenticado } from '../autenticacion/index.js';
+import { LimiteEvaluacion } from '../../common/rate-limit/index.js';
+import type { Solicitante } from '../vacantes/index.js';
 
 class MetricasDeColaRespuesta {
   @ApiProperty({ description: 'Esperando un worker libre.' }) enEspera!: number;
@@ -35,11 +39,26 @@ class ReintentoRespuesta {
   @ApiProperty({ example: 'encolada' }) estado!: 'encolada';
 }
 
+interface Peticion {
+  usuario: UsuarioAutenticado;
+}
+
+const solicitanteDe = (p: Peticion): Solicitante => ({
+  id: p.usuario.id,
+  rol: p.usuario.rol,
+  idEmpresa: p.usuario.idEmpresa,
+});
+
 @ApiTags('evaluaciones')
 @ApiBearerAuth('paseto')
 @Controller({ path: 'evaluaciones', version: '1' })
 export class EvaluacionesController {
-  constructor(private readonly cola: ColaDeEvaluacionService) {}
+  constructor(
+    private readonly cola: ColaDeEvaluacionService,
+    private readonly evaluacion: EvaluacionService,
+  ) {}
+
+  // Las rutas fijas van antes que las de parametro.
 
   @Get('cola')
   @RequierePermiso('evaluaciones:verCola')
@@ -53,8 +72,59 @@ export class EvaluacionesController {
     return this.cola.metricas();
   }
 
+  @Get('mias')
+  @RequierePermiso('evaluaciones:leerPropias')
+  @ApiOperation({
+    summary: 'Evaluaciones del candidato autenticado',
+    description: 'Con el desglose por criterio y la evidencia de cada puntaje.',
+  })
+  @ApiOkResponse({ type: [EvaluacionRespuesta] })
+  async mias(@Req() p: Peticion): Promise<EvaluacionRespuesta[]> {
+    // Sin el analisis: al candidato no se le dice que patron se detecto.
+    return (await this.evaluacion.mias(solicitanteDe(p))).map((e) => aRespuesta(e));
+  }
+
+  @Get('vacante/:idVacante')
+  @RequierePermiso('evaluaciones:leerDeLaVacante')
+  @ApiOperation({
+    summary: 'Evaluaciones de una vacante, de mayor a menor nota',
+    description:
+      'Solo para la empresa dueña de la vacante. Es la base del reporte del paquete 5.1.',
+  })
+  @ApiOkResponse({ type: [EvaluacionRespuesta] })
+  @ApiNotFoundResponse({ description: 'La vacante no existe, o es de otra empresa.' })
+  async deVacante(
+    @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
+    @Req() p: Peticion,
+  ): Promise<EvaluacionRespuesta[]> {
+    return (await this.evaluacion.deVacante(idVacante, solicitanteDe(p))).map((e) =>
+      aRespuesta(e, { conSeguridad: true }),
+    );
+  }
+
+  @Get('entrega/:idEntrega')
+  @ApiOperation({
+    summary: 'Evaluacion de una entrega',
+    description:
+      'Para el candidato que la entrego o para la empresa dueña de la vacante. Incluye la version de rubrica con la que se califico.',
+  })
+  @ApiOkResponse({ type: EvaluacionRespuesta })
+  @ApiNotFoundResponse({
+    description: 'No existe, aun no se evalua, o quien pregunta no tiene acceso.',
+  })
+  async deEntrega(
+    @Param('idEntrega', new ParseUUIDPipe({ version: '4' })) idEntrega: string,
+    @Req() p: Peticion,
+  ): Promise<EvaluacionRespuesta> {
+    const evaluacion = await this.evaluacion.deEntrega(idEntrega, solicitanteDe(p));
+    return aRespuesta(evaluacion, { conSeguridad: p.usuario.rol !== Rol.Candidato });
+  }
+
   @Post(':idEntrega/reintentar')
   @RequierePermiso('evaluaciones:reintentar')
+  // Diez por minuto y por usuario: cada reintento gasta cuota del proveedor
+  // (Plan de Seguridad §6.2, criterio del paquete 4.2).
+  @LimiteEvaluacion()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Reintenta la evaluacion de una entrega fallida',
@@ -65,7 +135,7 @@ export class EvaluacionesController {
   @ApiConflictResponse({ description: 'La entrega no esta en estado fallida.' })
   async reintentar(
     @Param('idEntrega', new ParseUUIDPipe({ version: '4' })) idEntrega: string,
-    @Req() p: { usuario: UsuarioAutenticado },
+    @Req() p: Peticion,
   ): Promise<ReintentoRespuesta> {
     await this.cola.reintentarFallida(idEntrega, p.usuario.id);
     return { idEntrega, estado: 'encolada' };

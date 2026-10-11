@@ -18,6 +18,8 @@ import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
 export interface Solicitante {
   readonly id: string;
   readonly rol: Rol;
+  /** Empresa a la que pertenece; null en un candidato o un admin de plataforma. */
+  readonly idEmpresa: string | null;
 }
 
 /**
@@ -49,6 +51,7 @@ export class VacantesService {
   ) {}
 
   async crear(datos: CrearVacanteDto, solicitante: Solicitante): Promise<Vacante> {
+    const idEmpresa = this.empresaDe(solicitante);
     const vacante = this.vacantes.create({
       titulo: datos.titulo,
       descripcion: datos.descripcion,
@@ -56,6 +59,8 @@ export class VacantesService {
       intentosPermitidos: datos.intentosPermitidos ?? 1,
       // El reclutador es quien la crea; no se acepta del cuerpo de la peticion.
       idReclutador: solicitante.id,
+      // Y la empresa sale de el, tampoco del cuerpo: es la frontera de los datos.
+      idEmpresa,
       estado: EstadoVacante.Borrador,
     });
 
@@ -87,10 +92,11 @@ export class VacantesService {
       });
     }
 
-    if (solicitante.rol === Rol.Reclutador) {
-      // Un reclutador ve las suyas, no las de sus colegas.
+    if (solicitante.idEmpresa !== null) {
+      // Las de su empresa: dos reclutadores de la misma empresa llevan el
+      // mismo proceso. Las de otra empresa no existen para el.
       return this.vacantes.find({
-        where: { idReclutador: solicitante.id },
+        where: { idEmpresa: solicitante.idEmpresa },
         relations: { ejercicios: true, candidatos: true },
         order: { creadaEn: 'DESC' },
       });
@@ -223,7 +229,12 @@ export class VacantesService {
     // Se pregunta al modulo de ejercicios por su interfaz publica, no a sus
     // tablas. Hasta que ese modulo existio, esta comprobacion no se podia hacer
     // y la vacante aceptaba identificadores inventados.
-    const existentes = await this.ejerciciosDelBanco.cualesExistenActivos(unicos);
+    // Con la empresa: un ejercicio de otra empresa no se puede asociar, y ni
+    // siquiera se confirma que exista.
+    const existentes = await this.ejerciciosDelBanco.cualesExistenActivos(
+      unicos,
+      vacante.idEmpresa,
+    );
     const faltantes = unicos.filter((id) => !existentes.includes(id));
     if (faltantes.length > 0) {
       throw new BadRequestException(
@@ -300,8 +311,22 @@ export class VacantesService {
   async puedeVerEntregasDe(idVacante: string, solicitante: Solicitante): Promise<boolean> {
     const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
     if (!vacante) return false;
-    if (solicitante.rol === Rol.Administrador) return true;
-    return solicitante.rol === Rol.Reclutador && vacante.idReclutador === solicitante.id;
+    if (solicitante.idEmpresa === null && solicitante.rol === Rol.Administrador) return true;
+    return solicitante.rol !== Rol.Candidato && vacante.idEmpresa === solicitante.idEmpresa;
+  }
+
+  /**
+   * Empresa dueña de una vacante, o null si ya no existe.
+   *
+   * La usa evaluacion para guardar cada resultado con su empresa: es lo que
+   * permite que un reporte no mezcle datos de dos clientes.
+   */
+  async empresaDeLaVacante(idVacante: string): Promise<string | null> {
+    const vacante = await this.vacantes.findOne({
+      where: { id: idVacante },
+      select: { id: true, idEmpresa: true },
+    });
+    return vacante?.idEmpresa ?? null;
   }
 
   async intentosPermitidosPara(idVacante: string): Promise<number> {
@@ -323,9 +348,25 @@ export class VacantesService {
   }
 
   /** Solo el reclutador dueno, o un administrador, modifican una vacante. */
+
+  /**
+   * La empresa de quien pide, exigida.
+   *
+   * Un administrador de plataforma no tiene empresa: puede leerlo todo, pero no
+   * crear nada, porque no se sabria de quien seria lo creado.
+   */
+  private empresaDe(solicitante: Solicitante): string {
+    if (solicitante.idEmpresa === null) {
+      throw new BadRequestException(
+        'Tu cuenta no pertenece a ninguna empresa, asi que no puede crear recursos de una.',
+      );
+    }
+    return solicitante.idEmpresa;
+  }
+
   private exigirPropiedad(vacante: Vacante, solicitante: Solicitante): void {
-    if (solicitante.rol === Rol.Administrador) return;
-    if (solicitante.rol === Rol.Reclutador && vacante.idReclutador === solicitante.id) return;
+    if (solicitante.idEmpresa === null && solicitante.rol === Rol.Administrador) return;
+    if (vacante.idEmpresa === solicitante.idEmpresa) return;
 
     this.registrar('acceso_denegado_por_recurso', solicitante, { idVacante: vacante.id });
     // Se responde 404 y no 403: un 403 confirmaria que la vacante existe, y con
@@ -335,8 +376,10 @@ export class VacantesService {
 
   /** Lectura: el dueno, un administrador, o un candidato invitado. */
   private async exigirAcceso(vacante: Vacante, solicitante: Solicitante): Promise<void> {
-    if (solicitante.rol === Rol.Administrador) return;
-    if (solicitante.rol === Rol.Reclutador && vacante.idReclutador === solicitante.id) return;
+    if (solicitante.idEmpresa === null && solicitante.rol === Rol.Administrador) return;
+    if (solicitante.rol !== Rol.Candidato && vacante.idEmpresa === solicitante.idEmpresa) {
+      return;
+    }
 
     if (solicitante.rol === Rol.Candidato) {
       const invitado = await this.asignaciones.exists({

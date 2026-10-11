@@ -17,7 +17,7 @@ Docker del backend.
 | **Artefacto** | Solo push a `main`, con todo lo anterior en verde | — Publica `ghcr.io/meritia/backend` |
 | **Despliegue** | Tras el artefacto, si `DESPLIEGUE_HABILITADO=true` | Faltan secretos del ambiente (y hoy, siempre: ver abajo) |
 
-Las pruebas de integración corren contra PostgreSQL, Redis y MinIO levantados
+Las pruebas de integración corren contra PostgreSQL, Redis y el almacenamiento levantados
 con el mismo `compose.yaml` del entorno local, con las mismas versiones de
 imagen.
 
@@ -95,7 +95,7 @@ sin él no debe dar un verde que no desplegó nada.
 npm audit --audit-level=critical
 npm run lint && npm run format:check && npm run build
 node scripts/exportar-openapi.mjs --check
-docker compose up -d --wait postgres redis minio
+docker compose up -d --wait postgres redis almacenamiento
 npm run test:total
 ```
 

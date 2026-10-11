@@ -52,7 +52,8 @@ describe('integracion: vacantes', () => {
   beforeEach(async () => {
     await vaciarTablas();
     reclutador = await crearConRol(app, 'recl1@ejemplo.com', 'reclutador');
-    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador');
+    // En OTRA empresa: la frontera de los datos es la empresa, no la persona.
+    otroReclutador = await crearConRol(app, 'recl2@ejemplo.com', 'reclutador', 'Empresa rival');
     candidato = await registrarCandidato(app, 'cand1@ejemplo.com');
     otroCandidato = await registrarCandidato(app, 'cand2@ejemplo.com');
   });
@@ -315,7 +316,7 @@ describe('integracion: vacantes', () => {
       expect(body.titulo).toBe('Desarrollador backend junior');
     });
 
-    it('el listado de un reclutador no incluye las de sus colegas', async () => {
+    it('el listado de un reclutador no incluye las de otra empresa', async () => {
       await crearVacante(reclutador);
       await crearVacante(otroReclutador);
 

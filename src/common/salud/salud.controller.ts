@@ -1,41 +1,50 @@
-import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, HttpStatus, Res, VERSION_NEUTRAL } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Publico } from '../../modules/autenticacion/index.js';
+import { SaludService, type EstadoGeneral } from './salud.service.js';
+
+/** Lo minimo que se necesita de la respuesta, sin atarse a Express. */
+interface RespuestaConEstado {
+  status: (codigo: number) => { json: (cuerpo: unknown) => void };
+}
 
 /**
- * Senal de vida del proceso.
+ * Vida y disponibilidad (paquete 5.5).
  *
- * ALCANCE, a proposito estrecho: esto responde unicamente a "el proceso esta
- * levantado y sirviendo HTTP". NO comprueba la base de datos, ni Redis, ni el
- * almacenamiento de objetos, ni el servicio de IA.
+ * SON DOS COSAS DISTINTAS, Y MEZCLARLAS ES UN ERROR OPERATIVO CONOCIDO
  *
- * La observabilidad completa que pide la seccion 15 del encuadre —distinguir
- * *application health*, *database availability* y *dependency availability*— es
- * el paquete 5.5 de la EDT, de Daniel Eduardo Useche Pinilla. Aqui solo se
- * cubre lo minimo que el HEALTHCHECK del contenedor necesita para no marcar la
- * imagen como enferma para siempre.
+ * - `/api/salud` responde "el proceso sirve HTTP". No toca ninguna dependencia.
+ *   Es lo que mira el HEALTHCHECK del contenedor: si fallara porque la base de
+ *   datos esta caida, el orquestador reiniciaria el contenedor una y otra vez
+ *   sin arreglar nada.
+ * - `/api/salud/listo` comprueba las cuatro dependencias que exige el criterio
+ *   del paquete: base de datos, servicio de IA (con tiempo maximo),
+ *   almacenamiento de objetos y cola de trabajos. Es lo que debe mirar el
+ *   balanceador para decidir si mandar trafico.
  *
- * Mezclar las dos cosas seria un error operativo conocido: si la comprobacion
- * de vida fallara porque la base de datos esta caida, el orquestador reiniciaria
- * el contenedor una y otra vez sin arreglar nada, en vez de dejarlo vivo y
- * marcarlo como no listo para recibir trafico.
- *
- * Va sin version (VERSION_NEUTRAL) para que la ruta no cambie al versionar la
- * API: quien monitoriza no deberia tener que seguir esos cambios.
+ * Las dos van sin version (VERSION_NEUTRAL): quien monitoriza no deberia tener
+ * que seguir los cambios de version de la API.
  */
 @ApiTags('salud')
 @Controller({ path: 'salud', version: VERSION_NEUTRAL })
 export class SaludController {
+  constructor(private readonly salud: SaludService) {}
+
   @Publico()
   @Get()
   @ApiOperation({
     summary: 'Senal de vida del proceso',
     description:
-      'Responde 200 si el proceso sirve HTTP. No comprueba base de datos ni dependencias: para eso esta el readiness del paquete 5.5.',
+      'Responde 200 si el proceso sirve HTTP. No comprueba dependencias: para eso esta /api/salud/listo.',
   })
   @ApiOkResponse({
     schema: {
-      example: { estado: 'vivo', momento: '2026-09-11T19:30:00.000Z', enPieDesdeHaceSegundos: 42 },
+      example: { estado: 'vivo', momento: '2026-10-04T19:30:00.000Z', enPieDesdeHaceSegundos: 42 },
     },
   })
   vida(): { estado: 'vivo'; momento: string; enPieDesdeHaceSegundos: number } {
@@ -44,5 +53,38 @@ export class SaludController {
       momento: new Date().toISOString(),
       enPieDesdeHaceSegundos: Math.floor(process.uptime()),
     };
+  }
+
+  @Publico()
+  @Get('listo')
+  @ApiOperation({
+    summary: 'Disponibilidad de las dependencias',
+    description:
+      'Comprueba base de datos, almacenamiento de objetos, cola de trabajos y servicio de IA, en paralelo y con tiempo maximo de 3 s cada una.\n\n' +
+      'Devuelve **200** si todo esta en pie o si solo falla algo no critico (estado `degradado`), y **503** si cae una dependencia critica: sin base de datos no se puede servir nada, pero sin servicio de IA se siguen recibiendo entregas para evaluarlas despues.',
+  })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        estado: 'listo',
+        momento: '2026-10-04T19:30:00.000Z',
+        dependencias: [
+          { nombre: 'base_de_datos', estado: 'ok', critica: true, duracionMs: 3 },
+          { nombre: 'almacenamiento', estado: 'ok', critica: true, duracionMs: 12 },
+          { nombre: 'cola', estado: 'ok', critica: true, duracionMs: 4 },
+          { nombre: 'servicio_ia', estado: 'ok', critica: false, duracionMs: 25 },
+        ],
+      },
+    },
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'Una dependencia critica esta caida. El cuerpo dice cual.',
+  })
+  async listo(@Res({ passthrough: true }) respuesta: RespuestaConEstado): Promise<void> {
+    const estado = await this.salud.comprobarTodo();
+    const codigo = estado.estado === 'no_listo' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
+    // El cuerpo siempre lleva el detalle por dependencia, tambien en el 503:
+    // es lo que convierte una alerta en un diagnostico.
+    respuesta.status(codigo).json(estado satisfies EstadoGeneral);
   }
 }

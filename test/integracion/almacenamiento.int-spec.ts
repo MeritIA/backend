@@ -103,7 +103,16 @@ describe('integracion: almacenamiento de objetos', () => {
         'text/plain',
       );
       const enlace = await almacen.enlaceDeDescarga(ref);
-      const alterado = enlace.replace(/X-Amz-Signature=[0-9a-f]/, 'X-Amz-Signature=0');
+      // El caracter de reemplazo se elige DISTINTO del original. Con un '0'
+      // fijo, una firma que ya empezara por '0' quedaba intacta: una vez de
+      // cada dieciseis la URL seguia siendo valida y esta prueba pasaba sin
+      // comprobar nada. En una prueba de seguridad eso es lo peor que puede
+      // pasar, porque el verde no significa nada.
+      const alterado = enlace.replace(
+        /(X-Amz-Signature=)([0-9a-f])/,
+        (_coincidencia, prefijo: string, primero: string) =>
+          `${prefijo}${primero === '0' ? '1' : '0'}`,
+      );
       expect((await fetch(alterado)).status).toBe(403);
     });
   });

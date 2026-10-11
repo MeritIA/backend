@@ -17,7 +17,7 @@
     },
     "/salud": {
       "get": {
-        "description": "Responde 200 si el proceso sirve HTTP. No comprueba base de datos ni dependencias: para eso esta el readiness del paquete 5.5.",
+        "description": "Responde 200 si el proceso sirve HTTP. No comprueba dependencias: para eso esta /api/salud/listo.",
         "operationId": "SaludController_vida",
         "parameters": [],
         "responses": {
@@ -28,7 +28,7 @@
                 "schema": {
                   "example": {
                     "estado": "vivo",
-                    "momento": "2026-09-11T19:30:00.000Z",
+                    "momento": "2026-10-04T19:30:00.000Z",
                     "enPieDesdeHaceSegundos": 42
                   }
                 }
@@ -37,6 +37,61 @@
           }
         },
         "summary": "Senal de vida del proceso",
+        "tags": [
+          "salud"
+        ]
+      }
+    },
+    "/salud/listo": {
+      "get": {
+        "description": "Comprueba base de datos, almacenamiento de objetos, cola de trabajos y servicio de IA, en paralelo y con tiempo maximo de 3 s cada una.\n\nDevuelve **200** si todo esta en pie o si solo falla algo no critico (estado `degradado`), y **503** si cae una dependencia critica: sin base de datos no se puede servir nada, pero sin servicio de IA se siguen recibiendo entregas para evaluarlas despues.",
+        "operationId": "SaludController_listo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "estado": "listo",
+                    "momento": "2026-10-04T19:30:00.000Z",
+                    "dependencias": [
+                      {
+                        "nombre": "base_de_datos",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 3
+                      },
+                      {
+                        "nombre": "almacenamiento",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 12
+                      },
+                      {
+                        "nombre": "cola",
+                        "estado": "ok",
+                        "critica": true,
+                        "duracionMs": 4
+                      },
+                      {
+                        "nombre": "servicio_ia",
+                        "estado": "ok",
+                        "critica": false,
+                        "duracionMs": 25
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Una dependencia critica esta caida. El cuerpo dice cual."
+          }
+        },
+        "summary": "Disponibilidad de las dependencias",
         "tags": [
           "salud"
         ]
@@ -204,6 +259,132 @@
         "summary": "Cierra la sesion en todos los dispositivos",
         "tags": [
           "autenticacion"
+        ]
+      }
+    },
+    "/empresas": {
+      "post": {
+        "description": "Solo un administrador de la plataforma (sin empresa propia). La empresa es la frontera de los datos: sus vacantes, ejercicios, entregas y reportes no los ve nadie de otra.",
+        "operationId": "EmpresasController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaRespuesta"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Un administrador de una empresa no crea otras."
+          },
+          "409": {
+            "description": "Ya existe una empresa con ese nombre."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea una empresa cliente",
+        "tags": [
+          "empresas"
+        ]
+      },
+      "get": {
+        "description": "Un administrador de la plataforma las ve todas; el de una empresa, solo la suya.",
+        "operationId": "EmpresasController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmpresaRespuesta"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lista las empresas visibles",
+        "tags": [
+          "empresas"
+        ]
+      }
+    },
+    "/empresas/{id}/usuarios": {
+      "post": {
+        "description": "Es el alta del paquete 5.3. El registro publico solo crea candidatos; reclutadores y administradores se crean por aqui.",
+        "operationId": "EmpresasController_crearUsuario",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearUsuarioDeEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDeEmpresaRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe, o no es la del administrador."
+          },
+          "409": {
+            "description": "Ya existe una cuenta con ese correo."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea un reclutador o administrador en la empresa",
+        "tags": [
+          "empresas"
         ]
       }
     },
@@ -815,6 +996,120 @@
         ]
       }
     },
+    "/evaluaciones/mias": {
+      "get": {
+        "description": "Con el desglose por criterio y la evidencia de cada puntaje.",
+        "operationId": "EvaluacionesController_mias",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluacionRespuesta"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluaciones del candidato autenticado",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/vacante/{idVacante}": {
+      "get": {
+        "description": "Solo para la empresa dueña de la vacante. Es la base del reporte del paquete 5.1.",
+        "operationId": "EvaluacionesController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluacionRespuesta"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluaciones de una vacante, de mayor a menor nota",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
+    "/evaluaciones/entrega/{idEntrega}": {
+      "get": {
+        "description": "Para el candidato que la entrego o para la empresa dueña de la vacante. Incluye la version de rubrica con la que se califico.",
+        "operationId": "EvaluacionesController_deEntrega",
+        "parameters": [
+          {
+            "name": "idEntrega",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluacionRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe, aun no se evalua, o quien pregunta no tiene acceso."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Evaluacion de una entrega",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
     "/evaluaciones/{idEntrega}/reintentar": {
       "post": {
         "description": "No consume un intento del candidato: el fallo fue de la evaluacion, no suyo.",
@@ -855,6 +1150,127 @@
         "summary": "Reintenta la evaluacion de una entrega fallida",
         "tags": [
           "evaluaciones"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}": {
+      "get": {
+        "description": "Ranking de candidatos de mayor a menor nota, con sus cifras consolidadas y el promedio por criterio. El ranking lleva una fila por candidato, con la nota de su mejor intento.",
+        "operationId": "ReportesController_deVacante",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteDeVacanteRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Reporte consolidado de una vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/candidatos/{idCandidato}": {
+      "get": {
+        "description": "Todos sus intentos evaluados, cada uno con el desglose por criterio y la evidencia que sustenta el puntaje. Es de donde sale la nota del ranking.",
+        "operationId": "ReportesController_deCandidato",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteDeCandidatoRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante es de otra empresa, o ese candidato no tiene evaluaciones en ella."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Detalle de un candidato en la vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/exportar": {
+      "get": {
+        "description": "Exportacion basica del entregable. Una fila por candidato; el desglose completo se consulta en el detalle. Las celdas van neutralizadas contra inyeccion de formulas.",
+        "operationId": "ReportesController_exportar",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El CSV, como descarga."
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Exporta el ranking de la vacante en CSV",
+        "tags": [
+          "reportes"
         ]
       }
     }
@@ -1027,6 +1443,113 @@
             "default": "web"
           }
         }
+      },
+      "CrearEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Acme S.A.S.",
+            "minLength": 2,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "EmpresaRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "creadaEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activa",
+          "creadaEn"
+        ]
+      },
+      "CrearUsuarioDeEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "correo": {
+            "type": "string",
+            "example": "reclutador@acme.com",
+            "maxLength": 254
+          },
+          "contrasena": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          },
+          "nombreCompleto": {
+            "type": "string",
+            "example": "Ana Maria Torres",
+            "maxLength": 120
+          },
+          "rol": {
+            "type": "string",
+            "enum": [
+              "reclutador",
+              "administrador"
+            ],
+            "description": "Solo reclutador o administrador. Los candidatos se crean solos por el registro publico: no pertenecen a ninguna empresa."
+          }
+        },
+        "required": [
+          "correo",
+          "contrasena",
+          "nombreCompleto",
+          "rol"
+        ]
+      },
+      "UsuarioDeEmpresaRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "correo": {
+            "type": "string"
+          },
+          "nombreCompleto": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string",
+            "enum": [
+              "candidato",
+              "reclutador",
+              "administrador"
+            ]
+          },
+          "idEmpresa": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "correo",
+          "nombreCompleto",
+          "rol",
+          "idEmpresa"
+        ]
       },
       "CrearVacanteDto": {
         "type": "object",
@@ -1238,6 +1761,168 @@
           "workerActivo"
         ]
       },
+      "CalificacionRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "puntaje": {
+            "type": "number"
+          },
+          "escalaMaxima": {
+            "type": "number"
+          },
+          "peso": {
+            "type": "number",
+            "description": "Cuanto aporta el criterio a la nota final. Suman 100."
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Por que ese puntaje, con referencia a la entrega."
+          }
+        },
+        "required": [
+          "criterio",
+          "puntaje",
+          "escalaMaxima",
+          "peso",
+          "evidencia"
+        ]
+      },
+      "BanderaRespuesta": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "example": "evasion_de_instrucciones"
+          },
+          "archivo": {
+            "type": "string"
+          },
+          "ocurrencias": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "codigo",
+          "archivo",
+          "ocurrencias"
+        ]
+      },
+      "SeguridadRespuesta": {
+        "type": "object",
+        "properties": {
+          "riesgo": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ]
+          },
+          "puntaje": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "banderas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BanderaRespuesta"
+            }
+          },
+          "versionReglas": {
+            "type": "string"
+          },
+          "versionListaNegra": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "riesgo",
+          "puntaje",
+          "banderas",
+          "versionReglas",
+          "versionListaNegra"
+        ]
+      },
+      "EvaluacionRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idVacante": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEjercicio": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idVersion": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Version de la rubrica con la que se califico. La rubrica puede cambiar despues; la nota se explica con esta."
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "criterios": {
+            "description": "En el orden de la rubrica.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalificacionRespuesta"
+            }
+          },
+          "proveedor": {
+            "type": "string",
+            "example": "gemini"
+          },
+          "modelo": {
+            "type": "string",
+            "example": "gemini-3.5-flash"
+          },
+          "creadaEn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "seguridad": {
+            "description": "Solo para el reclutador de la vacante o un administrador.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SeguridadRespuesta"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "idEntrega",
+          "idVacante",
+          "idCandidato",
+          "idEjercicio",
+          "idVersion",
+          "notaFinal",
+          "criterios",
+          "proveedor",
+          "modelo",
+          "creadaEn"
+        ]
+      },
       "ReintentoRespuesta": {
         "type": "object",
         "properties": {
@@ -1253,6 +1938,339 @@
         "required": [
           "idEntrega",
           "estado"
+        ]
+      },
+      "VacanteDelReporteRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "example": "publicada"
+          }
+        },
+        "required": [
+          "id",
+          "titulo",
+          "estado"
+        ]
+      },
+      "PromedioDeCriterioRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "promedioLogrado": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Promedio del porcentaje logrado en ese criterio. En porcentaje y no en puntos crudos, porque dos criterios con escalas distintas no se comparan en bruto."
+          },
+          "peso": {
+            "type": "number",
+            "description": "Cuanto aporta el criterio a la nota final."
+          },
+          "evaluaciones": {
+            "type": "number",
+            "description": "Sobre cuantas evaluaciones se calculo."
+          }
+        },
+        "required": [
+          "criterio",
+          "promedioLogrado",
+          "peso",
+          "evaluaciones"
+        ]
+      },
+      "ResumenRespuesta": {
+        "type": "object",
+        "properties": {
+          "candidatosEvaluados": {
+            "type": "number",
+            "description": "Cuantas personas distintas tienen al menos una nota."
+          },
+          "entregasEvaluadas": {
+            "type": "number"
+          },
+          "entregasEnProceso": {
+            "type": "number",
+            "description": "Recibidas o evaluandose. Dice si el ranking todavia esta incompleto."
+          },
+          "entregasFallidas": {
+            "type": "number",
+            "description": "Fallo la evaluacion, no el candidato. Se pueden reintentar."
+          },
+          "notaPromedio": {
+            "type": "object",
+            "nullable": true,
+            "description": "Una nota por candidato: quien entrego cinco veces no pesa cinco veces."
+          },
+          "notaMediana": {
+            "type": "object",
+            "nullable": true
+          },
+          "notaMaxima": {
+            "type": "object",
+            "nullable": true
+          },
+          "notaMinima": {
+            "type": "object",
+            "nullable": true
+          },
+          "porCriterio": {
+            "description": "Del criterio mas flojo al mas logrado: donde se cae la gente.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromedioDeCriterioRespuesta"
+            }
+          },
+          "entregasConRiesgoAlto": {
+            "type": "number",
+            "description": "Entregas marcadas con riesgo alto de inyeccion (paquete 4.2)."
+          }
+        },
+        "required": [
+          "candidatosEvaluados",
+          "entregasEvaluadas",
+          "entregasEnProceso",
+          "entregasFallidas",
+          "notaPromedio",
+          "notaMediana",
+          "notaMaxima",
+          "notaMinima",
+          "porCriterio",
+          "entregasConRiesgoAlto"
+        ]
+      },
+      "CandidatoRespuesta": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Ana Maria Rojas"
+          },
+          "correo": {
+            "type": "string",
+            "example": "ana@ejemplo.com",
+            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
+          }
+        },
+        "required": [
+          "nombre",
+          "correo"
+        ]
+      },
+      "FilaDeRankingRespuesta": {
+        "type": "object",
+        "properties": {
+          "posicion": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Dos candidatos empatados comparten posicion."
+          },
+          "candidato": {
+            "$ref": "#/components/schemas/CandidatoRespuesta"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "La del mejor intento evaluado. El detalle del candidato muestra todos."
+          },
+          "intentosEvaluados": {
+            "type": "number",
+            "minimum": 1
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEvaluacion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evaluadaEn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "riesgoInyeccion": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ],
+            "description": "Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano."
+          }
+        },
+        "required": [
+          "posicion",
+          "candidato",
+          "idCandidato",
+          "notaFinal",
+          "intentosEvaluados",
+          "idEntrega",
+          "idEvaluacion",
+          "evaluadaEn",
+          "riesgoInyeccion"
+        ]
+      },
+      "ReporteDeVacanteRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacante": {
+            "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
+          },
+          "resumen": {
+            "$ref": "#/components/schemas/ResumenRespuesta"
+          },
+          "ranking": {
+            "description": "De mayor a menor nota.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaDeRankingRespuesta"
+            }
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string",
+            "description": "El reporte se calcula al pedirlo; no hay copia que se desactualice."
+          }
+        },
+        "required": [
+          "vacante",
+          "resumen",
+          "ranking",
+          "generadoEn"
+        ]
+      },
+      "CriterioDelIntentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "puntaje": {
+            "type": "number"
+          },
+          "escalaMaxima": {
+            "type": "number"
+          },
+          "peso": {
+            "type": "number"
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Por que ese puntaje, con referencia a la entrega."
+          }
+        },
+        "required": [
+          "criterio",
+          "puntaje",
+          "escalaMaxima",
+          "peso",
+          "evidencia"
+        ]
+      },
+      "IntentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idEvaluacion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEntrega": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEjercicio": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notaFinal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "creadaEn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "riesgoInyeccion": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "bajo",
+              "medio",
+              "alto"
+            ]
+          },
+          "criterios": {
+            "description": "En el orden de la rubrica.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDelIntentoRespuesta"
+            }
+          }
+        },
+        "required": [
+          "idEvaluacion",
+          "idEntrega",
+          "idEjercicio",
+          "notaFinal",
+          "creadaEn",
+          "riesgoInyeccion",
+          "criterios"
+        ]
+      },
+      "ReporteDeCandidatoRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacante": {
+            "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
+          },
+          "candidato": {
+            "$ref": "#/components/schemas/CandidatoRespuesta"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "posicionEnLaVacante": {
+            "type": "object",
+            "nullable": true,
+            "description": "Su puesto en el ranking de la vacante."
+          },
+          "intentos": {
+            "description": "Del mas reciente al mas viejo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntentoRespuesta"
+            }
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vacante",
+          "candidato",
+          "idCandidato",
+          "intentos",
+          "generadoEn"
         ]
       }
     }

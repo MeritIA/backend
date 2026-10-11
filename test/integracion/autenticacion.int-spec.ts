@@ -189,7 +189,23 @@ describe('integracion: autenticacion', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      for (const roto of [`${token.slice(0, -1)}X`, `X${token.slice(1)}`, 'v4.public.inventado']) {
+      // Se altera un caracter del MEDIO, no el ultimo.
+      //
+      // El intento anterior cambiaba el ultimo evitando la 'X'. Eso bajaba la
+      // intermitencia sin quitarla: en base64url el ultimo caracter arrastra
+      // bits sobrantes y, segun la longitud, varios caracteres distintos
+      // decodifican los MISMOS bytes. Cuando tocaba uno de esos, el token
+      // seguia siendo valido. Un caracter del medio usa sus seis bits.
+      const enMedio = (t: string): string => {
+        const i = Math.floor(t.length / 2);
+        return t.slice(0, i) + (t[i] === 'a' ? 'b' : 'a') + t.slice(i + 1);
+      };
+      const primeroDistinto = (c: string): string => (c === 'X' ? 'Y' : 'X');
+      for (const roto of [
+        enMedio(token),
+        `${primeroDistinto(token[0])}${token.slice(1)}`,
+        'v4.public.inventado',
+      ]) {
         await api(app)
           .get('/api/v1/autenticacion/yo')
           .set('Authorization', `Bearer ${roto}`)

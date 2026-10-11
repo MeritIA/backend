@@ -19,7 +19,11 @@ import type { Ejercicio } from './entities/ejercicio.entity.js';
 interface Peticion {
   usuario: UsuarioAutenticado;
 }
-const solicitanteDe = (p: Peticion): Solicitante => ({ id: p.usuario.id, rol: p.usuario.rol });
+const solicitanteDe = (p: Peticion): Solicitante => ({
+  id: p.usuario.id,
+  rol: p.usuario.rol,
+  idEmpresa: p.usuario.idEmpresa,
+});
 
 @ApiTags('ejercicios')
 @ApiBearerAuth('paseto')

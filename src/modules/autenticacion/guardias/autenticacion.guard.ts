@@ -19,6 +19,11 @@ export const Publico = () => SetMetadata(PUBLICO, true);
 export interface UsuarioAutenticado {
   readonly id: string;
   readonly rol: Rol;
+  /**
+   * Empresa a la que pertenece, o null si no tiene: un candidato nunca la
+   * tiene, y un administrador sin empresa lo es de la plataforma.
+   */
+  readonly idEmpresa: string | null;
 }
 
 /**
@@ -70,7 +75,9 @@ export class AutenticacionGuard implements CanActivate {
       // Se consulta la base de datos: un token sigue siendo valido
       // criptograficamente despues de desactivar la cuenta.
       const usuario = await this.autenticacion.usuarioDeToken(contenido.sub, contenido.iat);
-      peticion.usuario = { id: usuario.id, rol: usuario.rol };
+      // La empresa sale de la base y no del token: si a alguien lo cambian de
+      // empresa, la sesion abierta no debe seguir viendo la anterior.
+      peticion.usuario = { id: usuario.id, rol: usuario.rol, idEmpresa: usuario.idEmpresa };
       return true;
     } catch (e) {
       if (e instanceof TokenRechazadoError) {

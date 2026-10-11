@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Queue, UnrecoverableError, Worker, type Job, type RedisOptions } from 'bullmq';
 import { BusDeEventos } from '../../../common/events/index.js';
+import { SaludService } from '../../../common/salud/index.js';
 import {
   ENTREGA_COMPLETADA,
   EntregasService,
@@ -94,9 +95,23 @@ export class ColaDeEvaluacionService
     private readonly entregas: EntregasService,
     private readonly bus: BusDeEventos,
     @Inject(EVALUADOR) private readonly evaluador: Evaluador,
+    private readonly salud: SaludService,
   ) {}
 
   onModuleInit(): void {
+    // Paquete 5.5: el estado de la cola es una de las cuatro dependencias
+    // que el criterio exige comprobar. Contar trabajos toca Redis, asi que
+    // esta comprobacion cubre las dos cosas a la vez.
+    this.salud.registrar('cola', true, async () => {
+      const m = await this.metricas();
+      // Una cola que crece sin que nadie la consuma no esta caida, pero
+      // tampoco esta bien: avisa antes de que se note en los candidatos.
+      const atascada = !m.workerActivo && m.enEspera > 0;
+      return atascada
+        ? { estado: 'degradado', detalle: `${m.enEspera} en espera y ningun worker aqui` }
+        : { estado: 'ok', detalle: `${m.enEspera} en espera, ${m.activos} activos` };
+    });
+
     this.cola = new Queue<DatosDelTrabajo>(NOMBRE_COLA_EVALUACION, {
       connection: this.conexion(),
       prefix: this.politica.prefijo,

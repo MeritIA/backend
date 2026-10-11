@@ -32,12 +32,12 @@ describe('PasetoService', () => {
 
   describe('emision', () => {
     it('emite un token v4.public', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
       expect(t.startsWith('v4.public.')).toBe(true);
     });
 
     it('pone exp como cadena ISO8601 y no como timestamp Unix', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
       const { exp } = await servicio.verificar(t, 'acceso');
       // El riesgo que señala el Diccionario en este paquete: un exp mal
       // implementado deja tokens validos indefinidamente.
@@ -47,15 +47,15 @@ describe('PasetoService', () => {
     });
 
     it('distingue el token de acceso del de renovacion', async () => {
-      const acceso = await servicio.emitirAcceso('u-1', Rol.Candidato);
-      const renov = await servicio.emitirRenovacion('u-1', Rol.Candidato);
+      const acceso = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
+      const renov = await servicio.emitirRenovacion('u-1', Rol.Candidato, null);
 
       await expect(servicio.verificar(renov, 'acceso')).rejects.toThrow(TokenRechazadoError);
       await expect(servicio.verificar(acceso, 'renovacion')).rejects.toThrow(TokenRechazadoError);
     });
 
     it('conserva sujeto y rol', async () => {
-      const t = await servicio.emitirAcceso('u-42', Rol.Reclutador);
+      const t = await servicio.emitirAcceso('u-42', Rol.Reclutador, null);
       const c = await servicio.verificar(t, 'acceso');
       expect(c.sub).toBe('u-42');
       expect(c.rol).toBe(Rol.Reclutador);
@@ -127,10 +127,22 @@ describe('PasetoService', () => {
     });
 
     it('rechaza un token manipulado', async () => {
-      const t = await servicio.emitirAcceso('u-1', Rol.Candidato);
+      const t = await servicio.emitirAcceso('u-1', Rol.Candidato, null);
+      // Se altera un caracter del MEDIO, no el ultimo.
+      //
+      // El intento anterior cambiaba el ultimo evitando la 'X'. Eso bajaba la
+      // intermitencia sin quitarla: en base64url el ultimo caracter arrastra
+      // bits sobrantes y, segun la longitud, varios caracteres distintos
+      // decodifican los MISMOS bytes. Cuando tocaba uno de esos, el token
+      // seguia siendo valido. Un caracter del medio usa sus seis bits.
+      const enMedio = (t: string): string => {
+        const i = Math.floor(t.length / 2);
+        return t.slice(0, i) + (t[i] === 'a' ? 'b' : 'a') + t.slice(i + 1);
+      };
+      const primeroDistinto = (c: string): string => (c === 'X' ? 'Y' : 'X');
       for (const roto of [
-        t.slice(0, -1) + 'X',
-        'X' + t.slice(1),
+        enMedio(t),
+        primeroDistinto(t[0]) + t.slice(1),
         t.replace('v4.public.', 'v4.local.'),
       ]) {
         expect(await motivoDe(servicio.verificar(roto, 'acceso'))).toBe('firma_invalida');
@@ -153,7 +165,7 @@ describe('PasetoService', () => {
 
     it('no revela el motivo en el mensaje que veria un cliente', async () => {
       // El motivo va al log; el guardia traduce todo a un 401 generico.
-      const t = await servicio.emitirRenovacion('u-1', Rol.Candidato);
+      const t = await servicio.emitirRenovacion('u-1', Rol.Candidato, null);
       try {
         await servicio.verificar(t, 'acceso');
       } catch (e) {

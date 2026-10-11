@@ -60,6 +60,17 @@ export class Usuario {
   rol!: Rol;
 
   /**
+   * Empresa a la que pertenece.
+   *
+   * Obligatoria para un reclutador, nula para un candidato (es una persona
+   * externa invitada) y opcional para un administrador: con empresa lo es de
+   * esa empresa, sin ella de la plataforma. La base lo comprueba con un CHECK.
+   */
+  @Index('ix_usuarios_empresa')
+  @Column({ type: 'uuid', name: 'id_empresa', nullable: true })
+  idEmpresa!: string | null;
+
+  /**
    * Una cuenta desactivada no puede iniciar sesion ni renovar token. Se prefiere
    * desactivar antes que borrar: las entregas y evaluaciones de un candidato
    * deben seguir siendo auditables.

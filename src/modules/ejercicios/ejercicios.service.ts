@@ -11,6 +11,8 @@ import type { CrearEjercicioDto, NuevaVersionDto } from './dto/index.js';
 export interface Solicitante {
   readonly id: string;
   readonly rol: Rol;
+  /** Empresa a la que pertenece; null en un candidato o un admin de plataforma. */
+  readonly idEmpresa: string | null;
 }
 
 /** Lo que otros modulos necesitan saber de una version, sin ver sus entidades. */
@@ -51,6 +53,7 @@ export class EjerciciosService {
 
   async crear(datos: CrearEjercicioDto, solicitante: Solicitante): Promise<Ejercicio> {
     this.exigirRubricaValida(datos.criterios);
+    const idEmpresa = this.empresaDe(solicitante);
 
     const id = await this.dataSource.transaction(async (manager) => {
       const ejercicio = await manager.save(
@@ -58,6 +61,7 @@ export class EjerciciosService {
           titulo: datos.titulo,
           tecnologia: datos.tecnologia ?? null,
           idAutor: solicitante.id,
+          idEmpresa,
           activo: true,
         }),
       );
@@ -121,8 +125,10 @@ export class EjerciciosService {
   }
 
   async listar(solicitante: Solicitante): Promise<Ejercicio[]> {
-    // Un administrador ve el banco entero; un reclutador, el suyo.
-    const where = solicitante.rol === Rol.Administrador ? {} : { idAutor: solicitante.id };
+    // El banco es de la EMPRESA, no de quien escribio el ejercicio: dos
+    // reclutadores de la misma empresa trabajan sobre el mismo banco. Un
+    // administrador de plataforma (sin empresa) lo ve entero.
+    const where = solicitante.idEmpresa === null ? {} : { idEmpresa: solicitante.idEmpresa };
     return this.ejercicios.find({
       where,
       relations: { versiones: { criterios: true } },
@@ -155,10 +161,10 @@ export class EjerciciosService {
    * La usa el modulo de vacantes para validar lo que asocia, sin tocar estas
    * tablas ni importar estas entidades.
    */
-  async cualesExistenActivos(ids: readonly string[]): Promise<string[]> {
+  async cualesExistenActivos(ids: readonly string[], idEmpresa: string): Promise<string[]> {
     if (ids.length === 0) return [];
     const encontrados = await this.ejercicios.find({
-      where: { id: In([...ids]), activo: true },
+      where: { id: In([...ids]), activo: true, idEmpresa },
       select: { id: true },
     });
     return encontrados.map((e) => e.id);
@@ -245,9 +251,24 @@ export class EjerciciosService {
     return ejercicio;
   }
 
+  /**
+   * La empresa de quien pide, exigida.
+   *
+   * Un administrador de plataforma no tiene empresa: puede leerlo todo, pero no
+   * crear nada, porque no se sabria de quien seria lo creado.
+   */
+  private empresaDe(solicitante: Solicitante): string {
+    if (solicitante.idEmpresa === null) {
+      throw new BadRequestException(
+        'Tu cuenta no pertenece a ninguna empresa, asi que no puede crear recursos de una.',
+      );
+    }
+    return solicitante.idEmpresa;
+  }
+
   private exigirPropiedad(ejercicio: Ejercicio, solicitante: Solicitante): void {
-    if (solicitante.rol === Rol.Administrador) return;
-    if (ejercicio.idAutor === solicitante.id) return;
+    if (solicitante.idEmpresa === null && solicitante.rol === Rol.Administrador) return;
+    if (ejercicio.idEmpresa === solicitante.idEmpresa) return;
 
     this.registrar('acceso_denegado_por_recurso', solicitante, { idEjercicio: ejercicio.id });
     // 404 y no 403, igual que en vacantes: un 403 confirmaria que existe.
