@@ -562,6 +562,54 @@ poder arrancar, y uno de producción sin canal tiene que decirlo en voz alta.
 instancias, cada una cuenta las suyas y los umbrales se alcanzan más tarde.
 Llevarlos a Redis es el paso natural; queda escrito antes que resuelto a medias.
 
+### 5.9 Control de admisión
+
+Pasado su punto de caída, el backend **rendía menos con más carga**: 106, 78 y
+hasta 57 peticiones por segundo (ver [`rendimiento.md`](rendimiento.md)). No se
+degradaba de forma elegante: se ahogaba. Aceptaba todo lo que llegaba, y cada
+petición de más competía por el mismo *event loop* y alargaba a todas.
+
+Ahora hay un tope de peticiones en vuelo. Pasado el tope, **503 con
+`Retry-After`**. Un rechazo claro en diez milisegundos es mejor servicio que un
+éxito en treinta segundos.
+
+**No sustituye al *rate limiting*, y no es lo mismo.** El *rate limiting* (§5.5)
+protege de un **origen** abusivo y cuenta por IP y por usuario: es seguridad.
+Esto protege al **proceso** de sí mismo, sin importar quién llame. Mil usuarios
+legítimos a la vez no son un ataque, y aun así hay que sobrevivirlos.
+
+**Va como middleware, no como guardia ni interceptor.** En NestJS el orden es
+middleware → guardias → interceptores → pipes. Un guardia correría después de
+la autenticación, así que cada petición rechazada ya habría pagado la
+verificación de la firma Ed25519 de su token — justo el cómputo que esto
+protege. Rechazar caro no protege nada. Hay una prueba que lo fija: sin token,
+la respuesta es 503 y no 401.
+
+**Y se registra en un módulo, no con `app.use`.** El arnés de las pruebas de
+integración repite el montaje de `main.ts` a mano, y si los dos divergen las
+pruebas verifican una aplicación que no es la que se despliega.
+
+**Las rutas de salud nunca se rechazan.** Si la señal de vida devolviera 503 por
+saturación, el orquestador daría el contenedor por muerto y lo reiniciaría
+*precisamente cuando está trabajando al máximo*, tirando todo lo que tiene en
+vuelo. Es el razonamiento del §5.8 visto desde el otro lado.
+
+**El tope sale de la medición, no del gusto.** Por la ley de Little, las
+peticiones en vuelo son rendimiento × latencia: 100 pet/s medidos × 0,5 s de
+objetivo de p95 = **50**. Depende de la máquina: al cambiarla hay que repetir
+`test/carga/barrido.mjs` y recalcularlo.
+
+**Dos detalles que no son obvios y están en el código:** se registra el
+*comienzo* de la saturación y no cada rechazo —un log por petición inundaría el
+disco justo cuando el sistema está ahogado—, y se sale del estado con una
+holgura del 80 %, porque en el tope exacto cada entrada y salida haría oscilar
+el estado y llenaría el log de transiciones.
+
+**Límite conocido:** el contador es por proceso. Con varias instancias, el tope
+real es el configurado × el número de instancias. Es correcto —cada proceso
+tiene su propio *event loop* que proteger— pero hay que tenerlo presente al
+dimensionar.
+
 ## 6. Configuración
 
 Toda la configuración vive fuera del código, en variables de entorno, con
@@ -727,9 +775,11 @@ Y dentro del backend, tres cosas concretas:
   las mediciones de carga señalan escalar a varias instancias como el segundo
   paso de mayor retorno, y esto va **antes**. Ver
   [`rendimiento.md`](rendimiento.md) §6 P2.
-- **Control de admisión.** Pasado su punto de caída el backend no rechaza: se
-  ahoga y rinde menos con más carga. Es el requisito **RNF-4**, el único
-  incumplido de los seis. Ver [`rendimiento.md`](rendimiento.md) §6 P1.
+- **Volver a medir el control de admisión.** El mecanismo ya existe (§5.9),
+  pero el RNF-4 afirma algo sobre carga y **falta repetir el barrido** para
+  comprobarlo. El criterio está fijado: las peticiones por segundo no deben
+  caer después del codo. Es el tercer paso de la tríada del encuadre, el que
+  casi siempre se omite.
 
 También falta localizar la **Declaración de Alcance v1.0**, que la EDT cita como
 fuente de las funcionalidades por módulo y de los criterios de aceptación.

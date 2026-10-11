@@ -7,6 +7,7 @@ import { AlmacenamientoModule } from './common/almacenamiento/index.js';
 import { EventosModule } from './common/events/index.js';
 import { SaludController, SaludModule } from './common/salud/index.js';
 import { AlertasModule } from './common/alertas/index.js';
+import { AdmisionModule } from './common/admision/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AutenticacionModule } from './modules/autenticacion/index.js';
@@ -36,6 +37,9 @@ import { ReportesModule } from './modules/reportes/index.js';
     // Va primero: cada parte registra en el su propia comprobacion al arrancar.
     SaludModule,
     AlertasModule,
+    // Antes que los modulos de negocio: su middleware tiene que poder rechazar
+    // una peticion antes de que nadie haga trabajo con ella.
+    AdmisionModule,
     DatabaseModule,
     RateLimitModule,
     AlmacenamientoModule,

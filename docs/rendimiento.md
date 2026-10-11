@@ -115,12 +115,28 @@ escribirlos. **Se cumplen o no según la medición, y se dice cuál es cuál.**
 | **RNF-1** | Sostener **≥ 75 pet/s** (30 it/s) en una instancia, con 8 núcleos compartidos | ✅ medido: 79 pet/s |
 | **RNF-2** | p95 en capacidad sana: lecturas simples ≤ 100 ms, reporte consolidado ≤ 250 ms, entrega de archivo ≤ 300 ms | ✅ medido: 83 / 242 / 148 ms |
 | **RNF-3** | **Cero respuestas inesperadas** hasta el punto de caída | ✅ medido: 0 en todos los escenarios |
-| **RNF-4** | Pasado el punto de caída, rechazar explícitamente (**503 + `Retry-After`**) y mantener el rendimiento del pico | ❌ **no se cumple**: hoy colapsa a 57 pet/s |
+| **RNF-4** | Pasado el punto de caída, rechazar explícitamente (**503 + `Retry-After`**) y mantener el rendimiento del pico | ⚠️ **mecanismo implementado, efecto sin medir**: ver abajo |
 | **RNF-5** | Tras un pico, volver al p95 de capacidad sana en ≤ 60 s | ⚠️ **no medible todavía**: falta serie de tiempo |
 | **RNF-6** | Sin crecimiento sostenido de memoria bajo carga constante | ⚠️ **no verificado**: falta un *soak* de horas |
 
-Tres cumplidos con número, uno incumplido, dos sin poder afirmar nada. El
-incumplido es el P1 del plan.
+Tres cumplidos con número, uno a medias y dos sin poder afirmar nada.
+
+### Sobre el RNF-4: el mecanismo existe, el efecto no está medido
+
+El control de admisión del P1 **está implementado y probado** (§5.9 de
+[`arquitectura.md`](arquitectura.md)): pasado el tope, el backend responde 503
+con `Retry-After` antes incluso de autenticar, y las rutas de salud nunca se
+rechazan. Dieciséis pruebas lo cubren, incluidas las de que un rechazo no ocupa
+cupo y que el contador no queda en negativo.
+
+**Pero la segunda mitad del requisito —"mantener el rendimiento del pico"— es
+una afirmación sobre carga, y todavía no se ha vuelto a medir.** La tríada del
+encuadre es medir, corregir y **volver a medir**, y el tercer paso falta. Hasta
+repetir el barrido no se puede decir que el RNF-4 se cumpla: solo que ya existe
+con qué cumplirlo.
+
+El criterio de la verificación pendiente está fijado: **`pet/s` no debe caer
+después del codo**. Hoy caía de 106 a 78 y a 57.
 
 ## 6. Plan de mejora
 
