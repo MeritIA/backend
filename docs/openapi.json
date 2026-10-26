@@ -1241,6 +1241,97 @@
         ]
       }
     },
+    "/reportes/vacantes/{idVacante}/candidatos/{idCandidato}/revelar": {
+      "post": {
+        "description": "El ranking se lee con alias para no sesgar la comparacion: es el proposito del producto. Esta accion devuelve el nombre y el correo, y DEJA RASTRO de quien la pidio y cuando. Es POST y no GET porque cambia algo: escribe en el registro de auditoria.",
+        "operationId": "ReportesController_revelar",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentidadReveladaRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante es de otra empresa, o ese candidato no participa en ella."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Revela la identidad de un candidato del ranking",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/revelaciones": {
+      "get": {
+        "description": "El rastro que deja cada revelacion. Un registro de auditoria que nadie puede consultar no es una auditoria.",
+        "operationId": "ReportesController_revelaciones",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RevelacionRegistradaRespuesta"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Quien revelo que identidades en esta vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
     "/reportes/vacantes/{idVacante}/exportar": {
       "get": {
         "description": "Exportacion basica del entregable. Una fila por candidato; el desglose completo se consulta en el detalle. Las celdas van neutralizadas contra inyeccion de formulas.",
@@ -2049,24 +2140,6 @@
           "entregasConRiesgoAlto"
         ]
       },
-      "CandidatoRespuesta": {
-        "type": "object",
-        "properties": {
-          "nombre": {
-            "type": "string",
-            "example": "Ana Maria Rojas"
-          },
-          "correo": {
-            "type": "string",
-            "example": "ana@ejemplo.com",
-            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
-          }
-        },
-        "required": [
-          "nombre",
-          "correo"
-        ]
-      },
       "FilaDeRankingRespuesta": {
         "type": "object",
         "properties": {
@@ -2075,8 +2148,10 @@
             "minimum": 1,
             "description": "Dos candidatos empatados comparten posicion."
           },
-          "candidato": {
-            "$ref": "#/components/schemas/CandidatoRespuesta"
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c",
+            "description": "Identidad oculta: el ranking se lee sin nombres para no sesgar la comparacion. Es estable dentro de la vacante y distinto en otras. El nombre se obtiene revelando, y queda registrado."
           },
           "idCandidato": {
             "type": "string",
@@ -2117,7 +2192,7 @@
         },
         "required": [
           "posicion",
-          "candidato",
+          "alias",
           "idCandidato",
           "notaFinal",
           "intentosEvaluados",
@@ -2241,8 +2316,9 @@
           "vacante": {
             "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
           },
-          "candidato": {
-            "$ref": "#/components/schemas/CandidatoRespuesta"
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
           },
           "idCandidato": {
             "type": "string",
@@ -2267,10 +2343,72 @@
         },
         "required": [
           "vacante",
-          "candidato",
+          "alias",
           "idCandidato",
           "intentos",
           "generadoEn"
+        ]
+      },
+      "IdentidadReveladaRespuesta": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Ana Maria Rojas"
+          },
+          "correo": {
+            "type": "string",
+            "example": "ana@ejemplo.com",
+            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
+          },
+          "reveladaEn": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Queda registrado quien la revelo y cuando."
+          }
+        },
+        "required": [
+          "alias",
+          "idCandidato",
+          "nombre",
+          "correo",
+          "reveladaEn"
+        ]
+      },
+      "RevelacionRegistradaRespuesta": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idUsuario": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quien la revelo."
+          },
+          "reveladaEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias",
+          "idCandidato",
+          "idUsuario",
+          "reveladaEn"
         ]
       }
     }

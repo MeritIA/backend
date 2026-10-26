@@ -187,7 +187,7 @@ describe('integracion: reportes consolidados', () => {
       });
     });
 
-    it('el ranking va de mayor a menor, con una fila por candidato y su nombre', async () => {
+    it('el ranking va de mayor a menor, con una fila por candidato y SIN su nombre', async () => {
       const { body } = await api(app)
         .get(`/api/v1/reportes/vacantes/${idVacante}`)
         .set(auth(reclutador))
@@ -199,8 +199,12 @@ describe('integracion: reportes consolidados', () => {
         posicion: 1,
         notaFinal: 88,
         intentosEvaluados: 2,
-        candidato: { nombre: 'Ana Maria Rojas', correo: 'ana@ejemplo.com' },
       });
+      // El proposito del producto es reducir el sesgo: el ranking se compara
+      // sin nombres. Esta es la asercion que lo sostiene.
+      expect(body.ranking[0].alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
+      expect(JSON.stringify(body)).not.toContain('ana@ejemplo.com');
       expect(body.ranking[1]).toMatchObject({ posicion: 2, notaFinal: 72, intentosEvaluados: 1 });
     });
 
@@ -232,7 +236,8 @@ describe('integracion: reportes consolidados', () => {
         .set(auth(reclutador))
         .expect(200);
 
-      expect(body.candidato.nombre).toBe('Ana Maria Rojas');
+      expect(body.alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
       expect(body.posicionEnLaVacante).toBe(1);
       expect(body.intentos).toHaveLength(2);
       // Del mas reciente al mas viejo.
@@ -314,6 +319,106 @@ describe('integracion: reportes consolidados', () => {
     });
   });
 
+  describe('CRITERIO: revelar la identidad es una accion, y deja rastro', () => {
+    beforeEach(async () => {
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-02T10:00:00Z',
+      });
+    });
+
+    it('devuelve nombre y correo, y el alias para cruzarlo con el ranking', async () => {
+      const { body } = await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toMatchObject({
+        idCandidato: ana.id,
+        nombre: 'Ana Maria Rojas',
+        correo: 'ana@ejemplo.com',
+      });
+      expect(body.alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+    });
+
+    it('el alias que devuelve es EL MISMO que muestra el ranking', async () => {
+      // Si no coincidiera, el reclutador no podria saber a que fila corresponde
+      // la identidad que acaba de pedir, y la pantalla seria inutil.
+      const { body: reporte } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+      const { body: revelada } = await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const fila = reporte.ranking.find((f: { idCandidato: string }) => f.idCandidato === ana.id);
+      expect(revelada.alias).toBe(fila.alias);
+    });
+
+    it('queda registrado quien la revelo y cuando', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ idCandidato: ana.id, idUsuario: reclutador.id });
+      // El registro NO lleva el nombre: guardarlo ahi seria copiar el dato
+      // personal a una segunda tabla para auditar que alguien lo miro.
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
+    });
+
+    it('revelar dos veces deja DOS registros: es un log de accesos', async () => {
+      // Una tabla de estado diria "ya la vio" y perderia cuantas veces y
+      // cuando, que es justo lo que mira una auditoria.
+      for (let i = 0; i < 2; i++) {
+        await api(app)
+          .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+          .set(auth(reclutador))
+          .expect(200);
+      }
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(body).toHaveLength(2);
+    });
+
+    it('el reclutador de otra empresa no revela nada', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(404);
+      await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(404);
+    });
+
+    it('no se revela la identidad de quien no participa en la vacante', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${luis.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(404);
+    });
+
+    it('un candidato no puede revelar identidades', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(ana))
+        .expect(403);
+    });
+  });
+
   describe('exportacion basica del reporte', () => {
     it('descarga un CSV con cabecera y una fila por candidato', async () => {
       await sembrarEvaluacion({
@@ -335,12 +440,21 @@ describe('integracion: reportes consolidados', () => {
       const texto = respuesta.text ?? String(respuesta.body);
       // El BOM va primero: sin el, Excel en Windows destroza los acentos.
       expect(texto.startsWith('﻿')).toBe(true);
-      expect(texto).toContain('Posicion,Candidato,Correo,Nota final');
-      expect(texto).toContain('Ana Maria Rojas');
+      expect(texto).toContain('Posicion,Candidato,Nota final');
+      expect(texto).toContain('Candidato ••••');
       expect(texto).toContain('88');
+      // Un export que filtra lo que la pantalla protege no protege nada, y un
+      // CSV se reenvia con mas facilidad todavia.
+      expect(texto).not.toContain('Ana Maria Rojas');
+      expect(texto).not.toContain('ana@ejemplo.com');
     });
 
-    it('SEGURIDAD: un nombre que empieza por guion sale neutralizado', async () => {
+    it('SEGURIDAD: el CSV sigue neutralizando formulas, ahora sobre el alias', async () => {
+      // El nombre peligroso ya no llega al CSV —ahora va alias—, pero la
+      // defensa sigue viva para cualquier celda: la evidencia, un titulo de
+      // vacante o lo que se exporte manana. La prueba de la funcion pura
+      // cubre los seis caracteres; aqui se comprueba de extremo a extremo que
+      // ninguna celda empieza por uno de ellos sin apostrofo.
       await sembrarEvaluacion({
         idCandidato: candidatoConNombrePeligroso.id,
         notaFinal: 90,
@@ -353,9 +467,18 @@ describe('integracion: reportes consolidados', () => {
         .expect(200);
 
       const texto = respuesta.text ?? String(respuesta.body);
-      // Con el apostrofo delante, la hoja de calculo lo trata como texto.
-      expect(texto).toContain("'-Sara Gomez");
-      expect(texto).not.toMatch(/,-Sara Gomez/);
+      expect(texto).not.toContain('-Sara Gomez');
+
+      // Ninguna celda puede empezar por un caracter que una hoja de calculo
+      // interprete como formula.
+      const PELIGROSOS = ['=', '+', '-', '@', String.fromCharCode(9), String.fromCharCode(13)];
+      const filas = texto.slice(1).trim().split(String.fromCharCode(13, 10)).slice(1);
+      expect(filas.length).toBeGreaterThan(0);
+      for (const fila of filas) {
+        for (const celda of fila.split(',')) {
+          expect(PELIGROSOS.some((p) => celda.startsWith(p))).toBe(false);
+        }
+      }
     });
   });
 });

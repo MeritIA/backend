@@ -46,6 +46,10 @@ export const PERMISOS = {
   'evaluaciones:verCola': [Rol.Administrador],
 
   'reportes:verDeLaVacante': [Rol.Reclutador, Rol.Administrador],
+  // Revelar la identidad de un candidato quita una proteccion de privacidad:
+  // es un permiso propio y no un efecto de poder ver el reporte.
+  'reportes:revelarIdentidad': [Rol.Reclutador, Rol.Administrador],
+  'reportes:verAuditoria': [Rol.Reclutador, Rol.Administrador],
 
   'usuarios:administrar': [Rol.Administrador],
   'empresas:administrar': [Rol.Administrador],

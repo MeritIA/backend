@@ -163,11 +163,43 @@ sitio donde la regla puede quedarse vieja. Y no existe un reporte "de un
 candidato" suelto: ese mostraría su historial en otras empresas, que es justo lo
 que el tercer criterio del paquete prohíbe.
 
-**El reporte identifica a las personas.** Para eso autenticación expone
-`identidadesDe`, que devuelve nombre y correo en lote y nada más —no el usuario
-entero, que llevaría el hash de la contraseña por todo el monolito—. Que el
-reclutador vea el correo no abre nada: es el correo con el que él mismo invitó al
-candidato.
+#### El ranking no lleva nombres, y eso es el producto
+
+**La primera versión devolvía nombre y correo en cada fila del ranking. Estaba
+mal.** El objetivo declarado de MeritIA es **reducir el sesgo** en la
+evaluación, y los mockups del proyecto lo instrumentan en la pantalla A06:
+*"Identidad oculta hasta que selecciones a quién contactar"*. Un nombre en la
+tabla habilita exactamente el sesgo que el producto dice evitar —por género, por
+origen, por la universidad que se adivina en un apellido— justo mientras se
+compara a las personas entre sí.
+
+Ahora cada fila lleva un **alias** (`Candidato ••••3f8a2c`), que es un hash del
+par vacante + candidato. Tres propiedades importan:
+
+1. **Estable** dentro de la vacante, para poder hablar de "el 3f8a2c" entre
+   pantallas.
+2. **Distinto en otra vacante**, a propósito: si el alias fuera sólo del
+   candidato, dos empresas podrían cruzar sus tablas y seguir a una persona
+   entre procesos.
+3. **No reversible**: del alias no se saca el identificador.
+
+**Revelar la identidad es una acción, no un campo.**
+`POST .../candidatos/{id}/revelar` devuelve nombre y correo **y deja rastro** de
+quién lo pidió y cuándo. Es `POST` y no `GET` porque escribe. El registro se
+guarda **antes** de devolver: si el guardado fallara, la identidad no sale —es
+preferible negar el dato que entregarlo sin registro—. Y
+`GET .../revelaciones` permite leer ese rastro, porque una auditoría que nadie
+puede consultar no es una auditoría.
+
+**El CSV también va con alias.** Un export que filtra lo que la pantalla
+protege no protege nada, y un CSV se reenvía con más facilidad todavía.
+
+**Por eso reportes sí tiene una tabla**, y no contradice la decisión de arriba:
+lo que se rechazó fue **copiar** las notas, porque una copia se desincroniza.
+El registro de revelaciones es un dato **nuevo**, que no existe en ningún otro
+módulo, así que no puede desincronizarse de nada. Es un **log de eventos** sin
+restricción única: revelar dos veces son dos accesos, y una tabla de estado
+perdería cuántas veces y cuándo.
 
 **Las entregas se cuentan en la base, agrupadas por estado.** El reporte
 necesita saber si el ranking está completo o si falta gente por evaluar, pero no
@@ -735,6 +767,14 @@ puede seguir MinIO con licencia o S3 de verdad. Lo que cambia es el contenedor
 de desarrollo y de CI. **El Blueprint queda desactualizado en este punto y el
 equipo debería corregirlo**, o decidir pagar MinIO si quiere que dev y
 producción usen el mismo servidor.
+
+**Los mockups describen más producto del que cubre la EDT.** Las 27 pantallas
+de `MeritIA_flujos_y_pantallas.zip` incluyen pagos, moderación con revisión
+humana, verificación técnica con proctoring, MentorIA, perfil público del
+candidato y cesión de derechos. **Ninguno de esos flujos tiene paquete en la
+EDT ni backend que lo soporte.** Antes de construir el frontend hay que decidir
+cuáles de las 27 son el MVP; si se toman todas, falta backend que nadie ha
+planificado.
 
 **Esquema de reportes.** El *Diccionario de la EDT* lista "esquema de reportes"
 entre los recursos del paquete 5.1. El módulo se implementó **sin esquema

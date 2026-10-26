@@ -1,4 +1,14 @@
-import { Controller, Get, Param, ParseUUIDPipe, Req, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  StreamableFile,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -9,8 +19,10 @@ import {
 } from '@nestjs/swagger';
 import { ReportesService } from './reportes.service.js';
 import {
+  IdentidadReveladaRespuesta,
   ReporteDeCandidatoRespuesta,
   ReporteDeVacanteRespuesta,
+  RevelacionRegistradaRespuesta,
   aRespuestaDeCandidato,
   aRespuestaDeVacante,
 } from './dto/reporte.dto.js';
@@ -80,6 +92,55 @@ export class ReportesController {
     return aRespuestaDeCandidato(
       await this.reportes.deCandidatoEnVacante(idVacante, idCandidato, solicitanteDe(p)),
     );
+  }
+
+  @Post('vacantes/:idVacante/candidatos/:idCandidato/revelar')
+  @RequierePermiso('reportes:revelarIdentidad')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Revela la identidad de un candidato del ranking',
+    description:
+      'El ranking se lee con alias para no sesgar la comparacion: es el proposito del producto. Esta accion devuelve el nombre y el correo, y DEJA RASTRO de quien la pidio y cuando. Es POST y no GET porque cambia algo: escribe en el registro de auditoria.',
+  })
+  @ApiOkResponse({ type: IdentidadReveladaRespuesta })
+  @ApiNotFoundResponse({
+    description: 'La vacante es de otra empresa, o ese candidato no participa en ella.',
+  })
+  async revelar(
+    @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
+    @Param('idCandidato', new ParseUUIDPipe({ version: '4' })) idCandidato: string,
+    @Req() p: Peticion,
+  ): Promise<IdentidadReveladaRespuesta> {
+    const r = await this.reportes.revelarIdentidad(idVacante, idCandidato, solicitanteDe(p));
+    return {
+      alias: r.alias,
+      idCandidato: r.idCandidato,
+      nombre: r.nombre,
+      correo: r.correo,
+      reveladaEn: r.reveladaEn,
+    };
+  }
+
+  @Get('vacantes/:idVacante/revelaciones')
+  @RequierePermiso('reportes:verAuditoria')
+  @ApiOperation({
+    summary: 'Quien revelo que identidades en esta vacante',
+    description:
+      'El rastro que deja cada revelacion. Un registro de auditoria que nadie puede consultar no es una auditoria.',
+  })
+  @ApiOkResponse({ type: [RevelacionRegistradaRespuesta] })
+  @ApiNotFoundResponse({ description: 'La vacante no existe, o es de otra empresa.' })
+  async revelaciones(
+    @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
+    @Req() p: Peticion,
+  ): Promise<RevelacionRegistradaRespuesta[]> {
+    const registros = await this.reportes.revelacionesDe(idVacante, solicitanteDe(p));
+    return registros.map((r) => ({
+      alias: r.alias,
+      idCandidato: r.idCandidato,
+      idUsuario: r.idUsuario,
+      reveladaEn: r.reveladaEn,
+    }));
   }
 
   @Get('vacantes/:idVacante/exportar')
