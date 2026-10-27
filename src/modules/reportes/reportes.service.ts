@@ -228,6 +228,13 @@ export class ReportesService {
       { titulo: 'Nota final', valor: (f) => f.notaFinal },
       { titulo: 'Intentos evaluados', valor: (f) => f.intentosEvaluados },
       { titulo: 'Evaluada en', valor: (f) => f.evaluadaEn },
+      // La misma columna que la pantalla A06: en una tabla de notas parecidas
+      // es lo que distingue a una persona de otra.
+      { titulo: 'Habilidad destacada', valor: (f) => f.habilidadDestacada?.criterio ?? '' },
+      {
+        titulo: 'Logro en esa habilidad',
+        valor: (f) => (f.habilidadDestacada ? `${f.habilidadDestacada.porcentajeLogrado}%` : ''),
+      },
       { titulo: 'Riesgo de inyeccion', valor: (f) => f.riesgoInyeccion },
       { titulo: 'Id de entrega', valor: (f) => f.idEntrega },
     ];

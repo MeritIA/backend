@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  habilidadDestacadaDe,
   mediana,
   rankingDeCandidatos,
   resumenDeVacante,
@@ -113,6 +114,91 @@ describe('ranking de candidatos', () => {
 
   it('sin evaluaciones el ranking esta vacio, no falla', () => {
     expect(rankingDeCandidatos([])).toEqual([]);
+  });
+});
+
+describe('habilidad destacada', () => {
+  it('es el criterio con mayor porcentaje logrado, no con mayor puntaje', () => {
+    // 4 de 5 (80 %) gana a 8 de 20 (40 %), aunque 8 sea mas que 4. Dos
+    // criterios con escalas distintas no se comparan en bruto.
+    const destacada = habilidadDestacadaDe(
+      evaluacion('ana', 70, {
+        criterios: [
+          { criterio: 'Arquitectura', puntaje: 8, escalaMaxima: 20, peso: 50 },
+          { criterio: 'Pruebas', puntaje: 4, escalaMaxima: 5, peso: 50 },
+        ],
+      }),
+    );
+
+    expect(destacada).toEqual({ criterio: 'Pruebas', porcentajeLogrado: 80, peso: 50 });
+  });
+
+  it('con el mismo porcentaje gana el criterio que mas pesa en la rubrica', () => {
+    // Destacar en algo que vale el 60 % dice mas que destacar en algo del 10 %.
+    const destacada = habilidadDestacadaDe(
+      evaluacion('ana', 70, {
+        criterios: [
+          { criterio: 'Estilo', puntaje: 5, escalaMaxima: 5, peso: 10 },
+          { criterio: 'Correccion', puntaje: 10, escalaMaxima: 10, peso: 60 },
+        ],
+      }),
+    );
+
+    expect(destacada?.criterio).toBe('Correccion');
+  });
+
+  it('con mismo porcentaje y mismo peso desempata el nombre, para que no baile', () => {
+    const criterios = [
+      { criterio: 'Zeta', puntaje: 5, escalaMaxima: 5, peso: 50 },
+      { criterio: 'Alfa', puntaje: 5, escalaMaxima: 5, peso: 50 },
+    ];
+    const enUnOrden = habilidadDestacadaDe(evaluacion('ana', 70, { criterios }));
+    const enElOtro = habilidadDestacadaDe(
+      evaluacion('ana', 70, { criterios: [...criterios].reverse() }),
+    );
+
+    expect(enUnOrden?.criterio).toBe('Alfa');
+    expect(enElOtro?.criterio).toBe('Alfa');
+  });
+
+  it('una escala de cero no revienta: cuenta como cero logrado', () => {
+    const destacada = habilidadDestacadaDe(
+      evaluacion('ana', 0, {
+        criterios: [{ criterio: 'Roto', puntaje: 3, escalaMaxima: 0, peso: 100 }],
+      }),
+    );
+
+    expect(destacada).toEqual({ criterio: 'Roto', porcentajeLogrado: 0, peso: 100 });
+  });
+
+  it('sin desglose no hay habilidad: null y no un criterio inventado', () => {
+    expect(habilidadDestacadaDe(evaluacion('ana', 70))).toBeNull();
+  });
+
+  it('en el ranking sale la del intento que puntua, no la de otro intento', () => {
+    // El intento flojo destaca en Pruebas; el que puntua destaca en
+    // Arquitectura. La fila describe UN intento, y la columna tiene que poder
+    // comprobarse contra el detalle de ese intento.
+    const filas = rankingDeCandidatos([
+      evaluacion('ana', 40, {
+        creadaEn: new Date('2026-10-01T10:00:00Z'),
+        criterios: [
+          { criterio: 'Arquitectura', puntaje: 1, escalaMaxima: 10, peso: 50 },
+          { criterio: 'Pruebas', puntaje: 10, escalaMaxima: 10, peso: 50 },
+        ],
+      }),
+      evaluacion('ana', 90, {
+        creadaEn: new Date('2026-10-02T10:00:00Z'),
+        criterios: [
+          { criterio: 'Arquitectura', puntaje: 10, escalaMaxima: 10, peso: 50 },
+          { criterio: 'Pruebas', puntaje: 5, escalaMaxima: 10, peso: 50 },
+        ],
+      }),
+    ]);
+
+    expect(filas).toHaveLength(1);
+    expect(filas[0].notaFinal).toBe(90);
+    expect(filas[0].habilidadDestacada?.criterio).toBe('Arquitectura');
   });
 });
 

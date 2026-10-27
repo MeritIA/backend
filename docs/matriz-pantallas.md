@@ -52,7 +52,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
 | A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **Todo el cobro** ⛔: pasarela, referencia, estado, reintento. Y los campos «finalistas a evaluar» y «remuneración por reto» no existen en `Vacante`. Ver contradicción §6.1. |
 | A05 | Pago rechazado | ✗ ⛔ | Ruta de excepción completa del cobro. Lo único que ya se sostiene es que la vacante quede **en borrador**, que es el estado que la pantalla describe. |
-| A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio y el CSV ya están, y revelar cubre «contactar seleccionados». Faltan: **habilidad destacada** por fila (hoy el promedio por criterio es de la vacante, no del candidato) y la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
+| A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
 | A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/cerrar`, `POST .../revelar` | No existe marcar **contratado**, ni notificar el resultado a los finalistas, ni el mensaje al seleccionado ⛔. Ver contradicción §6.3. |
 | A09 | Informe de auditoría | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar` | La **auditoría de sesgo** exige un dato que hoy no se recoge (§6.8). Las métricas de integridad vienen de moderación ⛔. «Descargar informe» es PDF; hoy solo hay CSV. |
@@ -73,7 +73,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | B19 | Reto en revisión | ◐ `GET /entregas/{id}` | El **historial de estados con momento y motivo** ya es el esqueleto de esa línea de tiempo. Faltan el caso de moderación, la explicación del candidato y la retención del pago ⛔. |
 | B20 | Caso restaurado | ✗ ⛔ | Resultado favorable de la revisión humana. |
 | B21 | Descalificado | ✗ ⛔ | Decisión confirmada y **derecho a disputa** ante un segundo moderador. |
-| B22 | Resultado y Mentor IA | ◐ `GET /evaluaciones/entrega/{idEntrega}`, `GET /evaluaciones/mias` | El puntaje, el desglose y **la versión de rúbrica con la que se calificó** ya están. Faltan: el **puesto en el ranking** (§6.6), insignias, Mentor IA y tendencia del mercado ⛔. |
+| B22 | Resultado y Mentor IA | ◐ `GET /evaluaciones/entrega/{idEntrega}`, `GET /evaluaciones/mias` | El puntaje, el desglose, **la versión de rúbrica con la que se calificó** y el **puesto** —con la vacante cerrada, `GET /evaluaciones/vacante/{id}/mi-puesto`— ya están. Faltan insignias, Mentor IA y tendencia del mercado ⛔. |
 | B23 | Pago no procesado | ✗ ⛔ | Dispersión al candidato y su ruta de excepción. |
 | B24 | Perfil público | ✗ | Perfil público, insignias y banco de talento ⛔. Pero **«Descargar mis datos» y «Eliminar cuenta» no son ⛔**: son obligaciones de la Ley 1581 y hoy no tienen ruta. |
 
@@ -146,11 +146,28 @@ Se añadió `GET /vacantes/{id}/ejercicios`, con tres decisiones:
 - **Un borrador no se lee**, aunque el candidato ya esté invitado: el reto no
   existe para él hasta que la vacante se publica.
 
-### 6.6 ¿El candidato ve su puesto?
+### 6.6 ¿El candidato ve su puesto? — **decidido: sí, con el proceso cerrado**
 
-B22 le muestra **«Puesto 2 de 15 finalistas»**. El backend no se lo da, y no por
-descuido: el ranking es de la empresa, y decir el puesto filtra el tamaño y la
-forma del proceso. Es una decisión de producto, no técnica.
+B22 le muestra **«Puesto 2 de 15 finalistas»**. El backend no se lo daba, y no
+por descuido: el ranking es de la empresa, y decir el puesto filtra el tamaño y
+la forma del proceso.
+
+Resuelto el 26/10 con una condición en medio: **se da cuando la vacante está
+cerrada, nunca antes**. Con el proceso abierto, el puesto cambia cada vez que
+otro candidato entrega, así que no es información suya sino un canal lateral
+sobre la actividad de los demás: quien consulte cada hora deduce cuándo entrega
+la competencia. Con el proceso cerrado es un hecho final y auditable, y es lo que
+hace interpretable la nota —un 72 sobre 100 no significa nada sin referencia— y
+verificable la promesa meritocrática.
+
+Lo que **no** se entrega nunca: el alias, el identificador ni la nota de ningún
+otro. La respuesta tiene seis campos y hay una prueba que los fija. Queda como
+decisión **D-8** de la Declaración de Alcance: si el equipo prefiere mostrarlo en
+vivo, es una condición.
+
+Y una consecuencia que conviene ver: `total` dice cuántos candidatos
+participaron. Una vacante cerrada con un solo finalista le revela al candidato
+que estaba solo.
 
 ### 6.7 El alias del ranking: dos caracteres contra seis
 
@@ -207,12 +224,11 @@ Con eso se demuestra el núcleo del producto: una empresa define un reto con su
 rúbrica, invita candidatos, la IA califica contra esa rúbrica, y el reclutador
 compara **sin ver nombres** hasta que decide a quién contactar, dejando rastro.
 
-De los tres impedimentos que esta matriz encontró para arrancar, **uno ya está
-resuelto** (§6.5: el candidato lee su reto). Quedan dos, y los dos son
-decisiones de producto, no trabajo de backend:
+De los tres impedimentos que esta matriz encontró para arrancar, **dos ya están
+resueltos**: §6.5 (el candidato lee su reto) y §6.6 (ve su puesto, con el
+proceso cerrado). Queda uno:
 
-1. **§6.6** — si el candidato ve su puesto en el ranking.
-2. **§6.3** — si cerrar la vacante revela la identidad y notifica a los
+1. **§6.3** — si cerrar la vacante revela la identidad y notifica a los
    finalistas, o si siguen siendo acciones separadas.
 
 Lo demás —pagos, proctoring, moderación, MentorIA, perfil público, cesión de

@@ -481,4 +481,164 @@ describe('integracion: reportes consolidados', () => {
       }
     });
   });
+
+  /**
+   * El puesto que ve el candidato (pantalla B22).
+   *
+   * La ruta vive en el modulo de evaluacion —reportes depende de evaluacion, no
+   * al contrario—, pero la prueba vive aqui porque lo que importa comprobar es
+   * que el numero que ve el candidato y el ranking que ve el reclutador NO se
+   * pueden separar. Son dos implementaciones del mismo concepto: una agrupacion
+   * en SQL y una funcion pura. Si alguien cambia una, esta prueba lo dice.
+   */
+  describe('CRITERIO: el candidato ve su puesto, y solo con el proceso cerrado', () => {
+    const invitar = (quien: Sesion) =>
+      api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: quien.id })
+        .expect(200);
+
+    const cerrar = () =>
+      api(app).post(`/api/v1/vacantes/${idVacante}/cerrar`).set(auth(reclutador)).expect(200);
+
+    const miPuesto = (quien: Sesion) =>
+      api(app).get(`/api/v1/evaluaciones/vacante/${idVacante}/mi-puesto`).set(auth(quien));
+
+    beforeEach(async () => {
+      await invitar(ana);
+      await invitar(luis);
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-02T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 72,
+        creadaEn: '2026-10-01T11:00:00Z',
+      });
+    });
+
+    it('con el proceso abierto no da el puesto, y dice por que', async () => {
+      // El puesto cambia cada vez que otro entrega: con la vacante abierta no
+      // es informacion del candidato, es un canal lateral sobre los demas.
+      const { body } = await miPuesto(ana).expect(200);
+
+      expect(body).toMatchObject({
+        disponible: false,
+        motivo: 'proceso_en_curso',
+        puesto: null,
+        total: null,
+      });
+      // Ni de refilon: tampoco su propia nota por esta via, que para eso esta
+      // la evaluacion de su entrega.
+      expect(body.notaFinal).toBeNull();
+    });
+
+    it('con la vacante cerrada da su puesto y cuanta gente participo', async () => {
+      await cerrar();
+
+      const { body: deAna } = await miPuesto(ana).expect(200);
+      expect(deAna).toMatchObject({ disponible: true, puesto: 1, total: 2, notaFinal: 88 });
+
+      const { body: deLuis } = await miPuesto(luis).expect(200);
+      expect(deLuis).toMatchObject({ disponible: true, puesto: 2, total: 2, notaFinal: 72 });
+    });
+
+    it('no filtra nada de los demas: ni alias, ni identificadores, ni notas ajenas', async () => {
+      await cerrar();
+
+      const { body } = await miPuesto(luis).expect(200);
+      const comoTexto = JSON.stringify(body);
+
+      expect(comoTexto).not.toContain(ana.id);
+      expect(comoTexto).not.toContain('Ana Maria Rojas');
+
+      // La nota de Ana (88) no puede salir por ningun campo. Buscarla en el
+      // texto no sirve: un UUID puede contener "88" por casualidad, y de hecho
+      // lo hizo. Se miran los valores, y se fija la forma de la respuesta para
+      // que un campo nuevo no se cuele sin que nadie lo revise.
+      expect(Object.values(body)).not.toContain(88);
+      expect(Object.keys(body).sort()).toEqual([
+        'disponible',
+        'estadoVacante',
+        'idVacante',
+        'notaFinal',
+        'puesto',
+        'total',
+      ]);
+    });
+
+    it('el puesto del candidato es EL MISMO que el del ranking del reclutador', async () => {
+      // Con empate, que es donde dos implementaciones se separan: los dos
+      // primeros comparten el puesto 1 y el siguiente salta al 3.
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-03T10:00:00Z',
+      });
+      const sara = await registrarCandidato(app, 'sara-puesto@ejemplo.com', 'Sara Lopez');
+      await invitar(sara);
+      await sembrarEvaluacion({
+        idCandidato: sara.id,
+        notaFinal: 60,
+        creadaEn: '2026-10-01T09:00:00Z',
+      });
+      await cerrar();
+
+      const { body: reporte } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const posicionEnElRanking = (id: string): number =>
+        (reporte.ranking as { idCandidato: string; posicion: number }[]).find(
+          (f) => f.idCandidato === id,
+        )!.posicion;
+
+      for (const quien of [ana, luis, sara]) {
+        const { body } = await miPuesto(quien).expect(200);
+        expect(body.puesto).toBe(posicionEnElRanking(quien.id));
+        expect(body.total).toBe(reporte.ranking.length);
+      }
+
+      // Y el empate es de verdad un empate, no una coincidencia de la prueba.
+      expect(posicionEnElRanking(ana.id)).toBe(1);
+      expect(posicionEnElRanking(luis.id)).toBe(1);
+      expect(posicionEnElRanking(sara.id)).toBe(3);
+    });
+
+    it('invitado pero sin ninguna entrega evaluada: no es un error, es que no participo', async () => {
+      const mudo = await registrarCandidato(app, 'mudo@ejemplo.com', 'Pedro Silencio');
+      await invitar(mudo);
+      await cerrar();
+
+      const { body } = await miPuesto(mudo).expect(200);
+      expect(body).toMatchObject({ disponible: false, motivo: 'sin_evaluacion', puesto: null });
+    });
+
+    it('un candidato que no fue invitado recibe 404, no un puesto', async () => {
+      const ajeno = await registrarCandidato(app, 'ajeno@ejemplo.com', 'Nadie Invitado');
+      await cerrar();
+
+      // 404 y no 403: con un 403 podria averiguar que vacantes existen
+      // probando identificadores.
+      await miPuesto(ajeno).expect(404);
+      await api(app)
+        .get(`/api/v1/evaluaciones/vacante/${uuid()}/mi-puesto`)
+        .set(auth(ana))
+        .expect(404);
+    });
+
+    it('la ruta es del candidato: el reclutador tiene el ranking, no un puesto', async () => {
+      await cerrar();
+
+      await miPuesto(reclutador).expect(403);
+      await api(app)
+        .get(`/api/v1/evaluaciones/vacante/${idVacante}/mi-puesto`)
+        .set(auth(admin))
+        .expect(403);
+    });
+  });
 });

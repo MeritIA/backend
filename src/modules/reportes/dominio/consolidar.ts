@@ -6,6 +6,9 @@
  * ve —un promedio mal hecho parece correcto— y hay que poder probarla a mano.
  */
 
+/** Dos decimales. Mas precision en una nota de 0 a 100 no significa nada. */
+const redondear = (n: number): number => Math.round(n * 100) / 100;
+
 /** Lo minimo que el reporte necesita de una evaluacion. */
 export interface EvaluacionParaReporte {
   readonly idEvaluacion: string;
@@ -24,6 +27,21 @@ export interface EvaluacionParaReporte {
   }[];
 }
 
+/**
+ * El criterio en el que al candidato le fue mejor.
+ *
+ * Es la columna "habilidad destacada" de la pantalla A06: lo que permite leer
+ * una tabla de notas parecidas y ver que cada persona es fuerte en algo
+ * distinto, que es justo el argumento del producto contra el CV.
+ */
+export interface HabilidadDestacada {
+  criterio: string;
+  /** Porcentaje logrado en ese criterio, de 0 a 100. */
+  porcentajeLogrado: number;
+  /** El peso que ese criterio tiene en la rubrica. */
+  peso: number;
+}
+
 export interface FilaDeRanking {
   /** Empieza en 1. Dos candidatos empatados comparten posicion. */
   posicion: number;
@@ -36,6 +54,45 @@ export interface FilaDeRanking {
   intentosEvaluados: number;
   /** Del intento que puntua. Se le muestra al reclutador, nunca al candidato. */
   riesgoInyeccion: string;
+  /**
+   * Sale del MISMO intento que da la nota, no del promedio de sus intentos.
+   *
+   * La fila entera describe un intento concreto —su nota, su entrega, su
+   * evidencia—, y mezclar aqui un promedio de otros intentos haria que el
+   * reclutador no pudiera comprobar la columna contra el detalle. `null` si esa
+   * evaluacion no trae desglose por criterio.
+   */
+  habilidadDestacada: HabilidadDestacada | null;
+}
+
+/**
+ * El criterio con mayor porcentaje logrado de una evaluacion.
+ *
+ * Porcentaje y no puntaje crudo: dos criterios con escalas distintas no se
+ * pueden comparar en bruto, y "8 de 20" no es mejor que "4 de 5".
+ *
+ * Desempates, en orden: el de mayor peso en la rubrica —destacar en algo que
+ * pesa el 40 % dice mas que destacar en algo que pesa el 5 %— y luego el nombre,
+ * para que la columna no baile entre dos consultas de los mismos datos.
+ */
+export function habilidadDestacadaDe(evaluacion: EvaluacionParaReporte): HabilidadDestacada | null {
+  let mejor: HabilidadDestacada | null = null;
+
+  for (const c of evaluacion.criterios) {
+    const porcentajeLogrado =
+      c.escalaMaxima > 0 ? redondear((c.puntaje / c.escalaMaxima) * 100) : 0;
+    const candidata = { criterio: c.criterio, porcentajeLogrado, peso: c.peso };
+
+    if (mejor === null || esMejorHabilidad(candidata, mejor)) mejor = candidata;
+  }
+
+  return mejor;
+}
+
+function esMejorHabilidad(a: HabilidadDestacada, b: HabilidadDestacada): boolean {
+  if (a.porcentajeLogrado !== b.porcentajeLogrado) return a.porcentajeLogrado > b.porcentajeLogrado;
+  if (a.peso !== b.peso) return a.peso > b.peso;
+  return a.criterio.localeCompare(b.criterio) < 0;
 }
 
 /**
@@ -96,6 +153,7 @@ export function rankingDeCandidatos(
       evaluadaEn: mejor.creadaEn,
       intentosEvaluados: intentos,
       riesgoInyeccion: mejor.riesgoInyeccion,
+      habilidadDestacada: habilidadDestacadaDe(mejor),
     };
   });
 }
@@ -121,9 +179,6 @@ export interface ResumenDeVacante {
   porCriterio: PromedioDeCriterio[];
   entregasConRiesgoAlto: number;
 }
-
-/** Dos decimales. Mas precision en una nota de 0 a 100 no significa nada. */
-const redondear = (n: number): number => Math.round(n * 100) / 100;
 
 export function mediana(valores: readonly number[]): number | null {
   if (valores.length === 0) return null;

@@ -60,6 +60,7 @@ decide. **Cada una está abierta a que el equipo la cambie.**
 | D-5 | Qué intento puntúa, D-1, **espera ratificación** del dueño del producto | — | Es una decisión de negocio, no técnica |
 | D-6 | El **sector** de una empresa sale de una lista cerrada de catorce entradas (`dominio/sector.ts`) | Texto libre; o la CIIU del DANE | Texto libre no se puede agrupar: "Financiero", "finanzas" y "banca" serían tres sectores y el informe saldría vacío. La CIIU tiene más de 500 clases y nadie la elige bien en un registro. **La lista no la ratificó ningún documento**: sale del campo de la pantalla A01 y de la pregunta del review del 26/10 |
 | D-7 | El **NIT** es opcional, pero si se declara se verifica su dígito y es único | Exigirlo siempre; o aceptarlo sin verificar | La verificación con Cámara de Comercio que pide A01 no existe. Exigir un dato que no se puede contrastar da una validez que el sistema no respalda; aceptarlo sin verificar tira la única comprobación disponible |
+| D-8 | El candidato ve **su puesto y el total de participantes solo con la vacante cerrada** | Mostrarlo en vivo; o no mostrarlo nunca | En vivo, el puesto cambia cada vez que otro entrega: es un canal lateral sobre la actividad de terceros. Nunca, y la nota queda sin referencia: 72 sobre 100 no se puede interpretar. Cerrado es un hecho final y auditable. **Consecuencia aceptada**: el total le revela cuánta gente participó |
 
 ## 5. Supuestos
 
