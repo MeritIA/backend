@@ -31,6 +31,8 @@ respaldo.
 |---|---|---|---|
 | RF-EMP-1 | Cada usuario no-candidato pertenece a una empresa | `usuario.idEmpresa`, `empresa.entity` | implementado |
 | RF-EMP-2 | Ningún recurso de una empresa es visible para otra; a lo ajeno se responde 404 | pruebas de aislamiento en cada módulo | implementado |
+| RF-EMP-3 | Cada empresa se clasifica por **sector** de una lista cerrada, para poder agrupar convocatorias por tipo de empresa | `dominio/sector.ts`, pantalla A01, review 26/10 | implementado; la taxonomía **no está ratificada** (D-6) |
+| RF-EMP-4 | El **NIT** es opcional, único, y si se declara se verifica su dígito | `dominio/nit.ts` con NIT públicos como caso de prueba | implementado; la validación con Cámara de Comercio queda fuera (D-7) |
 
 ### RF-VAC — Vacantes (paquete 2.2)
 
@@ -132,7 +134,7 @@ respaldo.
 | RNF-OPE-1 | El entorno local se levanta con un comando | implementado (`compose.yaml`) |
 | RNF-OPE-2 | Servicios separados; imagen con usuario no-root y healthcheck | implementado |
 | RNF-OPE-3 | Configuración por entorno, validada al arrancar | implementado |
-| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (32 rutas) |
+| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (40 operaciones) |
 
 ## Qué queda fuera, a propósito
 

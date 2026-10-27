@@ -1,7 +1,18 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Rol } from '../dominio/rol.js';
+import { normalizarNit } from '../dominio/nit.js';
+import { SECTORES, SectorEmpresa } from '../dominio/sector.js';
 
 export class CrearEmpresaDto {
   @ApiProperty({ example: 'Acme S.A.S.', minLength: 2, maxLength: 160 })
@@ -10,6 +21,45 @@ export class CrearEmpresaDto {
   @MaxLength(160, { message: 'nombre no puede superar los 160 caracteres' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   nombre!: string;
+
+  /**
+   * Obligatorio en la API, aunque la columna tenga valor por omision.
+   *
+   * El valor por omision existe para las filas anteriores a la columna, no para
+   * que alguien cree una empresa sin clasificarla: el sector es lo que permite
+   * responder "cuantas convocatorias al ano tiene el sector financiero".
+   */
+  @ApiProperty({
+    enum: SECTORES,
+    example: SectorEmpresa.Financiero,
+    description:
+      'Sector economico, de una lista cerrada para que los informes se puedan agrupar. La lista no esta ratificada: ver docs/declaracion-de-alcance.md.',
+  })
+  @IsEnum(SectorEmpresa, { message: `sector debe ser uno de: ${SECTORES.join(', ')}` })
+  sector!: SectorEmpresa;
+
+  /**
+   * Opcional, y se guarda normalizado.
+   *
+   * Si llega, se exige el digito de verificacion y se comprueba: mientras no
+   * exista la verificacion contra la Camara de Comercio, ese digito es la unica
+   * comprobacion disponible. La aritmetica esta en `dominio/nit.ts`; aqui solo
+   * se mira la forma, para que el 400 diga que es de forma y no de calculo.
+   */
+  @ApiPropertyOptional({
+    example: '890903938-8',
+    description:
+      'NIT con digito de verificacion. Los puntos y los espacios se quitan. Unico entre empresas.',
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizarNit(value.trim()) : value,
+  )
+  @Matches(/^\d{8,15}-\d$/, {
+    message: 'nit debe tener entre 8 y 15 digitos, un guion y el digito de verificacion',
+  })
+  nit?: string;
 }
 
 /**
@@ -59,6 +109,8 @@ export class CrearUsuarioDeEmpresaDto {
 export class EmpresaRespuesta {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() nombre!: string;
+  @ApiProperty({ enum: SECTORES }) sector!: SectorEmpresa;
+  @ApiProperty({ nullable: true, example: '890903938-8' }) nit!: string | null;
   @ApiProperty() activa!: boolean;
   @ApiProperty() creadaEn!: Date;
 }

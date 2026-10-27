@@ -27,6 +27,7 @@ import {
   UsuarioDeEmpresaRespuesta,
 } from './dto/index.js';
 import { RequierePermiso } from './guardias/roles.guard.js';
+import type { SectorEmpresa } from './dominio/sector.js';
 import type { UsuarioAutenticado } from './guardias/autenticacion.guard.js';
 
 interface Peticion {
@@ -95,8 +96,17 @@ export class EmpresasController {
 function aRespuesta(e: {
   id: string;
   nombre: string;
+  sector: SectorEmpresa;
+  nit: string | null;
   activa: boolean;
   creadaEn: Date;
 }): EmpresaRespuesta {
-  return { id: e.id, nombre: e.nombre, activa: e.activa, creadaEn: e.creadaEn };
+  return {
+    id: e.id,
+    nombre: e.nombre,
+    sector: e.sector,
+    nit: e.nit,
+    activa: e.activa,
+    creadaEn: e.creadaEn,
+  };
 }

@@ -1571,10 +1571,37 @@
             "example": "Acme S.A.S.",
             "minLength": 2,
             "maxLength": 160
+          },
+          "sector": {
+            "type": "string",
+            "enum": [
+              "financiero",
+              "tecnologia",
+              "salud",
+              "educacion",
+              "industria",
+              "comercio",
+              "servicios",
+              "construccion",
+              "agro",
+              "transporte",
+              "energia",
+              "telecomunicaciones",
+              "gobierno",
+              "otro"
+            ],
+            "example": "financiero",
+            "description": "Sector economico, de una lista cerrada para que los informes se puedan agrupar. La lista no esta ratificada: ver docs/declaracion-de-alcance.md."
+          },
+          "nit": {
+            "type": "string",
+            "example": "890903938-8",
+            "description": "NIT con digito de verificacion. Los puntos y los espacios se quitan. Unico entre empresas."
           }
         },
         "required": [
-          "nombre"
+          "nombre",
+          "sector"
         ]
       },
       "EmpresaRespuesta": {
@@ -1587,6 +1614,30 @@
           "nombre": {
             "type": "string"
           },
+          "sector": {
+            "type": "string",
+            "enum": [
+              "financiero",
+              "tecnologia",
+              "salud",
+              "educacion",
+              "industria",
+              "comercio",
+              "servicios",
+              "construccion",
+              "agro",
+              "transporte",
+              "energia",
+              "telecomunicaciones",
+              "gobierno",
+              "otro"
+            ]
+          },
+          "nit": {
+            "type": "object",
+            "nullable": true,
+            "example": "890903938-8"
+          },
           "activa": {
             "type": "boolean"
           },
@@ -1598,6 +1649,8 @@
         "required": [
           "id",
           "nombre",
+          "sector",
+          "nit",
           "activa",
           "creadaEn"
         ]

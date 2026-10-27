@@ -58,6 +58,8 @@ decide. **Cada una está abierta a que el equipo la cambie.**
 | D-3 | El módulo de reportes **no tiene esquema propio**: compone en vivo | Proyección materializada | Una copia de las notas se desincroniza y contradice a la evaluación. Para el MVP las cifras caben en vivo (ver `rendimiento.md`) |
 | D-4 | El almacenamiento de objetos en desarrollo es **SeaweedFS**, no MinIO | Seguir con MinIO | MinIO retiró sus imágenes públicas. Producción puede usar S3 real o MinIO con licencia |
 | D-5 | Qué intento puntúa, D-1, **espera ratificación** del dueño del producto | — | Es una decisión de negocio, no técnica |
+| D-6 | El **sector** de una empresa sale de una lista cerrada de catorce entradas (`dominio/sector.ts`) | Texto libre; o la CIIU del DANE | Texto libre no se puede agrupar: "Financiero", "finanzas" y "banca" serían tres sectores y el informe saldría vacío. La CIIU tiene más de 500 clases y nadie la elige bien en un registro. **La lista no la ratificó ningún documento**: sale del campo de la pantalla A01 y de la pregunta del review del 26/10 |
+| D-7 | El **NIT** es opcional, pero si se declara se verifica su dígito y es único | Exigirlo siempre; o aceptarlo sin verificar | La verificación con Cámara de Comercio que pide A01 no existe. Exigir un dato que no se puede contrastar da una validez que el sistema no respalda; aceptarlo sin verificar tira la única comprobación disponible |
 
 ## 5. Supuestos
 

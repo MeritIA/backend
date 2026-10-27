@@ -47,7 +47,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 
 | # | Pantalla | Endpoints que ya existen | Qué falta |
 |---|---|---|---|
-| A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | La pantalla es un **auto-registro** de la empresa; el endpoint solo deja crearla a un administrador de plataforma. La entidad `Empresa` no tiene **NIT** ni **sector**. La validación con Cámara de Comercio es una integración externa ⛔. |
+| A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **NIT y sector ya existen** (y el NIT se verifica por su dígito). Sigue faltando que la pantalla sea un **auto-registro**: el endpoint solo deja crear la empresa a un administrador de plataforma. La validación contra Cámara de Comercio es una integración externa ⛔. |
 | A02 | Panel de vacantes | ◐ `GET /vacantes`, `GET /ejercicios` | Los cuatro contadores (vacantes activas, finalistas en evaluación, contratados, retos en banco) no tienen endpoint: hoy saldrían de N+1 llamadas. No existen «avance», «cierre estimado» ni el concepto de **contratado**. El banco de talento ⛔. |
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
 | A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **Todo el cobro** ⛔: pasarela, referencia, estado, reintento. Y los campos «finalistas a evaluar» y «remuneración por reto» no existen en `Vacante`. Ver contradicción §6.1. |
