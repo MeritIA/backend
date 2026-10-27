@@ -7,6 +7,7 @@ import { AutenticacionModule } from '../autenticacion/index.js';
 import { EntregasModule } from '../entregas/index.js';
 import { EvaluacionModule } from '../evaluacion/index.js';
 import { VacantesModule } from '../vacantes/index.js';
+import { EjerciciosModule } from '../ejercicios/index.js';
 
 /**
  * Agrega resultados y genera la informacion consolidada por vacante o candidato
@@ -23,6 +24,7 @@ import { VacantesModule } from '../vacantes/index.js';
     EvaluacionModule,
     EntregasModule,
     VacantesModule,
+    EjerciciosModule,
     AutenticacionModule,
   ],
   controllers: [ReportesController],

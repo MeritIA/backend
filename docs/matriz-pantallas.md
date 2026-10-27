@@ -48,13 +48,13 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | # | Pantalla | Endpoints que ya existen | Qué falta |
 |---|---|---|---|
 | A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **NIT y sector ya existen** (y el NIT se verifica por su dígito). Sigue faltando que la pantalla sea un **auto-registro**: el endpoint solo deja crear la empresa a un administrador de plataforma. La validación contra Cámara de Comercio es una integración externa ⛔. |
-| A02 | Panel de vacantes | ◐ `GET /vacantes`, `GET /ejercicios` | Los cuatro contadores (vacantes activas, finalistas en evaluación, contratados, retos en banco) no tienen endpoint: hoy saldrían de N+1 llamadas. No existen «avance», «cierre estimado» ni el concepto de **contratado**. El banco de talento ⛔. |
+| A02 | Panel de vacantes | ◐ `GET /reportes/panel`, `GET /vacantes`, `GET /ejercicios` | **Los cuatro contadores ya salen en una sola llamada**, y el concepto de **contratado** existe. Siguen faltando «avance» y «cierre estimado», que piden campos nuevos en `Vacante`. El banco de talento ⛔. |
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
 | A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **Todo el cobro** ⛔: pasarela, referencia, estado, reintento. Y los campos «finalistas a evaluar» y «remuneración por reto» no existen en `Vacante`. Ver contradicción §6.1. |
 | A05 | Pago rechazado | ✗ ⛔ | Ruta de excepción completa del cobro. Lo único que ya se sostiene es que la vacante quede **en borrador**, que es el estado que la pantalla describe. |
 | A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
-| A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/cerrar`, `POST .../revelar` | No existe marcar **contratado**, ni notificar el resultado a los finalistas, ni el mensaje al seleccionado ⛔. Ver contradicción §6.3. |
+| A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/candidatos/{idCandidato}/contratar`, `POST .../cerrar`, `POST .../revelar` | **Marcar contratado ya existe**, con quién lo registró y cuándo. Falta **notificar el resultado a los finalistas** (§6.3, decisión abierta) y el mensaje al seleccionado ⛔. |
 | A09 | Informe de auditoría | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar` | La **auditoría de sesgo** exige un dato que hoy no se recoge (§6.8). Las métricas de integridad vienen de moderación ⛔. «Descargar informe» es PDF; hoy solo hay CSV. |
 | A10 | Banco de retos | ◐ `GET /ejercicios`, `GET /ejercicios/{id}`, `DELETE /ejercicios/{id}` | El banco **ya es reutilizable y versionado**. Faltan: estadísticas de uso por ejercicio, estado de validación, y toda la **suscripción** ⛔. |
 
@@ -111,11 +111,27 @@ invitado**. En B13 descubre vacantes por **% de afinidad**, y A04 promete que
 finalistas». Eso es un motor de preselección que no existe, y cambia quién
 invita a quién: hoy invita el reclutador, uno por uno.
 
-### 6.3 Cerrar la vacante contra revelar la identidad
+### 6.3 Cerrar la vacante contra revelar la identidad — **medio decidida**
 
 En A08 **cerrar es lo que revela** la identidad del seleccionado y notifica el
 resultado a los quince finalistas. En el backend, `cerrar` y `revelar` son dos
 acciones independientes y **cerrar no notifica a nadie**.
+
+Lo decidido el 26/10 (**D-9**): **cerrar no revela ninguna identidad, nunca**.
+Automatizarlo volcaría todos los nombres de todos los procesos cerrados, que es
+exactamente la protección que el producto vende; revelar sigue siendo un acto
+deliberado y registrado. Y **marcar contratado** ya existe, con autor y fecha,
+sin exigir que la identidad se haya revelado antes: pedirlo obligaría a
+`vacantes` a preguntarle a `reportes`, que ya depende de `vacantes`, y no
+protegería nada —quien no reveló no sabe a quién contrató—.
+
+**Lo que sigue abierto, y es decisión del equipo:** si cerrar debe **notificar
+por correo a los finalistas**. El canal existe (`CorreoService`, paquete 5.5),
+pero hoy solo envía alertas de seguridad al equipo, no mensajes a personas
+externas. Son dos preguntas, no una: qué dice ese correo —«el proceso se cerró»
+no es lo mismo que «no fuiste seleccionado»— y quién aprueba que el sistema
+empiece a escribirle a candidatos reales el día que se configure SMTP. Por eso
+no se programó de oficio.
 
 ### 6.4 La entrega es un archivo, no una sesión
 

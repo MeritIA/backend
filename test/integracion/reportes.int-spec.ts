@@ -208,6 +208,43 @@ describe('integracion: reportes consolidados', () => {
       expect(body.ranking[1]).toMatchObject({ posicion: 2, notaFinal: 72, intentosEvaluados: 1 });
     });
 
+    it('cada fila trae su habilidad destacada, del intento que puntua (A06)', async () => {
+      const sara = await registrarCandidato(app, 'sara-habilidad@ejemplo.com', 'Sara Ruiz');
+      await sembrarEvaluacion({
+        idCandidato: sara.id,
+        notaFinal: 95,
+        creadaEn: '2026-10-04T10:00:00Z',
+        criterios: [
+          // 8 de 20 es el 40 %; 4 de 5 es el 80 %. Gana el porcentaje, no el
+          // puntaje crudo.
+          { criterio: 'Arquitectura', puntaje: 8, escalaMaxima: 20, peso: 60 },
+          { criterio: 'Pruebas automatizadas', puntaje: 4, escalaMaxima: 5, peso: 40 },
+        ],
+      });
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const deSara = (body.ranking as { idCandidato: string; habilidadDestacada: unknown }[]).find(
+        (f) => f.idCandidato === sara.id,
+      );
+      expect(deSara?.habilidadDestacada).toEqual({
+        criterio: 'Pruebas automatizadas',
+        porcentajeLogrado: 80,
+        peso: 40,
+      });
+
+      // Y el CSV lleva la misma columna: es la tabla que el reclutador pega en
+      // su hoja de seguimiento.
+      const exportado = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/exportar`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(exportado.text ?? String(exportado.body)).toContain('Habilidad destacada');
+    });
+
     it('las cifras consolidadas cuadran con lo sembrado', async () => {
       await sembrarEntrega(ana.id, 'recibida', 9);
       await sembrarEntrega(luis.id, 'fallida', 9);
@@ -639,6 +676,97 @@ describe('integracion: reportes consolidados', () => {
         .get(`/api/v1/evaluaciones/vacante/${idVacante}/mi-puesto`)
         .set(auth(admin))
         .expect(403);
+    });
+  });
+
+  describe('CRITERIO: el panel de la empresa en una sola llamada (A02)', () => {
+    const panel = (quien: Sesion) => api(app).get('/api/v1/reportes/panel').set(auth(quien));
+
+    it('las cifras cuadran con lo sembrado, y los retos retirados no se cuentan', async () => {
+      // Una vacante mas en borrador y otra cerrada, sobre la publicada del
+      // montaje.
+      const { body: borrador } = await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({ titulo: 'Analista de datos', descripcion: 'Para el equipo de datos.' })
+        .expect(201);
+      expect(borrador.estado).toBe('borrador');
+
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: ana.id })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos/${ana.id}/contratar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await sembrarEntrega(luis.id, 'en_evaluacion', 1);
+      await sembrarEntrega(luis.id, 'evaluada', 2);
+      await sembrarEntrega(ana.id, 'fallida', 3);
+
+      const retirado = await crearEjercicioEnElBanco(app, reclutador, `Retirado ${uuid()}`);
+      await api(app).delete(`/api/v1/ejercicios/${retirado}`).set(auth(reclutador)).expect(200);
+
+      const { body } = await panel(reclutador).expect(200);
+
+      expect(body.vacantes).toEqual({ borradores: 1, publicadas: 1, cerradas: 0 });
+      expect(body).toMatchObject({
+        entregasPorEvaluar: 2,
+        entregasEvaluadas: 1,
+        entregasFallidas: 1,
+        contratados: 1,
+        // El del montaje. El retirado se conserva para que las evaluaciones
+        // emitidas sigan siendo auditables, pero ya no es material disponible.
+        retosEnElBanco: 1,
+      });
+    });
+
+    it('cuenta PERSONAS en finalistas y ENTREGAS en la cola: la diferencia son los reintentos', async () => {
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await sembrarEntrega(ana.id, 'en_evaluacion', 2);
+
+      const { body } = await panel(reclutador).expect(200);
+
+      // Una sola persona esperando, con dos entregas. Si el panel contara
+      // entregas, diria que hay dos finalistas donde hay una.
+      expect(body.finalistasEnEvaluacion).toBe(1);
+      expect(body.entregasPorEvaluar).toBe(2);
+    });
+
+    it('no mezcla empresas: la vecina ve su propio panel en ceros', async () => {
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: ana.id })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos/${ana.id}/contratar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await panel(reclutadorDeOtraEmpresa).expect(200);
+
+      expect(body.vacantes).toEqual({ borradores: 0, publicadas: 0, cerradas: 0 });
+      expect(body).toMatchObject({
+        finalistasEnEvaluacion: 0,
+        entregasPorEvaluar: 0,
+        contratados: 0,
+        retosEnElBanco: 0,
+      });
+    });
+
+    it('un administrador de plataforma no tiene panel: no pertenece a ninguna empresa', async () => {
+      // Devolver ceros seria peor: pareceria una empresa sin actividad.
+      const { body } = await panel(admin).expect(400);
+      expect(body.mensaje).toMatch(/empresa/i);
+    });
+
+    it('un candidato no ve el panel de la empresa', async () => {
+      await panel(ana).expect(403);
     });
   });
 });

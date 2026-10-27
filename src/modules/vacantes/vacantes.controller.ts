@@ -148,6 +148,27 @@ export class VacantesController {
     return this.vacantes.asignarCandidato(id, datos.idCandidato, solicitanteDe(p));
   }
 
+  @Post(':id/candidatos/:idCandidato/contratar')
+  @RequierePermiso('vacantes:editar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Registra que a un candidato se le contrato',
+    description:
+      'El cierre del flujo de la pantalla A08, y la cifra "contratados" del panel. Deja quien lo registro y cuando. ' +
+      'Se puede marcar con la vacante ya cerrada, que es el caso normal: primero se cierra el proceso y la contratacion se confirma despues. ' +
+      'Es idempotente: volver a marcarlo no mueve la fecha, porque la primera es la que lee una auditoria.',
+  })
+  @ApiNotFoundResponse({
+    description: 'La vacante no existe, no es de su empresa, o ese candidato no fue invitado.',
+  })
+  contratar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('idCandidato', new ParseUUIDPipe({ version: '4' })) idCandidato: string,
+    @Req() p: Peticion,
+  ): Promise<Vacante> {
+    return this.vacantes.contratar(id, idCandidato, solicitanteDe(p));
+  }
+
   @Post(':id/publicar')
   @RequierePermiso('vacantes:editar')
   @HttpCode(HttpStatus.OK)

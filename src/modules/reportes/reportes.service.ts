@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -12,9 +12,10 @@ import { aCsv, type Columna } from './dominio/csv.js';
 import { aliasDeCandidato } from './dominio/alias.js';
 import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
 import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
+import { EjerciciosService } from '../ejercicios/index.js';
 import { EntregasService, EstadoEntrega } from '../entregas/index.js';
 import { EvaluacionService } from '../evaluacion/index.js';
-import { VacantesService, type Solicitante } from '../vacantes/index.js';
+import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
 
 /**
  * Servicio de aplicacion del modulo de reportes (paquete 5.1).
@@ -55,8 +56,64 @@ export class ReportesService {
     private readonly evaluacion: EvaluacionService,
     private readonly entregas: EntregasService,
     private readonly vacantes: VacantesService,
+    private readonly ejerciciosDelBanco: EjerciciosService,
     private readonly autenticacion: AutenticacionService,
   ) {}
+
+  /**
+   * El panel de la empresa: las cuatro cifras de la pantalla A02.
+   *
+   * POR QUE VIVE EN REPORTES
+   *
+   * Porque ninguna de las cuatro sale de un solo modulo. Vacantes sabe cuantas
+   * hay y cuantas personas se contrataron, entregas sabe cuantas estan por
+   * evaluar, y ejercicios sabe con cuanto material cuenta el banco. Reportes es
+   * el unico modulo autorizado a componer datos de varios, y hacerlo aqui
+   * evita que el frontend lo arme con una llamada por vacante, que es como se
+   * vuelve lento un panel.
+   *
+   * NO RECIBE NINGUN IDENTIFICADOR, Y ESO ES LA PROTECCION
+   *
+   * La empresa sale del token de quien pregunta, no de la URL. No hay nada que
+   * cambiar en la peticion para ver el panel de otra empresa: la clase de
+   * ataque que el encuadre llama IDOR no tiene superficie aqui.
+   */
+  async panelDeLaEmpresa(solicitante: Solicitante): Promise<PanelDeEmpresa> {
+    if (solicitante.idEmpresa === null) {
+      // Un administrador de plataforma no tiene empresa. Devolver un panel
+      // vacio seria peor que decirlo: parecería una empresa sin actividad.
+      throw new BadRequestException(
+        'Este panel resume una empresa, y un administrador de plataforma no pertenece a ninguna.',
+      );
+    }
+
+    const deVacantes = await this.vacantes.panelDeEmpresa(solicitante.idEmpresa);
+    const [conteosDeEntregas, finalistasEnEvaluacion, retosEnElBanco] = await Promise.all([
+      this.entregas.conteosPorEstadoDeVacantes(deVacantes.ids),
+      this.entregas.candidatosEnEvaluacionDeVacantes(deVacantes.ids),
+      this.ejerciciosDelBanco.cuantosEnElBanco(solicitante.idEmpresa),
+    ]);
+
+    this.registrar('panel_de_empresa_consultado', solicitante, {
+      idEmpresa: solicitante.idEmpresa,
+    });
+
+    return {
+      vacantes: {
+        borradores: deVacantes.porEstado[EstadoVacante.Borrador],
+        publicadas: deVacantes.porEstado[EstadoVacante.Publicada],
+        cerradas: deVacantes.porEstado[EstadoVacante.Cerrada],
+      },
+      finalistasEnEvaluacion,
+      entregasPorEvaluar:
+        conteosDeEntregas[EstadoEntrega.Recibida] + conteosDeEntregas[EstadoEntrega.EnEvaluacion],
+      entregasEvaluadas: conteosDeEntregas[EstadoEntrega.Evaluada],
+      entregasFallidas: conteosDeEntregas[EstadoEntrega.Fallida],
+      contratados: deVacantes.contratados,
+      retosEnElBanco,
+      generadoEn: new Date(),
+    };
+  }
 
   /** Ranking de una vacante con sus cifras consolidadas. */
   async deVacante(idVacante: string, solicitante: Solicitante): Promise<ReporteDeVacante> {
@@ -358,5 +415,25 @@ export interface ReporteDeCandidato {
   idCandidato: string;
   posicionEnLaVacante: number | null;
   intentos: EvaluacionParaReporte[];
+  generadoEn: Date;
+}
+
+/**
+ * Las cifras del panel de la empresa (pantalla A02).
+ *
+ * `finalistasEnEvaluacion` cuenta PERSONAS y `entregasPorEvaluar` cuenta
+ * ENTREGAS: la diferencia entre las dos son los reintentos. Van las dos porque
+ * la pantalla muestra personas y la operacion necesita entregas —una cola que
+ * crece se ve en la segunda, no en la primera.
+ */
+export interface PanelDeEmpresa {
+  vacantes: { borradores: number; publicadas: number; cerradas: number };
+  finalistasEnEvaluacion: number;
+  entregasPorEvaluar: number;
+  entregasEvaluadas: number;
+  entregasFallidas: number;
+  contratados: number;
+  /** Ejercicios activos del banco. Los retirados no se cuentan. */
+  retosEnElBanco: number;
   generadoEn: Date;
 }

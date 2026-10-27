@@ -32,6 +32,12 @@ export class RevelacionRegistradaRespuesta {
   @ApiProperty() reveladaEn!: Date;
 }
 
+export class HabilidadDestacadaRespuesta {
+  @ApiProperty({ example: 'Correccion funcional' }) criterio!: string;
+  @ApiProperty({ minimum: 0, maximum: 100, example: 92.5 }) porcentajeLogrado!: number;
+  @ApiProperty({ minimum: 0, maximum: 100, example: 40 }) peso!: number;
+}
+
 export class FilaDeRankingRespuesta {
   @ApiProperty({ minimum: 1, description: 'Dos candidatos empatados comparten posicion.' })
   posicion!: number;
@@ -62,6 +68,14 @@ export class FilaDeRankingRespuesta {
     description: 'Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano.',
   })
   riesgoInyeccion!: string;
+
+  @ApiProperty({
+    type: HabilidadDestacadaRespuesta,
+    nullable: true,
+    description:
+      'El criterio en el que mejor le fue, del MISMO intento que da la nota. Es lo que distingue a dos personas con notas parecidas. Nulo si esa evaluacion no trae desglose.',
+  })
+  habilidadDestacada!: HabilidadDestacadaRespuesta | null;
 }
 
 export class PromedioDeCriterioRespuesta {
@@ -192,6 +206,7 @@ export function aRespuestaDeVacante(r: ReporteDeVacante): ReporteDeVacanteRespue
       idEvaluacion: f.idEvaluacion,
       evaluadaEn: f.evaluadaEn,
       riesgoInyeccion: f.riesgoInyeccion,
+      habilidadDestacada: f.habilidadDestacada,
     })),
     generadoEn: r.generadoEn,
   };
@@ -220,4 +235,32 @@ export function aRespuestaDeCandidato(r: ReporteDeCandidato): ReporteDeCandidato
     })),
     generadoEn: r.generadoEn,
   };
+}
+
+export class VacantesDelPanelRespuesta {
+  @ApiProperty() borradores!: number;
+  @ApiProperty() publicadas!: number;
+  @ApiProperty() cerradas!: number;
+}
+
+export class PanelDeEmpresaRespuesta {
+  @ApiProperty({ type: VacantesDelPanelRespuesta }) vacantes!: VacantesDelPanelRespuesta;
+
+  @ApiProperty({
+    description:
+      'PERSONAS con alguna entrega por evaluar. No es lo mismo que entregas: quien reintenta tiene dos, y el panel diria que hay dos personas donde hay una.',
+  })
+  finalistasEnEvaluacion!: number;
+
+  @ApiProperty({
+    description: 'ENTREGAS recibidas o en evaluacion. Una cola que crece se ve aqui.',
+  })
+  entregasPorEvaluar!: number;
+
+  @ApiProperty() entregasEvaluadas!: number;
+  @ApiProperty() entregasFallidas!: number;
+  @ApiProperty({ description: 'Personas contratadas en toda la empresa.' }) contratados!: number;
+  @ApiProperty({ description: 'Ejercicios activos del banco. Los retirados no se cuentan.' })
+  retosEnElBanco!: number;
+  @ApiProperty() generadoEn!: Date;
 }

@@ -613,6 +613,44 @@
         ]
       }
     },
+    "/vacantes/{id}/candidatos/{idCandidato}/contratar": {
+      "post": {
+        "description": "El cierre del flujo de la pantalla A08, y la cifra \"contratados\" del panel. Deja quien lo registro y cuando. Se puede marcar con la vacante ya cerrada, que es el caso normal: primero se cierra el proceso y la contratacion se confirma despues. Es idempotente: volver a marcarlo no mueve la fecha, porque la primera es la que lee una auditoria.",
+        "operationId": "VacantesController_contratar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, no es de su empresa, o ese candidato no fue invitado."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Registra que a un candidato se le contrato",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
     "/vacantes/{id}/publicar": {
       "post": {
         "description": "Exige al menos un ejercicio asociado: publicarla sin ninguno dejaria a los candidatos invitados sin nada que resolver.",
@@ -1218,6 +1256,34 @@
         "summary": "Reintenta la evaluacion de una entrega fallida",
         "tags": [
           "evaluaciones"
+        ]
+      }
+    },
+    "/reportes/panel": {
+      "get": {
+        "description": "Vacantes por estado, finalistas en evaluacion, contratados y retos en el banco, en una sola llamada. La empresa sale del token y no de la URL: no hay identificador que cambiar para ver el panel de otra. Un administrador de plataforma no pertenece a ninguna empresa y recibe 400.",
+        "operationId": "ReportesController_panel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelDeEmpresaRespuesta"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Las cifras de la empresa de quien pregunta (pantalla A02)",
+        "tags": [
+          "reportes"
         ]
       }
     },
@@ -2204,6 +2270,69 @@
           "estado"
         ]
       },
+      "VacantesDelPanelRespuesta": {
+        "type": "object",
+        "properties": {
+          "borradores": {
+            "type": "number"
+          },
+          "publicadas": {
+            "type": "number"
+          },
+          "cerradas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "borradores",
+          "publicadas",
+          "cerradas"
+        ]
+      },
+      "PanelDeEmpresaRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacantes": {
+            "$ref": "#/components/schemas/VacantesDelPanelRespuesta"
+          },
+          "finalistasEnEvaluacion": {
+            "type": "number",
+            "description": "PERSONAS con alguna entrega por evaluar. No es lo mismo que entregas: quien reintenta tiene dos, y el panel diria que hay dos personas donde hay una."
+          },
+          "entregasPorEvaluar": {
+            "type": "number",
+            "description": "ENTREGAS recibidas o en evaluacion. Una cola que crece se ve aqui."
+          },
+          "entregasEvaluadas": {
+            "type": "number"
+          },
+          "entregasFallidas": {
+            "type": "number"
+          },
+          "contratados": {
+            "type": "number",
+            "description": "Personas contratadas en toda la empresa."
+          },
+          "retosEnElBanco": {
+            "type": "number",
+            "description": "Ejercicios activos del banco. Los retirados no se cuentan."
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vacantes",
+          "finalistasEnEvaluacion",
+          "entregasPorEvaluar",
+          "entregasEvaluadas",
+          "entregasFallidas",
+          "contratados",
+          "retosEnElBanco",
+          "generadoEn"
+        ]
+      },
       "VacanteDelReporteRespuesta": {
         "type": "object",
         "properties": {
@@ -2313,6 +2442,32 @@
           "entregasConRiesgoAlto"
         ]
       },
+      "HabilidadDestacadaRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string",
+            "example": "Correccion funcional"
+          },
+          "porcentajeLogrado": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 92.5
+          },
+          "peso": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 40
+          }
+        },
+        "required": [
+          "criterio",
+          "porcentajeLogrado",
+          "peso"
+        ]
+      },
       "FilaDeRankingRespuesta": {
         "type": "object",
         "properties": {
@@ -2361,6 +2516,16 @@
               "alto"
             ],
             "description": "Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano."
+          },
+          "habilidadDestacada": {
+            "nullable": true,
+            "description": "El criterio en el que mejor le fue, del MISMO intento que da la nota. Es lo que distingue a dos personas con notas parecidas. Nulo si esa evaluacion no trae desglose.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HabilidadDestacadaRespuesta"
+              }
+            ]
           }
         },
         "required": [
@@ -2372,7 +2537,8 @@
           "idEntrega",
           "idEvaluacion",
           "evaluadaEn",
-          "riesgoInyeccion"
+          "riesgoInyeccion",
+          "habilidadDestacada"
         ]
       },
       "ReporteDeVacanteRespuesta": {

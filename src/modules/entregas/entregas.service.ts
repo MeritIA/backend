@@ -284,6 +284,65 @@ export class EntregasService {
     return conteos;
   }
 
+  /**
+   * Los mismos conteos, pero de varias vacantes a la vez.
+   *
+   * Para el panel de la empresa (A02): una llamada por vacante convertiria
+   * cuatro cifras en decenas de consultas.
+   *
+   * NO COMPRUEBA ACCESO, Y NO ES UN DESCUIDO: no puede. Recibe una lista de
+   * identificadores, no una peticion, y quien la llama —el panel de reportes—
+   * los obtiene del modulo de vacantes usando la empresa del token, nunca un
+   * parametro de la URL. Ahi no hay identificador que un atacante pueda
+   * cambiar. Si algun dia la llama alguien mas, la comprobacion le toca a el.
+   */
+  async conteosPorEstadoDeVacantes(
+    idsDeVacantes: readonly string[],
+  ): Promise<Record<EstadoEntrega, number>> {
+    const conteos = Object.fromEntries(
+      Object.values(EstadoEntrega).map((estado) => [estado, 0]),
+    ) as Record<EstadoEntrega, number>;
+
+    // Sin vacantes no hay nada que contar, y un `IN ()` vacio es SQL invalido.
+    if (idsDeVacantes.length === 0) return conteos;
+
+    const filas = await this.entregas
+      .createQueryBuilder('e')
+      .select('e.estado', 'estado')
+      .addSelect('count(*)::int', 'total')
+      .where('e.id_vacante IN (:...idsDeVacantes)', { idsDeVacantes })
+      .groupBy('e.estado')
+      .getRawMany<{ estado: EstadoEntrega; total: number }>();
+
+    for (const fila of filas) conteos[fila.estado] = Number(fila.total);
+    return conteos;
+  }
+
+  /**
+   * Cuantas PERSONAS distintas tienen una entrega pendiente de evaluar.
+   *
+   * Es la cifra que la pantalla A02 llama "finalistas en evaluacion". No es lo
+   * mismo que contar entregas: quien reintenta tiene dos, y el panel diria que
+   * hay dos personas esperando donde hay una. El conteo por estado se queda
+   * para saber si el ranking esta completo; este, para el panel.
+   *
+   * Sobre el acceso vale lo dicho en `conteosPorEstadoDeVacantes`.
+   */
+  async candidatosEnEvaluacionDeVacantes(idsDeVacantes: readonly string[]): Promise<number> {
+    if (idsDeVacantes.length === 0) return 0;
+
+    const fila = await this.entregas
+      .createQueryBuilder('e')
+      .select('count(distinct e.id_candidato)::int', 'total')
+      .where('e.id_vacante IN (:...idsDeVacantes)', { idsDeVacantes })
+      .andWhere('e.estado IN (:...estados)', {
+        estados: [EstadoEntrega.Recibida, EstadoEntrega.EnEvaluacion],
+      })
+      .getRawOne<{ total: number }>();
+
+    return Number(fila?.total ?? 0);
+  }
+
   async obtenerPara(id: string, solicitante: Solicitante): Promise<Entrega> {
     const entrega = await this.obtenerConHistorial(id);
     await this.exigirAcceso(entrega, solicitante);

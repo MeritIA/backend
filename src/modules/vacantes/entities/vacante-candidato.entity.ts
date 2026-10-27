@@ -43,4 +43,29 @@ export class VacanteCandidato {
 
   @CreateDateColumn({ type: 'timestamptz', name: 'asignado_en' })
   asignadoEn!: Date;
+
+  /**
+   * Cuando se registro que a este candidato se le contrato, o `null`.
+   *
+   * VA EN LA FILA DE LA INVITACION, NO EN LA VACANTE
+   *
+   * Una convocatoria puede terminar con mas de una persona contratada —la
+   * pantalla A04 pide cuantos finalistas evaluar, y nada dice que solo se
+   * contrate a uno—, asi que el dato pertenece a la relacion y no a la oferta.
+   * De paso, el panel de la empresa cuenta contratados sumando filas en vez de
+   * interpretar un estado.
+   *
+   * La primera fecha es la que cuenta: volver a marcarlo no la mueve, porque es
+   * el dato que una auditoria lee.
+   */
+  @Column({ type: 'timestamptz', name: 'contratado_en', nullable: true })
+  contratadoEn!: Date | null;
+
+  /**
+   * Quien lo registro. Contratar es la decision con consecuencias economicas
+   * del proceso: tiene que saberse quien la tomo, igual que se sabe quien
+   * revelo una identidad.
+   */
+  @Column({ type: 'uuid', name: 'id_usuario_que_contrato', nullable: true })
+  idUsuarioQueContrato!: string | null;
 }

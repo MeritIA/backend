@@ -586,4 +586,102 @@ describe('integracion: vacantes', () => {
       ).toHaveLength(5); // los 4 del montaje mas este
     });
   });
+
+  describe('CRITERIO: la contratacion se registra, y dice quien y cuando (A08)', () => {
+    let idVacante: string;
+
+    const contratar = (quien: Sesion, aQuien: Sesion, vacante = idVacante) =>
+      api(app)
+        .post(`/api/v1/vacantes/${vacante}/candidatos/${aQuien.id}/contratar`)
+        .set(auth(quien));
+
+    const fechaDeContratacion = async (aQuien: Sesion) => {
+      const [fila] = await consultar<{
+        contratado_en: Date | null;
+        id_usuario_que_contrato: string | null;
+      }>(
+        `select contratado_en, id_usuario_que_contrato
+           from vacantes.vacante_candidatos
+          where id_vacante = $1 and id_candidato = $2`,
+        [idVacante, aQuien.id],
+      );
+      return fila;
+    };
+
+    beforeEach(async () => {
+      const idEjercicio = await crearEjercicioEnElBanco(app, reclutador, `Reto ${uuid()}`);
+      idVacante = await crearVacante();
+      await api(app)
+        .put(`/api/v1/vacantes/${idVacante}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [idEjercicio] })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/publicar`)
+        .set(auth(reclutador))
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+    });
+
+    it('el reclutador dueno lo marca, y queda quien lo registro', async () => {
+      await contratar(reclutador, candidato).expect(200);
+
+      const fila = await fechaDeContratacion(candidato);
+      expect(fila.contratado_en).not.toBeNull();
+      // Quien: contratar es la decision con consecuencias economicas del
+      // proceso, y tiene que dejar rastro igual que revelar una identidad.
+      expect(fila.id_usuario_que_contrato).toBe(reclutador.id);
+    });
+
+    it('volver a marcarlo no mueve la fecha: la primera es la que se audita', async () => {
+      await contratar(reclutador, candidato).expect(200);
+      const primera = await fechaDeContratacion(candidato);
+
+      await contratar(reclutador, candidato).expect(200);
+      const segunda = await fechaDeContratacion(candidato);
+
+      expect(segunda.contratado_en).toEqual(primera.contratado_en);
+    });
+
+    it('se puede contratar con la vacante ya cerrada, que es el caso normal', async () => {
+      // En A08 se cierra el proceso y la contratacion se confirma despues.
+      await api(app).post(`/api/v1/vacantes/${idVacante}/cerrar`).set(auth(reclutador)).expect(200);
+
+      await contratar(reclutador, candidato).expect(200);
+      expect((await fechaDeContratacion(candidato)).contratado_en).not.toBeNull();
+    });
+
+    it('en un borrador no se contrata: alli no se recibe ninguna entrega', async () => {
+      const borrador = await crearVacante();
+      await api(app)
+        .post(`/api/v1/vacantes/${borrador}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+
+      const { body } = await contratar(reclutador, candidato, borrador).expect(400);
+      expect(body.mensaje).toMatch(/borrador/i);
+    });
+
+    it('a quien no fue invitado, 404, y el mismo mensaje que si no existiera', async () => {
+      await contratar(reclutador, otroCandidato).expect(404);
+      await contratar(reclutador, candidato, uuid()).expect(404);
+    });
+
+    it('un reclutador de otra empresa no contrata en una vacante ajena', async () => {
+      // 404 y no 403: con un 403 podria inventariar las vacantes de la
+      // competencia probando identificadores.
+      await contratar(otroReclutador, candidato).expect(404);
+      expect((await fechaDeContratacion(candidato)).contratado_en).toBeNull();
+    });
+
+    it('el candidato no se contrata a si mismo', async () => {
+      await contratar(candidato, candidato).expect(403);
+      expect((await fechaDeContratacion(candidato)).contratado_en).toBeNull();
+    });
+  });
 });

@@ -124,6 +124,20 @@ export class EjerciciosService {
     return this.obtenerCompleto(idEjercicio);
   }
 
+  /**
+   * Cuantos retos reutilizables tiene la empresa en su banco (cifra de A02).
+   *
+   * Cuenta solo los ACTIVOS: un ejercicio retirado se conserva para que las
+   * evaluaciones ya emitidas sigan siendo auditables, pero no se puede asociar
+   * a vacantes nuevas, y el panel pregunta con cuanto material cuenta hoy.
+   *
+   * Cuenta en la base en vez de cargar el banco entero con sus versiones y
+   * criterios, que es lo que hace `listar` y seria absurdo para un numero.
+   */
+  async cuantosEnElBanco(idEmpresa: string): Promise<number> {
+    return this.ejercicios.count({ where: { idEmpresa, activo: true } });
+  }
+
   async listar(solicitante: Solicitante): Promise<Ejercicio[]> {
     // El banco es de la EMPRESA, no de quien escribio el ejercicio: dos
     // reclutadores de la misma empresa trabajan sobre el mismo banco. Un

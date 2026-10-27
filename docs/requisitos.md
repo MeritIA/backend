@@ -43,6 +43,7 @@ respaldo.
 | RF-VAC-3 | La lista de ejercicios de una vacante solo se cambia en borrador | `vacantes.service · reemplazarEjercicios` | implementado |
 | RF-VAC-4 | El reclutador invita candidatos; sin invitación no hay acceso ni entrega | `vacante-candidato`, `candidatoTieneAcceso` | implementado |
 | RF-VAC-5 | La vacante fija cuántos intentos se permiten (1 a 10) | `intentosPermitidos` | implementado |
+| RF-VAC-6 | La contratación de un candidato se registra con **quién** la registró y **cuándo** | `vacante-candidato · contratadoEn`, pantalla A08 | implementado; **no notifica** a los finalistas (§6.3 de la matriz) |
 
 ### RF-EJE — Banco de ejercicios y rúbrica (paquete 2.3)
 
@@ -84,6 +85,9 @@ respaldo.
 | RF-REP-3 | El detalle de un candidato muestra todos sus intentos con su desglose | `deCandidatoEnVacante` | implementado |
 | RF-REP-4 | El ranking se exporta a CSV, con las celdas neutralizadas contra inyección de fórmulas | `csv · neutralizarFormula` | implementado |
 | RF-REP-5 | Ningún reporte muestra datos de otra empresa | delegación en `obtenerPara`/`deVacante`, prueba | implementado |
+| RF-REP-6 | El ranking dice en qué criterio destacó cada candidato | `consolidar · habilidadDestacadaDe`, pantalla A06 | implementado |
+| RF-REP-7 | La empresa ve sus cifras en una sola llamada: vacantes por estado, finalistas en evaluación, contratados y retos del banco | `reportes.service · panelDeLaEmpresa`, pantalla A02 | implementado |
+| RF-REP-8 | El candidato ve su puesto y el total de participantes, solo con la vacante cerrada | `evaluacion.service · miPuestoEn`, pantalla B22 | implementado (D-8) |
 
 ### RF-OBS — Observabilidad y alertas (paquete 5.5)
 

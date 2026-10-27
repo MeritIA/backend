@@ -17,11 +17,12 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
-import { ReportesService } from './reportes.service.js';
+import { ReportesService, type PanelDeEmpresa } from './reportes.service.js';
 import {
   IdentidadReveladaRespuesta,
   ReporteDeCandidatoRespuesta,
   ReporteDeVacanteRespuesta,
+  PanelDeEmpresaRespuesta,
   RevelacionRegistradaRespuesta,
   aRespuestaDeCandidato,
   aRespuestaDeVacante,
@@ -56,6 +57,22 @@ const solicitanteDe = (p: Peticion): Solicitante => ({
 @Controller({ path: 'reportes', version: '1' })
 export class ReportesController {
   constructor(private readonly reportes: ReportesService) {}
+
+  // La ruta fija va antes que las de parametro.
+
+  @Get('panel')
+  @RequierePermiso('reportes:verDeLaVacante')
+  @ApiOperation({
+    summary: 'Las cifras de la empresa de quien pregunta (pantalla A02)',
+    description:
+      'Vacantes por estado, finalistas en evaluacion, contratados y retos en el banco, en una sola llamada. ' +
+      'La empresa sale del token y no de la URL: no hay identificador que cambiar para ver el panel de otra. ' +
+      'Un administrador de plataforma no pertenece a ninguna empresa y recibe 400.',
+  })
+  @ApiOkResponse({ type: PanelDeEmpresaRespuesta })
+  panel(@Req() p: Peticion): Promise<PanelDeEmpresa> {
+    return this.reportes.panelDeLaEmpresa(solicitanteDe(p));
+  }
 
   @Get('vacantes/:idVacante')
   @RequierePermiso('reportes:verDeLaVacante')
