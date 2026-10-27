@@ -31,6 +31,8 @@ respaldo.
 |---|---|---|---|
 | RF-EMP-1 | Cada usuario no-candidato pertenece a una empresa | `usuario.idEmpresa`, `empresa.entity` | implementado |
 | RF-EMP-2 | Ningún recurso de una empresa es visible para otra; a lo ajeno se responde 404 | pruebas de aislamiento en cada módulo | implementado |
+| RF-EMP-3 | Cada empresa se clasifica por **sector** de una lista cerrada, para poder agrupar convocatorias por tipo de empresa | `dominio/sector.ts`, pantalla A01, review 26/10 | implementado; la taxonomía **no está ratificada** (D-6) |
+| RF-EMP-4 | El **NIT** es opcional, único, y si se declara se verifica su dígito | `dominio/nit.ts` con NIT públicos como caso de prueba | implementado; la validación con Cámara de Comercio queda fuera (D-7) |
 
 ### RF-VAC — Vacantes (paquete 2.2)
 
@@ -41,6 +43,7 @@ respaldo.
 | RF-VAC-3 | La lista de ejercicios de una vacante solo se cambia en borrador | `vacantes.service · reemplazarEjercicios` | implementado |
 | RF-VAC-4 | El reclutador invita candidatos; sin invitación no hay acceso ni entrega | `vacante-candidato`, `candidatoTieneAcceso` | implementado |
 | RF-VAC-5 | La vacante fija cuántos intentos se permiten (1 a 10) | `intentosPermitidos` | implementado |
+| RF-VAC-6 | La contratación de un candidato se registra con **quién** la registró y **cuándo** | `vacante-candidato · contratadoEn`, pantalla A08 | implementado; **no notifica** a los finalistas (§6.3 de la matriz) |
 
 ### RF-EJE — Banco de ejercicios y rúbrica (paquete 2.3)
 
@@ -82,6 +85,9 @@ respaldo.
 | RF-REP-3 | El detalle de un candidato muestra todos sus intentos con su desglose | `deCandidatoEnVacante` | implementado |
 | RF-REP-4 | El ranking se exporta a CSV, con las celdas neutralizadas contra inyección de fórmulas | `csv · neutralizarFormula` | implementado |
 | RF-REP-5 | Ningún reporte muestra datos de otra empresa | delegación en `obtenerPara`/`deVacante`, prueba | implementado |
+| RF-REP-6 | El ranking dice en qué criterio destacó cada candidato | `consolidar · habilidadDestacadaDe`, pantalla A06 | implementado |
+| RF-REP-7 | La empresa ve sus cifras en una sola llamada: vacantes por estado, finalistas en evaluación, contratados y retos del banco | `reportes.service · panelDeLaEmpresa`, pantalla A02 | implementado |
+| RF-REP-8 | El candidato ve su puesto y el total de participantes, solo con la vacante cerrada | `evaluacion.service · miPuestoEn`, pantalla B22 | implementado (D-8) |
 
 ### RF-OBS — Observabilidad y alertas (paquete 5.5)
 
@@ -132,7 +138,7 @@ respaldo.
 | RNF-OPE-1 | El entorno local se levanta con un comando | implementado (`compose.yaml`) |
 | RNF-OPE-2 | Servicios separados; imagen con usuario no-root y healthcheck | implementado |
 | RNF-OPE-3 | Configuración por entorno, validada al arrancar | implementado |
-| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (32 rutas) |
+| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (40 operaciones) |
 
 ## Qué queda fuera, a propósito
 

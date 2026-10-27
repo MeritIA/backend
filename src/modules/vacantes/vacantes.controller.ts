@@ -26,6 +26,7 @@ import {
   EditarVacanteDto,
 } from './dto/index.js';
 import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
+import type { ResumenVersion } from '../ejercicios/index.js';
 import type { Vacante } from './entities/vacante.entity.js';
 
 interface Peticion {
@@ -81,6 +82,27 @@ export class VacantesController {
     return this.vacantes.obtenerPara(id, solicitanteDe(p));
   }
 
+  @Get(':id/ejercicios')
+  @RequierePermiso('vacantes:leer')
+  @ApiOperation({
+    summary: 'Enunciado y rubrica de los ejercicios de la vacante',
+    description:
+      'Lo que necesita quien va a resolver el reto: el enunciado y los criterios con sus pesos. ' +
+      'Es la unica forma en que un candidato invitado lee su ejercicio, porque el banco de ejercicios ' +
+      'de la empresa no es visible para el. Devuelve la version vigente de cada uno, que es la misma ' +
+      'contra la que se califica: la rubrica es publica y es igual para todos los finalistas.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'La vacante no existe, o quien pregunta no tiene acceso a ella. Un candidato solo accede si fue invitado y la vacante ya esta publicada.',
+  })
+  ejercicios(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() p: Peticion,
+  ): Promise<ResumenVersion[]> {
+    return this.vacantes.ejerciciosDeLaVacante(id, solicitanteDe(p));
+  }
+
   @Patch(':id')
   @RequierePermiso('vacantes:editar')
   @ApiOperation({
@@ -124,6 +146,27 @@ export class VacantesController {
     @Req() p: Peticion,
   ): Promise<Vacante> {
     return this.vacantes.asignarCandidato(id, datos.idCandidato, solicitanteDe(p));
+  }
+
+  @Post(':id/candidatos/:idCandidato/contratar')
+  @RequierePermiso('vacantes:editar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Registra que a un candidato se le contrato',
+    description:
+      'El cierre del flujo de la pantalla A08, y la cifra "contratados" del panel. Deja quien lo registro y cuando. ' +
+      'Se puede marcar con la vacante ya cerrada, que es el caso normal: primero se cierra el proceso y la contratacion se confirma despues. ' +
+      'Es idempotente: volver a marcarlo no mueve la fecha, porque la primera es la que lee una auditoria.',
+  })
+  @ApiNotFoundResponse({
+    description: 'La vacante no existe, no es de su empresa, o ese candidato no fue invitado.',
+  })
+  contratar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('idCandidato', new ParseUUIDPipe({ version: '4' })) idCandidato: string,
+    @Req() p: Peticion,
+  ): Promise<Vacante> {
+    return this.vacantes.contratar(id, idCandidato, solicitanteDe(p));
   }
 
   @Post(':id/publicar')

@@ -275,6 +275,159 @@ describe('integracion: vacantes', () => {
     });
   });
 
+  describe('CRITERIO: el candidato invitado puede leer el reto que se le pide', () => {
+    async function publicadaCon(...idsDeEjercicios: string[]): Promise<string> {
+      const id = await crearVacante();
+      await api(app)
+        .put(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios })
+        .expect(200);
+      await api(app).post(`/api/v1/vacantes/${id}/publicar`).set(auth(reclutador)).expect(200);
+      return id;
+    }
+
+    async function invitar(idVacante: string, quien = candidato): Promise<void> {
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: quien.id })
+        .expect(200);
+    }
+
+    it('devuelve el enunciado y la rubrica con sus pesos', async () => {
+      // Sin esto se invitaba a resolver un ejercicio ilegible: el candidato
+      // podia entregar un archivo sin saber que se le pedia ni como se le
+      // calificaba. La rubrica es publica a proposito (mockup B14).
+      const id = await publicadaCon(await ejercicio());
+      await invitar(id);
+
+      const { body } = await api(app)
+        .get(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(candidato))
+        .expect(200);
+
+      expect(body).toHaveLength(1);
+      expect(body[0].enunciado).toContain('Enunciado de prueba');
+      expect(body[0].numero).toBe(1);
+      expect(body[0].criterios).toEqual([
+        {
+          nombre: 'Correccion funcional',
+          descripcion: 'La solucion resuelve todos los casos del enunciado, incluidos los limite.',
+          peso: 100,
+          escalaMaxima: 5,
+        },
+      ]);
+    });
+
+    it('respeta el orden en que se asociaron', async () => {
+      // El enunciado puede venir por partes: leerlas desordenadas cambia el
+      // ejercicio.
+      const primero = await ejercicio();
+      const segundo = await ejercicio();
+      const id = await publicadaCon(primero, segundo);
+      await invitar(id);
+
+      const { body } = await api(app)
+        .get(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(candidato))
+        .expect(200);
+
+      expect(body.map((e: { idEjercicio: string }) => e.idEjercicio)).toEqual([primero, segundo]);
+    });
+
+    it('el permiso viene de la vacante, no del banco: el candidato sigue sin ver el banco', async () => {
+      const idEjercicio = await ejercicio();
+      const id = await publicadaCon(idEjercicio);
+      await invitar(id);
+
+      await api(app).get(`/api/v1/vacantes/${id}/ejercicios`).set(auth(candidato)).expect(200);
+
+      // El mismo ejercicio, pedido por la puerta del banco, le sigue negado.
+      await api(app).get('/api/v1/ejercicios').set(auth(candidato)).expect(403);
+      await api(app).get(`/api/v1/ejercicios/${idEjercicio}`).set(auth(candidato)).expect(403);
+    });
+
+    it('sin invitacion no lo lee, y recibe el mismo 404 que la vacante', async () => {
+      const id = await publicadaCon(await ejercicio());
+      await invitar(id);
+
+      await api(app).get(`/api/v1/vacantes/${id}/ejercicios`).set(auth(otroCandidato)).expect(404);
+    });
+
+    it('invitado a un borrador tampoco lo lee: el reto no esta publicado', async () => {
+      const id = await crearVacante();
+      await api(app)
+        .put(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [await ejercicio()] })
+        .expect(200);
+      await invitar(id);
+
+      await api(app).get(`/api/v1/vacantes/${id}/ejercicios`).set(auth(candidato)).expect(404);
+    });
+
+    it('un reclutador de otra empresa no lo lee', async () => {
+      const id = await publicadaCon(await ejercicio());
+
+      await api(app).get(`/api/v1/vacantes/${id}/ejercicios`).set(auth(otroReclutador)).expect(404);
+    });
+
+    it('el reclutador dueno lo lee: es lo que vera el candidato', async () => {
+      const id = await publicadaCon(await ejercicio());
+
+      const { body } = await api(app)
+        .get(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toHaveLength(1);
+    });
+
+    it('una vacante sin ejercicios devuelve una lista vacia, no un error', async () => {
+      const id = await crearVacante();
+
+      const { body } = await api(app)
+        .get(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toEqual([]);
+    });
+
+    it('muestra la version vigente, la misma contra la que se califica', async () => {
+      const idEjercicio = await ejercicio();
+      const id = await publicadaCon(idEjercicio);
+      await invitar(id);
+
+      await api(app)
+        .post(`/api/v1/ejercicios/${idEjercicio}/versiones`)
+        .set(auth(reclutador))
+        .send({
+          enunciado:
+            'Enunciado corregido: se aclara el caso limite de la lista vacia por completo.',
+          criterios: [
+            {
+              nombre: 'Correccion funcional',
+              descripcion: 'La solucion resuelve todos los casos, incluidos los limite.',
+              peso: 100,
+              escalaMaxima: 5,
+            },
+          ],
+          motivoDelCambio: 'El caso limite confundia a los candidatos.',
+        })
+        .expect(201);
+
+      const { body } = await api(app)
+        .get(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(candidato))
+        .expect(200);
+
+      expect(body[0].numero).toBe(2);
+      expect(body[0].enunciado).toContain('Enunciado corregido');
+    });
+  });
+
   describe('acceso por recurso: cambiar un identificador no da acceso', () => {
     it('otro reclutador no ve, edita, publica ni cierra una vacante ajena', async () => {
       const id = await crearVacante();
@@ -431,6 +584,104 @@ describe('integracion: vacantes', () => {
       expect(
         await consultar('select 1 from autenticacion.usuarios where correo_hash is not null'),
       ).toHaveLength(5); // los 4 del montaje mas este
+    });
+  });
+
+  describe('CRITERIO: la contratacion se registra, y dice quien y cuando (A08)', () => {
+    let idVacante: string;
+
+    const contratar = (quien: Sesion, aQuien: Sesion, vacante = idVacante) =>
+      api(app)
+        .post(`/api/v1/vacantes/${vacante}/candidatos/${aQuien.id}/contratar`)
+        .set(auth(quien));
+
+    const fechaDeContratacion = async (aQuien: Sesion) => {
+      const [fila] = await consultar<{
+        contratado_en: Date | null;
+        id_usuario_que_contrato: string | null;
+      }>(
+        `select contratado_en, id_usuario_que_contrato
+           from vacantes.vacante_candidatos
+          where id_vacante = $1 and id_candidato = $2`,
+        [idVacante, aQuien.id],
+      );
+      return fila;
+    };
+
+    beforeEach(async () => {
+      const idEjercicio = await crearEjercicioEnElBanco(app, reclutador, `Reto ${uuid()}`);
+      idVacante = await crearVacante();
+      await api(app)
+        .put(`/api/v1/vacantes/${idVacante}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [idEjercicio] })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/publicar`)
+        .set(auth(reclutador))
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+    });
+
+    it('el reclutador dueno lo marca, y queda quien lo registro', async () => {
+      await contratar(reclutador, candidato).expect(200);
+
+      const fila = await fechaDeContratacion(candidato);
+      expect(fila.contratado_en).not.toBeNull();
+      // Quien: contratar es la decision con consecuencias economicas del
+      // proceso, y tiene que dejar rastro igual que revelar una identidad.
+      expect(fila.id_usuario_que_contrato).toBe(reclutador.id);
+    });
+
+    it('volver a marcarlo no mueve la fecha: la primera es la que se audita', async () => {
+      await contratar(reclutador, candidato).expect(200);
+      const primera = await fechaDeContratacion(candidato);
+
+      await contratar(reclutador, candidato).expect(200);
+      const segunda = await fechaDeContratacion(candidato);
+
+      expect(segunda.contratado_en).toEqual(primera.contratado_en);
+    });
+
+    it('se puede contratar con la vacante ya cerrada, que es el caso normal', async () => {
+      // En A08 se cierra el proceso y la contratacion se confirma despues.
+      await api(app).post(`/api/v1/vacantes/${idVacante}/cerrar`).set(auth(reclutador)).expect(200);
+
+      await contratar(reclutador, candidato).expect(200);
+      expect((await fechaDeContratacion(candidato)).contratado_en).not.toBeNull();
+    });
+
+    it('en un borrador no se contrata: alli no se recibe ninguna entrega', async () => {
+      const borrador = await crearVacante();
+      await api(app)
+        .post(`/api/v1/vacantes/${borrador}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+
+      const { body } = await contratar(reclutador, candidato, borrador).expect(400);
+      expect(body.mensaje).toMatch(/borrador/i);
+    });
+
+    it('a quien no fue invitado, 404, y el mismo mensaje que si no existiera', async () => {
+      await contratar(reclutador, otroCandidato).expect(404);
+      await contratar(reclutador, candidato, uuid()).expect(404);
+    });
+
+    it('un reclutador de otra empresa no contrata en una vacante ajena', async () => {
+      // 404 y no 403: con un 403 podria inventariar las vacantes de la
+      // competencia probando identificadores.
+      await contratar(otroReclutador, candidato).expect(404);
+      expect((await fechaDeContratacion(candidato)).contratado_en).toBeNull();
+    });
+
+    it('el candidato no se contrata a si mismo', async () => {
+      await contratar(candidato, candidato).expect(403);
+      expect((await fechaDeContratacion(candidato)).contratado_en).toBeNull();
     });
   });
 });

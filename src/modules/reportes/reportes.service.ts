@@ -1,4 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import {
   rankingDeCandidatos,
   resumenDeVacante,
@@ -7,10 +9,13 @@ import {
   type ResumenDeVacante,
 } from './dominio/consolidar.js';
 import { aCsv, type Columna } from './dominio/csv.js';
+import { aliasDeCandidato } from './dominio/alias.js';
+import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
 import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
+import { EjerciciosService } from '../ejercicios/index.js';
 import { EntregasService, EstadoEntrega } from '../entregas/index.js';
 import { EvaluacionService } from '../evaluacion/index.js';
-import { VacantesService, type Solicitante } from '../vacantes/index.js';
+import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
 
 /**
  * Servicio de aplicacion del modulo de reportes (paquete 5.1).
@@ -46,11 +51,69 @@ export class ReportesService {
   private readonly logger = new Logger('Reportes');
 
   constructor(
+    @InjectRepository(RevelacionDeIdentidad)
+    private readonly revelaciones: Repository<RevelacionDeIdentidad>,
     private readonly evaluacion: EvaluacionService,
     private readonly entregas: EntregasService,
     private readonly vacantes: VacantesService,
+    private readonly ejerciciosDelBanco: EjerciciosService,
     private readonly autenticacion: AutenticacionService,
   ) {}
+
+  /**
+   * El panel de la empresa: las cuatro cifras de la pantalla A02.
+   *
+   * POR QUE VIVE EN REPORTES
+   *
+   * Porque ninguna de las cuatro sale de un solo modulo. Vacantes sabe cuantas
+   * hay y cuantas personas se contrataron, entregas sabe cuantas estan por
+   * evaluar, y ejercicios sabe con cuanto material cuenta el banco. Reportes es
+   * el unico modulo autorizado a componer datos de varios, y hacerlo aqui
+   * evita que el frontend lo arme con una llamada por vacante, que es como se
+   * vuelve lento un panel.
+   *
+   * NO RECIBE NINGUN IDENTIFICADOR, Y ESO ES LA PROTECCION
+   *
+   * La empresa sale del token de quien pregunta, no de la URL. No hay nada que
+   * cambiar en la peticion para ver el panel de otra empresa: la clase de
+   * ataque que el encuadre llama IDOR no tiene superficie aqui.
+   */
+  async panelDeLaEmpresa(solicitante: Solicitante): Promise<PanelDeEmpresa> {
+    if (solicitante.idEmpresa === null) {
+      // Un administrador de plataforma no tiene empresa. Devolver un panel
+      // vacio seria peor que decirlo: parecería una empresa sin actividad.
+      throw new BadRequestException(
+        'Este panel resume una empresa, y un administrador de plataforma no pertenece a ninguna.',
+      );
+    }
+
+    const deVacantes = await this.vacantes.panelDeEmpresa(solicitante.idEmpresa);
+    const [conteosDeEntregas, finalistasEnEvaluacion, retosEnElBanco] = await Promise.all([
+      this.entregas.conteosPorEstadoDeVacantes(deVacantes.ids),
+      this.entregas.candidatosEnEvaluacionDeVacantes(deVacantes.ids),
+      this.ejerciciosDelBanco.cuantosEnElBanco(solicitante.idEmpresa),
+    ]);
+
+    this.registrar('panel_de_empresa_consultado', solicitante, {
+      idEmpresa: solicitante.idEmpresa,
+    });
+
+    return {
+      vacantes: {
+        borradores: deVacantes.porEstado[EstadoVacante.Borrador],
+        publicadas: deVacantes.porEstado[EstadoVacante.Publicada],
+        cerradas: deVacantes.porEstado[EstadoVacante.Cerrada],
+      },
+      finalistasEnEvaluacion,
+      entregasPorEvaluar:
+        conteosDeEntregas[EstadoEntrega.Recibida] + conteosDeEntregas[EstadoEntrega.EnEvaluacion],
+      entregasEvaluadas: conteosDeEntregas[EstadoEntrega.Evaluada],
+      entregasFallidas: conteosDeEntregas[EstadoEntrega.Fallida],
+      contratados: deVacantes.contratados,
+      retosEnElBanco,
+      generadoEn: new Date(),
+    };
+  }
 
   /** Ranking de una vacante con sus cifras consolidadas. */
   async deVacante(idVacante: string, solicitante: Solicitante): Promise<ReporteDeVacante> {
@@ -70,8 +133,6 @@ export class ReportesService {
       fallidas: conteos[EstadoEntrega.Fallida],
     });
 
-    const identidades = await this.autenticacion.identidadesDe(ranking.map((f) => f.idCandidato));
-
     this.registrar('reporte_de_vacante_consultado', solicitante, {
       idVacante,
       candidatos: ranking.length,
@@ -82,7 +143,7 @@ export class ReportesService {
       resumen,
       ranking: ranking.map((fila) => ({
         ...fila,
-        candidato: identificar(identidades, fila.idCandidato),
+        alias: aliasDeCandidato(idVacante, fila.idCandidato),
       })),
       generadoEn: new Date(),
     };
@@ -111,7 +172,6 @@ export class ReportesService {
       throw new NotFoundException('Ese candidato no tiene evaluaciones en esta vacante.');
     }
 
-    const identidades = await this.autenticacion.identidadesDe([idCandidato]);
     const posicion =
       rankingDeCandidatos(todas).find((f) => f.idCandidato === idCandidato)?.posicion ?? null;
 
@@ -119,13 +179,88 @@ export class ReportesService {
 
     return {
       vacante: cabecera(vacante),
-      candidato: identificar(identidades, idCandidato),
+      alias: aliasDeCandidato(idVacante, idCandidato),
       idCandidato,
       posicionEnLaVacante: posicion,
       // Del intento mas reciente al mas viejo: es como se lee un historial.
       intentos: [...suyas].sort((a, b) => b.creadaEn.getTime() - a.creadaEn.getTime()),
       generadoEn: new Date(),
     };
+  }
+
+  /**
+   * Revela la identidad de un candidato, y deja rastro.
+   *
+   * El ranking muestra alias porque el proposito del producto es reducir el
+   * sesgo. Revelar es entonces una accion deliberada —"contactar
+   * seleccionados" en la pantalla A06— y no un campo mas de una consulta.
+   *
+   * SE REGISTRA ANTES DE DEVOLVER. Si el guardado fallara, la identidad no
+   * sale: una revelacion sin rastro es exactamente lo que esta tabla existe
+   * para impedir, y es preferible negar el dato a entregarlo sin registro.
+   */
+  async revelarIdentidad(
+    idVacante: string,
+    idCandidato: string,
+    solicitante: Solicitante,
+  ): Promise<IdentidadRevelada> {
+    const vacante = await this.vacantes.obtenerPara(idVacante, solicitante);
+
+    // Mismo 404 que el detalle: no se revela a quien no participa en esta
+    // vacante, y quien pregunta no averigua si ese identificador existe.
+    const evaluaciones = await this.evaluacion.deVacante(idVacante, solicitante);
+    if (!evaluaciones.some((e) => e.idCandidato === idCandidato)) {
+      throw new NotFoundException('Ese candidato no tiene evaluaciones en esta vacante.');
+    }
+
+    const identidades = await this.autenticacion.identidadesDe([idCandidato]);
+    const identidad = identificar(identidades, idCandidato);
+
+    const registro = await this.revelaciones.save(
+      this.revelaciones.create({
+        idVacante,
+        idCandidato,
+        idEmpresa: vacante.idEmpresa,
+        idUsuario: solicitante.id,
+      }),
+    );
+
+    this.registrar('identidad_revelada', solicitante, { idVacante, idCandidato });
+
+    return {
+      alias: aliasDeCandidato(idVacante, idCandidato),
+      idCandidato,
+      nombre: identidad.nombre,
+      correo: identidad.correo,
+      reveladaEn: registro.reveladaEn,
+    };
+  }
+
+  /**
+   * Quien revelo que identidades en esta vacante.
+   *
+   * Un registro de auditoria que nadie puede consultar no es una auditoria.
+   * Va por la misma puerta que el resto del reporte, asi que la frontera de
+   * empresa se aplica igual: `obtenerPara` responde 404 si la vacante es de
+   * otra.
+   */
+  async revelacionesDe(
+    idVacante: string,
+    solicitante: Solicitante,
+  ): Promise<RevelacionRegistrada[]> {
+    await this.vacantes.obtenerPara(idVacante, solicitante);
+
+    const registros = await this.revelaciones.find({
+      where: { idVacante },
+      order: { reveladaEn: 'DESC' },
+    });
+
+    return registros.map((r) => ({
+      alias: aliasDeCandidato(idVacante, r.idCandidato),
+      idCandidato: r.idCandidato,
+      idUsuario: r.idUsuario,
+      reveladaEn: r.reveladaEn,
+    }));
   }
 
   /**
@@ -143,11 +278,20 @@ export class ReportesService {
 
     const columnas: Columna<FilaConCandidato>[] = [
       { titulo: 'Posicion', valor: (f) => f.posicion },
-      { titulo: 'Candidato', valor: (f) => f.candidato.nombre },
-      { titulo: 'Correo', valor: (f) => f.candidato.correo },
+      // Alias y no nombre: el CSV sale de la misma tabla y se reenvia por
+      // correo con mas facilidad todavia. Un export que filtra lo que la
+      // pantalla protege no protege nada.
+      { titulo: 'Candidato', valor: (f) => f.alias },
       { titulo: 'Nota final', valor: (f) => f.notaFinal },
       { titulo: 'Intentos evaluados', valor: (f) => f.intentosEvaluados },
       { titulo: 'Evaluada en', valor: (f) => f.evaluadaEn },
+      // La misma columna que la pantalla A06: en una tabla de notas parecidas
+      // es lo que distingue a una persona de otra.
+      { titulo: 'Habilidad destacada', valor: (f) => f.habilidadDestacada?.criterio ?? '' },
+      {
+        titulo: 'Logro en esa habilidad',
+        valor: (f) => (f.habilidadDestacada ? `${f.habilidadDestacada.porcentajeLogrado}%` : ''),
+      },
       { titulo: 'Riesgo de inyeccion', valor: (f) => f.riesgoInyeccion },
       { titulo: 'Id de entrega', valor: (f) => f.idEntrega },
     ];
@@ -183,8 +327,8 @@ const cabecera = (v: { id: string; titulo: string; estado: string }): CabeceraDe
 
 /** Nombre y correo, o un marcador si la cuenta ya no existe. */
 function identificar(identidades: Map<string, Identidad>, id: string): Identidad {
-  // Una cuenta borrada no debe tumbar el reporte: la nota sigue siendo valida y
-  // el reclutador tiene que poder ver que esa fila existio.
+  // Una cuenta borrada no debe tumbar la consulta: la nota sigue siendo valida
+  // y el reclutador tiene que poder ver que esa fila existio.
   return identidades.get(id) ?? { nombre: 'Candidato no disponible', correo: '' };
 }
 
@@ -238,7 +382,8 @@ export interface CabeceraDeVacante {
 }
 
 export interface FilaConCandidato extends FilaDeRanking {
-  candidato: Identidad;
+  /** Alias estable dentro de la vacante. El nombre NO viaja en el ranking. */
+  alias: string;
 }
 
 export interface ReporteDeVacante {
@@ -248,11 +393,47 @@ export interface ReporteDeVacante {
   generadoEn: Date;
 }
 
+export interface IdentidadRevelada {
+  alias: string;
+  idCandidato: string;
+  nombre: string;
+  correo: string;
+  reveladaEn: Date;
+}
+
+export interface RevelacionRegistrada {
+  alias: string;
+  idCandidato: string;
+  /** Quien la revelo. */
+  idUsuario: string;
+  reveladaEn: Date;
+}
+
 export interface ReporteDeCandidato {
   vacante: CabeceraDeVacante;
-  candidato: Identidad;
+  alias: string;
   idCandidato: string;
   posicionEnLaVacante: number | null;
   intentos: EvaluacionParaReporte[];
+  generadoEn: Date;
+}
+
+/**
+ * Las cifras del panel de la empresa (pantalla A02).
+ *
+ * `finalistasEnEvaluacion` cuenta PERSONAS y `entregasPorEvaluar` cuenta
+ * ENTREGAS: la diferencia entre las dos son los reintentos. Van las dos porque
+ * la pantalla muestra personas y la operacion necesita entregas —una cola que
+ * crece se ve en la segunda, no en la primera.
+ */
+export interface PanelDeEmpresa {
+  vacantes: { borradores: number; publicadas: number; cerradas: number };
+  finalistasEnEvaluacion: number;
+  entregasPorEvaluar: number;
+  entregasEvaluadas: number;
+  entregasFallidas: number;
+  contratados: number;
+  /** Ejercicios activos del banco. Los retirados no se cuentan. */
+  retosEnElBanco: number;
   generadoEn: Date;
 }

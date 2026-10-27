@@ -8,20 +8,47 @@ import type { ReporteDeCandidato, ReporteDeVacante } from '../reportes.service.j
  * publicado no cambie solo porque una entidad gane una columna.
  */
 
-export class CandidatoRespuesta {
+/**
+ * Identidad de un candidato. SOLO aparece en la respuesta de revelar: nunca en
+ * el ranking ni en el detalle, que van con alias.
+ */
+export class IdentidadReveladaRespuesta {
+  @ApiProperty({ example: 'Candidato ••••3f8a2c' }) alias!: string;
+  @ApiProperty({ format: 'uuid' }) idCandidato!: string;
   @ApiProperty({ example: 'Ana Maria Rojas' }) nombre!: string;
   @ApiProperty({
     example: 'ana@ejemplo.com',
     description: 'El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe.',
   })
   correo!: string;
+  @ApiProperty({ description: 'Queda registrado quien la revelo y cuando.' })
+  reveladaEn!: Date;
+}
+
+export class RevelacionRegistradaRespuesta {
+  @ApiProperty({ example: 'Candidato ••••3f8a2c' }) alias!: string;
+  @ApiProperty({ format: 'uuid' }) idCandidato!: string;
+  @ApiProperty({ format: 'uuid', description: 'Quien la revelo.' }) idUsuario!: string;
+  @ApiProperty() reveladaEn!: Date;
+}
+
+export class HabilidadDestacadaRespuesta {
+  @ApiProperty({ example: 'Correccion funcional' }) criterio!: string;
+  @ApiProperty({ minimum: 0, maximum: 100, example: 92.5 }) porcentajeLogrado!: number;
+  @ApiProperty({ minimum: 0, maximum: 100, example: 40 }) peso!: number;
 }
 
 export class FilaDeRankingRespuesta {
   @ApiProperty({ minimum: 1, description: 'Dos candidatos empatados comparten posicion.' })
   posicion!: number;
 
-  @ApiProperty({ type: CandidatoRespuesta }) candidato!: CandidatoRespuesta;
+  @ApiProperty({
+    example: 'Candidato ••••3f8a2c',
+    description:
+      'Identidad oculta: el ranking se lee sin nombres para no sesgar la comparacion. Es estable dentro de la vacante y distinto en otras. El nombre se obtiene revelando, y queda registrado.',
+  })
+  alias!: string;
+
   @ApiProperty({ format: 'uuid' }) idCandidato!: string;
 
   @ApiProperty({
@@ -41,6 +68,14 @@ export class FilaDeRankingRespuesta {
     description: 'Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano.',
   })
   riesgoInyeccion!: string;
+
+  @ApiProperty({
+    type: HabilidadDestacadaRespuesta,
+    nullable: true,
+    description:
+      'El criterio en el que mejor le fue, del MISMO intento que da la nota. Es lo que distingue a dos personas con notas parecidas. Nulo si esa evaluacion no trae desglose.',
+  })
+  habilidadDestacada!: HabilidadDestacadaRespuesta | null;
 }
 
 export class PromedioDeCriterioRespuesta {
@@ -134,7 +169,7 @@ export class IntentoRespuesta {
 
 export class ReporteDeCandidatoRespuesta {
   @ApiProperty({ type: VacanteDelReporteRespuesta }) vacante!: VacanteDelReporteRespuesta;
-  @ApiProperty({ type: CandidatoRespuesta }) candidato!: CandidatoRespuesta;
+  @ApiProperty({ example: 'Candidato ••••3f8a2c' }) alias!: string;
   @ApiProperty({ format: 'uuid' }) idCandidato!: string;
 
   @ApiPropertyOptional({ nullable: true, description: 'Su puesto en el ranking de la vacante.' })
@@ -163,7 +198,7 @@ export function aRespuestaDeVacante(r: ReporteDeVacante): ReporteDeVacanteRespue
     },
     ranking: r.ranking.map((f) => ({
       posicion: f.posicion,
-      candidato: { nombre: f.candidato.nombre, correo: f.candidato.correo },
+      alias: f.alias,
       idCandidato: f.idCandidato,
       notaFinal: f.notaFinal,
       intentosEvaluados: f.intentosEvaluados,
@@ -171,6 +206,7 @@ export function aRespuestaDeVacante(r: ReporteDeVacante): ReporteDeVacanteRespue
       idEvaluacion: f.idEvaluacion,
       evaluadaEn: f.evaluadaEn,
       riesgoInyeccion: f.riesgoInyeccion,
+      habilidadDestacada: f.habilidadDestacada,
     })),
     generadoEn: r.generadoEn,
   };
@@ -179,7 +215,7 @@ export function aRespuestaDeVacante(r: ReporteDeVacante): ReporteDeVacanteRespue
 export function aRespuestaDeCandidato(r: ReporteDeCandidato): ReporteDeCandidatoRespuesta {
   return {
     vacante: { id: r.vacante.id, titulo: r.vacante.titulo, estado: r.vacante.estado },
-    candidato: { nombre: r.candidato.nombre, correo: r.candidato.correo },
+    alias: r.alias,
     idCandidato: r.idCandidato,
     posicionEnLaVacante: r.posicionEnLaVacante,
     intentos: r.intentos.map((i) => ({
@@ -199,4 +235,32 @@ export function aRespuestaDeCandidato(r: ReporteDeCandidato): ReporteDeCandidato
     })),
     generadoEn: r.generadoEn,
   };
+}
+
+export class VacantesDelPanelRespuesta {
+  @ApiProperty() borradores!: number;
+  @ApiProperty() publicadas!: number;
+  @ApiProperty() cerradas!: number;
+}
+
+export class PanelDeEmpresaRespuesta {
+  @ApiProperty({ type: VacantesDelPanelRespuesta }) vacantes!: VacantesDelPanelRespuesta;
+
+  @ApiProperty({
+    description:
+      'PERSONAS con alguna entrega por evaluar. No es lo mismo que entregas: quien reintenta tiene dos, y el panel diria que hay dos personas donde hay una.',
+  })
+  finalistasEnEvaluacion!: number;
+
+  @ApiProperty({
+    description: 'ENTREGAS recibidas o en evaluacion. Una cola que crece se ve aqui.',
+  })
+  entregasPorEvaluar!: number;
+
+  @ApiProperty() entregasEvaluadas!: number;
+  @ApiProperty() entregasFallidas!: number;
+  @ApiProperty({ description: 'Personas contratadas en toda la empresa.' }) contratados!: number;
+  @ApiProperty({ description: 'Ejercicios activos del banco. Los retirados no se cuentan.' })
+  retosEnElBanco!: number;
+  @ApiProperty() generadoEn!: Date;
 }

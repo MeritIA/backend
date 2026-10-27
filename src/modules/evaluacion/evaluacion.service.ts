@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Evaluacion } from './entities/evaluacion.entity.js';
 import { Rol } from '../autenticacion/index.js';
-import { VacantesService, type Solicitante } from '../vacantes/index.js';
+import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
 
 /**
  * Servicio de aplicacion del modulo de evaluacion.
@@ -63,6 +63,88 @@ export class EvaluacionService {
     });
   }
 
+  /**
+   * El puesto del propio candidato en la vacante.
+   *
+   * SOLO CUANDO LA VACANTE YA ESTA CERRADA, y la decision no es timida.
+   *
+   * La pantalla B22 le muestra al candidato su posicion. Mientras el proceso
+   * esta abierto, esa posicion cambia sin que el candidato haga nada —cada vez
+   * que otro entrega—, asi que no es informacion suya: es un canal lateral
+   * sobre la actividad de los demas. Alguien que consulte cada hora puede
+   * deducir cuando entrega la competencia y cuantos van. Con la vacante cerrada
+   * el numero es un hecho final y auditable, y es lo que convierte la promesa
+   * meritocratica en algo que el candidato puede verificar: sin puesto, un 72
+   * sobre 100 no se puede interpretar.
+   *
+   * Queda como decision abierta en la Declaracion de Alcance: si el equipo
+   * prefiere mostrarlo en vivo, se cambia una condicion.
+   *
+   * COMO SE CALCULA, Y POR QUE ASI
+   *
+   * Puesto = cuantos candidatos tienen mejor nota que la mia, mas uno. Eso da
+   * exactamente el mismo numero que el ranking del modulo de reportes
+   * —empatados comparten puesto, y el siguiente salta— sin traer ni una fila
+   * de otro candidato a memoria, y sin que este modulo dependa de reportes,
+   * que depende de el. Hay una prueba de integracion que compara los dos
+   * numeros contra los mismos datos, para que no se separen en silencio.
+   *
+   * `MAX(nota_final)` es la regla D-1: puntua el mejor intento.
+   */
+  async miPuestoEn(idVacante: string, solicitante: Solicitante): Promise<MiPuesto> {
+    // 404 si no fue invitado, o si la vacante sigue en borrador.
+    const vacante = await this.vacantes.obtenerPara(idVacante, solicitante);
+    const cabecera = { idVacante, estadoVacante: vacante.estado };
+
+    if (vacante.estado !== EstadoVacante.Cerrada) {
+      // 200 y no 403: la pregunta es legitima y la respuesta es "todavia no".
+      // Un 403 le diria que nunca podra verlo, y la pantalla tiene que poder
+      // dibujar este estado.
+      return {
+        ...cabecera,
+        disponible: false,
+        motivo: 'proceso_en_curso',
+        puesto: null,
+        total: null,
+        notaFinal: null,
+      };
+    }
+
+    const mejores = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('e.idCandidato', 'idCandidato')
+      .addSelect('MAX(e.notaFinal)', 'nota')
+      .where('e.idVacante = :idVacante', { idVacante })
+      .groupBy('e.idCandidato')
+      .getRawMany<{ idCandidato: string; nota: string }>();
+
+    const mia = mejores.find((m) => m.idCandidato === solicitante.id);
+    if (!mia) {
+      // Invitado pero sin ninguna entrega evaluada. No es un error: es el
+      // candidato que no participo, y decirselo asi no revela nada de nadie.
+      return {
+        ...cabecera,
+        disponible: false,
+        motivo: 'sin_evaluacion',
+        puesto: null,
+        total: null,
+        notaFinal: null,
+      };
+    }
+
+    // `MAX` de una columna numeric vuelve como cadena en PostgreSQL.
+    const notaFinal = Number(mia.nota);
+    const mejoresQueLaMia = mejores.filter((m) => Number(m.nota) > notaFinal).length;
+
+    return {
+      ...cabecera,
+      disponible: true,
+      puesto: mejoresQueLaMia + 1,
+      total: mejores.length,
+      notaFinal,
+    };
+  }
+
   private async exigirAcceso(evaluacion: Evaluacion, solicitante: Solicitante): Promise<void> {
     if (solicitante.rol === Rol.Candidato) {
       if (evaluacion.idCandidato === solicitante.id) return;
@@ -85,4 +167,23 @@ export class EvaluacionService {
       }),
     );
   }
+}
+
+/**
+ * Lo que el candidato puede saber de su posicion.
+ *
+ * `total` dice cuanta gente participo, y eso solo sale con el proceso cerrado:
+ * es el dato que hace interpretable el puesto, y con la vacante abierta seria
+ * informacion sobre terceros.
+ */
+export interface MiPuesto {
+  idVacante: string;
+  estadoVacante: EstadoVacante;
+  disponible: boolean;
+  motivo?: 'proceso_en_curso' | 'sin_evaluacion';
+  /** Empieza en 1. Empatados comparten puesto. */
+  puesto: number | null;
+  /** Candidatos con al menos una entrega evaluada en la vacante. */
+  total: number | null;
+  notaFinal: number | null;
 }

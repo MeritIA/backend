@@ -506,6 +506,34 @@
       }
     },
     "/vacantes/{id}/ejercicios": {
+      "get": {
+        "description": "Lo que necesita quien va a resolver el reto: el enunciado y los criterios con sus pesos. Es la unica forma en que un candidato invitado lee su ejercicio, porque el banco de ejercicios de la empresa no es visible para el. Devuelve la version vigente de cada uno, que es la misma contra la que se califica: la rubrica es publica y es igual para todos los finalistas.",
+        "operationId": "VacantesController_ejercicios",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o quien pregunta no tiene acceso a ella. Un candidato solo accede si fue invitado y la vacante ya esta publicada."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enunciado y rubrica de los ejercicios de la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      },
       "put": {
         "description": "Reemplaza la lista completa. Solo mientras la vacante es un borrador: cambiarlos despues dejaria a dos candidatos del mismo proceso resolviendo pruebas distintas, y sus resultados dejarian de ser comparables.",
         "operationId": "VacantesController_asociarEjercicios",
@@ -580,6 +608,44 @@
           }
         ],
         "summary": "Invita a un candidato",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/candidatos/{idCandidato}/contratar": {
+      "post": {
+        "description": "El cierre del flujo de la pantalla A08, y la cifra \"contratados\" del panel. Deja quien lo registro y cuando. Se puede marcar con la vacante ya cerrada, que es el caso normal: primero se cierra el proceso y la contratacion se confirma despues. Es idempotente: volver a marcarlo no mueve la fecha, porque la primera es la que lee una auditoria.",
+        "operationId": "VacantesController_contratar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, no es de su empresa, o ese candidato no fue invitado."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Registra que a un candidato se le contrato",
         "tags": [
           "vacantes"
         ]
@@ -1027,6 +1093,46 @@
         ]
       }
     },
+    "/evaluaciones/vacante/{idVacante}/mi-puesto": {
+      "get": {
+        "description": "Lo que la pantalla B22 muestra junto a la nota. Solo con la vacante CERRADA: mientras el proceso esta abierto el puesto cambia cada vez que otro candidato entrega, asi que no seria informacion suya sino un canal lateral sobre la actividad de los demas. Nunca devuelve el puesto de otro: la posicion se calcula para quien pregunta.",
+        "operationId": "EvaluacionesController_miPuesto",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiPuestoRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o no fue invitado a ella."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Puesto del propio candidato en la vacante",
+        "tags": [
+          "evaluaciones"
+        ]
+      }
+    },
     "/evaluaciones/vacante/{idVacante}": {
       "get": {
         "description": "Solo para la empresa dueña de la vacante. Es la base del reporte del paquete 5.1.",
@@ -1153,6 +1259,34 @@
         ]
       }
     },
+    "/reportes/panel": {
+      "get": {
+        "description": "Vacantes por estado, finalistas en evaluacion, contratados y retos en el banco, en una sola llamada. La empresa sale del token y no de la URL: no hay identificador que cambiar para ver el panel de otra. Un administrador de plataforma no pertenece a ninguna empresa y recibe 400.",
+        "operationId": "ReportesController_panel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelDeEmpresaRespuesta"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Las cifras de la empresa de quien pregunta (pantalla A02)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
     "/reportes/vacantes/{idVacante}": {
       "get": {
         "description": "Ranking de candidatos de mayor a menor nota, con sus cifras consolidadas y el promedio por criterio. El ranking lleva una fila por candidato, con la nota de su mejor intento.",
@@ -1236,6 +1370,97 @@
           }
         ],
         "summary": "Detalle de un candidato en la vacante",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/candidatos/{idCandidato}/revelar": {
+      "post": {
+        "description": "El ranking se lee con alias para no sesgar la comparacion: es el proposito del producto. Esta accion devuelve el nombre y el correo, y DEJA RASTRO de quien la pidio y cuando. Es POST y no GET porque cambia algo: escribe en el registro de auditoria.",
+        "operationId": "ReportesController_revelar",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentidadReveladaRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante es de otra empresa, o ese candidato no participa en ella."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Revela la identidad de un candidato del ranking",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/vacantes/{idVacante}/revelaciones": {
+      "get": {
+        "description": "El rastro que deja cada revelacion. Un registro de auditoria que nadie puede consultar no es una auditoria.",
+        "operationId": "ReportesController_revelaciones",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RevelacionRegistradaRespuesta"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Quien revelo que identidades en esta vacante",
         "tags": [
           "reportes"
         ]
@@ -1452,10 +1677,37 @@
             "example": "Acme S.A.S.",
             "minLength": 2,
             "maxLength": 160
+          },
+          "sector": {
+            "type": "string",
+            "enum": [
+              "financiero",
+              "tecnologia",
+              "salud",
+              "educacion",
+              "industria",
+              "comercio",
+              "servicios",
+              "construccion",
+              "agro",
+              "transporte",
+              "energia",
+              "telecomunicaciones",
+              "gobierno",
+              "otro"
+            ],
+            "example": "financiero",
+            "description": "Sector economico, de una lista cerrada para que los informes se puedan agrupar. La lista no esta ratificada: ver docs/declaracion-de-alcance.md."
+          },
+          "nit": {
+            "type": "string",
+            "example": "890903938-8",
+            "description": "NIT con digito de verificacion. Los puntos y los espacios se quitan. Unico entre empresas."
           }
         },
         "required": [
-          "nombre"
+          "nombre",
+          "sector"
         ]
       },
       "EmpresaRespuesta": {
@@ -1468,6 +1720,30 @@
           "nombre": {
             "type": "string"
           },
+          "sector": {
+            "type": "string",
+            "enum": [
+              "financiero",
+              "tecnologia",
+              "salud",
+              "educacion",
+              "industria",
+              "comercio",
+              "servicios",
+              "construccion",
+              "agro",
+              "transporte",
+              "energia",
+              "telecomunicaciones",
+              "gobierno",
+              "otro"
+            ]
+          },
+          "nit": {
+            "type": "object",
+            "nullable": true,
+            "example": "890903938-8"
+          },
           "activa": {
             "type": "boolean"
           },
@@ -1479,6 +1755,8 @@
         "required": [
           "id",
           "nombre",
+          "sector",
+          "nit",
           "activa",
           "creadaEn"
         ]
@@ -1923,6 +2201,58 @@
           "creadaEn"
         ]
       },
+      "MiPuestoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idVacante": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estadoVacante": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "publicada",
+              "cerrada"
+            ]
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "Falso mientras el proceso sigue abierto, o si el candidato no tiene ninguna entrega evaluada. La pantalla tiene que poder dibujar ese estado."
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "proceso_en_curso",
+              "sin_evaluacion"
+            ]
+          },
+          "puesto": {
+            "type": "object",
+            "nullable": true,
+            "example": 3,
+            "description": "Empieza en 1. Empatados comparten puesto."
+          },
+          "total": {
+            "type": "object",
+            "nullable": true,
+            "example": 12
+          },
+          "notaFinal": {
+            "type": "object",
+            "nullable": true,
+            "example": 82.5
+          }
+        },
+        "required": [
+          "idVacante",
+          "estadoVacante",
+          "disponible",
+          "puesto",
+          "total",
+          "notaFinal"
+        ]
+      },
       "ReintentoRespuesta": {
         "type": "object",
         "properties": {
@@ -1938,6 +2268,69 @@
         "required": [
           "idEntrega",
           "estado"
+        ]
+      },
+      "VacantesDelPanelRespuesta": {
+        "type": "object",
+        "properties": {
+          "borradores": {
+            "type": "number"
+          },
+          "publicadas": {
+            "type": "number"
+          },
+          "cerradas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "borradores",
+          "publicadas",
+          "cerradas"
+        ]
+      },
+      "PanelDeEmpresaRespuesta": {
+        "type": "object",
+        "properties": {
+          "vacantes": {
+            "$ref": "#/components/schemas/VacantesDelPanelRespuesta"
+          },
+          "finalistasEnEvaluacion": {
+            "type": "number",
+            "description": "PERSONAS con alguna entrega por evaluar. No es lo mismo que entregas: quien reintenta tiene dos, y el panel diria que hay dos personas donde hay una."
+          },
+          "entregasPorEvaluar": {
+            "type": "number",
+            "description": "ENTREGAS recibidas o en evaluacion. Una cola que crece se ve aqui."
+          },
+          "entregasEvaluadas": {
+            "type": "number"
+          },
+          "entregasFallidas": {
+            "type": "number"
+          },
+          "contratados": {
+            "type": "number",
+            "description": "Personas contratadas en toda la empresa."
+          },
+          "retosEnElBanco": {
+            "type": "number",
+            "description": "Ejercicios activos del banco. Los retirados no se cuentan."
+          },
+          "generadoEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vacantes",
+          "finalistasEnEvaluacion",
+          "entregasPorEvaluar",
+          "entregasEvaluadas",
+          "entregasFallidas",
+          "contratados",
+          "retosEnElBanco",
+          "generadoEn"
         ]
       },
       "VacanteDelReporteRespuesta": {
@@ -2049,22 +2442,30 @@
           "entregasConRiesgoAlto"
         ]
       },
-      "CandidatoRespuesta": {
+      "HabilidadDestacadaRespuesta": {
         "type": "object",
         "properties": {
-          "nombre": {
+          "criterio": {
             "type": "string",
-            "example": "Ana Maria Rojas"
+            "example": "Correccion funcional"
           },
-          "correo": {
-            "type": "string",
-            "example": "ana@ejemplo.com",
-            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
+          "porcentajeLogrado": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 92.5
+          },
+          "peso": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 40
           }
         },
         "required": [
-          "nombre",
-          "correo"
+          "criterio",
+          "porcentajeLogrado",
+          "peso"
         ]
       },
       "FilaDeRankingRespuesta": {
@@ -2075,8 +2476,10 @@
             "minimum": 1,
             "description": "Dos candidatos empatados comparten posicion."
           },
-          "candidato": {
-            "$ref": "#/components/schemas/CandidatoRespuesta"
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c",
+            "description": "Identidad oculta: el ranking se lee sin nombres para no sesgar la comparacion. Es estable dentro de la vacante y distinto en otras. El nombre se obtiene revelando, y queda registrado."
           },
           "idCandidato": {
             "type": "string",
@@ -2113,18 +2516,29 @@
               "alto"
             ],
             "description": "Del intento que puntua. Riesgo alto: conviene revisar la entrega a mano."
+          },
+          "habilidadDestacada": {
+            "nullable": true,
+            "description": "El criterio en el que mejor le fue, del MISMO intento que da la nota. Es lo que distingue a dos personas con notas parecidas. Nulo si esa evaluacion no trae desglose.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HabilidadDestacadaRespuesta"
+              }
+            ]
           }
         },
         "required": [
           "posicion",
-          "candidato",
+          "alias",
           "idCandidato",
           "notaFinal",
           "intentosEvaluados",
           "idEntrega",
           "idEvaluacion",
           "evaluadaEn",
-          "riesgoInyeccion"
+          "riesgoInyeccion",
+          "habilidadDestacada"
         ]
       },
       "ReporteDeVacanteRespuesta": {
@@ -2241,8 +2655,9 @@
           "vacante": {
             "$ref": "#/components/schemas/VacanteDelReporteRespuesta"
           },
-          "candidato": {
-            "$ref": "#/components/schemas/CandidatoRespuesta"
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
           },
           "idCandidato": {
             "type": "string",
@@ -2267,10 +2682,72 @@
         },
         "required": [
           "vacante",
-          "candidato",
+          "alias",
           "idCandidato",
           "intentos",
           "generadoEn"
+        ]
+      },
+      "IdentidadReveladaRespuesta": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Ana Maria Rojas"
+          },
+          "correo": {
+            "type": "string",
+            "example": "ana@ejemplo.com",
+            "description": "El correo con el que el reclutador la invito. Vacio si la cuenta ya no existe."
+          },
+          "reveladaEn": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Queda registrado quien la revelo y cuando."
+          }
+        },
+        "required": [
+          "alias",
+          "idCandidato",
+          "nombre",
+          "correo",
+          "reveladaEn"
+        ]
+      },
+      "RevelacionRegistradaRespuesta": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
+          },
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idUsuario": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quien la revelo."
+          },
+          "reveladaEn": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias",
+          "idCandidato",
+          "idUsuario",
+          "reveladaEn"
         ]
       }
     }

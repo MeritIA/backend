@@ -185,6 +185,27 @@ export class VariablesDeEntorno {
   AI_REQUEST_TIMEOUT_MS?: number;
 
   /**
+   * Tope de peticiones en vuelo antes de rechazar con 503 (P1 de
+   * docs/rendimiento.md).
+   *
+   * El valor por omision (50) sale de la medicion y no del gusto: por la ley de
+   * Little, 100 pet/s medidos x 0,5 s de objetivo de p95 = 50 en vuelo. DEPENDE
+   * DE LA MAQUINA: al cambiarla hay que repetir el barrido de carga y
+   * recalcularlo.
+   *
+   * Se admite 0, que rechaza todo. No es util en produccion pero hace
+   * determinista la prueba de integracion: sin eso habria que provocar una
+   * carrera entre peticiones concurrentes para ver un rechazo, y una prueba de
+   * seguridad que depende del azar es peor que no tenerla.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  ADMISION_MAXIMO_EN_VUELO?: number;
+
+  /**
    * Canal de alertas de seguridad (paquete 5.5). Sin SMTP_HOST ni
    * ALERTAS_DESTINO, las alertas se registran en el log y se avisa de que no
    * hay canal; el proceso arranca igual.

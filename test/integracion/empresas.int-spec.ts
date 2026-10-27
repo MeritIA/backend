@@ -66,9 +66,13 @@ describe('integracion: empresas', () => {
       const { body: empresa } = await api(app)
         .post('/api/v1/empresas')
         .set(auth(admin))
-        .send({ nombre: 'Tercera S.A.S.' })
+        .send({ nombre: 'Tercera S.A.S.', sector: 'tecnologia' })
         .expect(201);
-      expect(empresa).toMatchObject({ nombre: 'Tercera S.A.S.', activa: true });
+      expect(empresa).toMatchObject({
+        nombre: 'Tercera S.A.S.',
+        sector: 'tecnologia',
+        activa: true,
+      });
 
       const { body: usuario } = await api(app)
         .post(`/api/v1/empresas/${empresa.id}/usuarios`)
@@ -98,12 +102,12 @@ describe('integracion: empresas', () => {
       await api(app)
         .post('/api/v1/empresas')
         .set(auth(admin))
-        .send({ nombre: 'Unica' })
+        .send({ nombre: 'Unica', sector: 'comercio' })
         .expect(201);
       await api(app)
         .post('/api/v1/empresas')
         .set(auth(admin))
-        .send({ nombre: 'UNICA' })
+        .send({ nombre: 'UNICA', sector: 'comercio' })
         .expect(409);
     });
 
@@ -129,12 +133,12 @@ describe('integracion: empresas', () => {
       await api(app)
         .post('/api/v1/empresas')
         .set(auth(reclutadorAcme))
-        .send({ nombre: 'Inventada' })
+        .send({ nombre: 'Inventada', sector: 'servicios' })
         .expect(403);
       await api(app)
         .post('/api/v1/empresas')
         .set(auth(candidato))
-        .send({ nombre: 'Inventada' })
+        .send({ nombre: 'Inventada', sector: 'servicios' })
         .expect(403);
       await api(app).get('/api/v1/empresas').set(auth(candidato)).expect(403);
     });
@@ -168,6 +172,82 @@ describe('integracion: empresas', () => {
           rol: 'reclutador',
         })
         .expect(404);
+    });
+  });
+
+  describe('sector y NIT: el dato con el que se responde "que tipo de empresas"', () => {
+    const alta = (cuerpo: Record<string, unknown>) =>
+      api(app).post('/api/v1/empresas').set(auth(admin)).send(cuerpo);
+
+    it('guarda el sector y normaliza el NIT que se escribe con puntos', async () => {
+      const { body } = await alta({
+        nombre: 'Banco del Ejemplo',
+        sector: 'financiero',
+        nit: '890.903.938-8',
+      }).expect(201);
+
+      // Canonico: si la misma empresa se registrara una vez con puntos y otra
+      // sin ellos, el indice unico no la reconoceria y quedaria duplicada.
+      expect(body).toMatchObject({ sector: 'financiero', nit: '890903938-8' });
+
+      const [fila] = await consultar<{ sector: string; nit: string }>(
+        'select sector, nit from autenticacion.empresas where id = $1',
+        [body.id],
+      );
+      expect(fila).toMatchObject({ sector: 'financiero', nit: '890903938-8' });
+    });
+
+    it('exige el sector, aunque la columna tenga valor por omision', async () => {
+      // El valor por omision existe para las filas anteriores a la columna, no
+      // para crear empresas sin clasificar.
+      await alta({ nombre: 'Sin Clasificar' }).expect(400);
+      await alta({ nombre: 'Inventado', sector: 'criptomonedas' }).expect(400);
+    });
+
+    it('rechaza el NIT cuyo digito de verificacion no cuadra', async () => {
+      // Es el error real: alguien copia el NIT y se equivoca en el ultimo
+      // numero. Sin esta comprobacion entra una empresa con un NIT que no
+      // existe, y nadie se enteraria hasta la facturacion.
+      const { body } = await alta({
+        nombre: 'Digito Malo',
+        sector: 'industria',
+        nit: '890903938-7',
+      }).expect(400);
+      expect(String(body.mensaje)).toMatch(/digito de verificacion/i);
+    });
+
+    it('rechaza la forma equivocada antes de calcular nada', async () => {
+      // Dos 400 distintos a proposito: este es de forma, el anterior de
+      // calculo. Quien se equivoco necesita saber en que.
+      const { body } = await alta({
+        nombre: 'Forma Mala',
+        sector: 'industria',
+        nit: '890903938',
+      }).expect(400);
+      // El de forma llega por el ValidationPipe, asi que el detalle va por
+      // campo en `errores` y no en el mensaje general.
+      expect(JSON.stringify(body.errores)).toMatch(/nit.*digito de verificacion/is);
+
+      await alta({ nombre: 'Forma Mala 2', sector: 'industria', nit: 'no-es-un-nit' }).expect(400);
+    });
+
+    it('el NIT no se repite, y el conflicto dice que choco el NIT y no el nombre', async () => {
+      await alta({ nombre: 'Primera', sector: 'salud', nit: '890903938-8' }).expect(201);
+
+      const { body } = await alta({
+        nombre: 'Segunda, otro nombre',
+        sector: 'salud',
+        nit: '890.903.938-8',
+      }).expect(409);
+
+      // Si el mensaje hablara del nombre, quien lo lee corregiria el nombre,
+      // que estaba bien, y volveria a chocar.
+      expect(String(body.mensaje)).toMatch(/NIT/);
+    });
+
+    it('varias empresas sin NIT conviven: el indice unico es parcial', async () => {
+      await alta({ nombre: 'Sin NIT Uno', sector: 'educacion' }).expect(201);
+      await alta({ nombre: 'Sin NIT Dos', sector: 'educacion' }).expect(201);
     });
   });
 

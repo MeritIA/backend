@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { Vacante } from './entities/vacante.entity.js';
 import { VacanteEjercicio } from './entities/vacante-ejercicio.entity.js';
 import { VacanteCandidato } from './entities/vacante-candidato.entity.js';
@@ -11,7 +11,7 @@ import {
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
 import { Rol } from '../autenticacion/index.js';
-import { EjerciciosService } from '../ejercicios/index.js';
+import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
 
 /** Quien pide, tal como lo resolvio el guardia de autenticacion. */
@@ -277,7 +277,101 @@ export class VacantesService {
     return this.obtenerCompleta(id);
   }
 
+  /**
+   * Registra que a un candidato se le contrato (pantalla A08).
+   *
+   * POR QUE NO EXIGE HABER REVELADO LA IDENTIDAD ANTES
+   *
+   * Se penso: "no se puede contratar un alias". Se descarto por dos razones. La
+   * primera es de arquitectura: el registro de revelaciones vive en reportes, y
+   * reportes depende de vacantes, asi que preguntarselo crearia un ciclo entre
+   * modulos. La segunda es que la regla no protegeria nada: quien no revelo la
+   * identidad simplemente no sabe a quien contrato, y el sistema no tiene por
+   * que impedirle registrar una decision que ya tomo fuera.
+   *
+   * SI EXIGE QUE LA VACANTE HAYA SALIDO DEL BORRADOR
+   *
+   * Contratar desde un borrador significaria que nadie fue evaluado, porque en
+   * borrador no se recibe ninguna entrega.
+   *
+   * SE PUEDE CONTRATAR CON LA VACANTE YA CERRADA, y es el caso normal: en A08
+   * se cierra el proceso y la contratacion se confirma despues. No contradice
+   * "una vacante cerrada no se edita": esto no cambia la oferta, registra en
+   * que termino.
+   *
+   * Es idempotente: volver a marcarlo no mueve la fecha ni el autor, porque la
+   * primera es la que una auditoria lee.
+   */
+  async contratar(
+    idVacante: string,
+    idCandidato: string,
+    solicitante: Solicitante,
+  ): Promise<Vacante> {
+    const vacante = await this.obtenerCompleta(idVacante);
+    this.exigirPropiedad(vacante, solicitante);
+
+    if (vacante.estado === EstadoVacante.Borrador) {
+      throw new BadRequestException(
+        'No se contrata en un borrador: en borrador no se recibe ninguna entrega.',
+      );
+    }
+
+    const invitacion = await this.asignaciones.findOne({ where: { idVacante, idCandidato } });
+    if (!invitacion) {
+      // 404 y el mismo mensaje que una vacante inexistente: quien pregunta no
+      // averigua si ese identificador es de alguien que participo.
+      this.registrar('acceso_denegado_por_recurso', solicitante, { idVacante, idCandidato });
+      throw new NotFoundException('Ese candidato no esta invitado a esta vacante.');
+    }
+
+    if (invitacion.contratadoEn === null) {
+      invitacion.contratadoEn = new Date();
+      invitacion.idUsuarioQueContrato = solicitante.id;
+      await this.asignaciones.save(invitacion);
+      this.registrar('candidato_contratado', solicitante, { idVacante, idCandidato });
+    }
+
+    return this.obtenerCompleta(idVacante);
+  }
+
   // --- Consultas que otros modulos pueden necesitar, por esta puerta ---
+
+  /**
+   * Las cifras de la empresa que pide el panel de la pantalla A02.
+   *
+   * Devuelve tambien los identificadores de las vacantes porque el panel
+   * necesita que OTROS modulos cuenten lo suyo —entregas en evaluacion, por
+   * ejemplo— y ninguno de ellos puede consultar las tablas de este. Pasarles la
+   * lista es la unica via que respeta la frontera; sin ella, el panel saldria de
+   * una llamada por vacante, que es justo lo que A02 no puede permitirse.
+   *
+   * No lleva comprobacion de acceso porque no recibe nada de la peticion: la
+   * empresa la pone quien llama a partir del token, nunca un parametro. No hay
+   * identificador que cambiar.
+   */
+  async panelDeEmpresa(idEmpresa: string): Promise<PanelDeVacantes> {
+    // Id y estado de cada vacante en una sola consulta: con decenas de
+    // vacantes por empresa es mas barato que agrupar y volver a pedir los ids.
+    const filas = await this.vacantes.find({
+      where: { idEmpresa },
+      select: { id: true, estado: true },
+    });
+
+    const porEstado = Object.fromEntries(
+      Object.values(EstadoVacante).map((estado) => [estado, 0]),
+    ) as Record<EstadoVacante, number>;
+    for (const fila of filas) porEstado[fila.estado] += 1;
+
+    const ids = filas.map((f) => f.id);
+    const contratados =
+      ids.length === 0
+        ? 0
+        : await this.asignaciones.count({
+            where: { idVacante: In(ids), contratadoEn: Not(IsNull()) },
+          });
+
+    return { ids, porEstado, contratados };
+  }
 
   /**
    * Ejercicios de una vacante, en orden.
@@ -333,6 +427,49 @@ export class VacantesService {
     const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
     if (!vacante) throw new NotFoundException('La vacante no existe.');
     return vacante.intentosPermitidos;
+  }
+
+  /**
+   * El enunciado y la rubrica de los ejercicios de la vacante.
+   *
+   * POR QUE ESTO EXISTE
+   *
+   * `GET /vacantes/:id` devuelve las filas de enlace (`idEjercicio`, `orden`),
+   * no el enunciado. Y `ejercicios:leer` esta concedido a reclutador y
+   * administrador, **no a candidato**. El resultado era que se invitaba a una
+   * persona a resolver un ejercicio que no tenia forma de leer: podia entregar
+   * un archivo, pero no saber que se le pedia ni como se le iba a calificar.
+   *
+   * POR QUE AQUI Y NO EN EL MODULO DE EJERCICIOS
+   *
+   * El permiso para leer esto no nace del banco de ejercicios, nace de la
+   * vacante: se concede por estar invitado a ELLA. Por eso la puerta es esta, y
+   * reusa `exigirAcceso`, que ya decide quien entra —el dueno, un administrador,
+   * o un candidato invitado a una vacante que no sea borrador— y responde 404 a
+   * los demas. Un candidato sigue sin poder leer el banco de la empresa.
+   *
+   * SE DEVUELVE LA VERSION VIGENTE, LA MISMA CON LA QUE SE CALIFICA
+   *
+   * `versionVigenteDe` es exactamente lo que el modulo de evaluacion consulta
+   * para fijar contra que rubrica califica. Que las dos lean lo mismo es lo que
+   * sostiene la promesa del producto: la rubrica es publica y es la misma para
+   * todos los finalistas. Si un dia se versiona un ejercicio con una vacante ya
+   * publicada, las dos cambian a la vez, no una sin la otra.
+   */
+  async ejerciciosDeLaVacante(id: string, solicitante: Solicitante): Promise<ResumenVersion[]> {
+    const vacante = await this.obtenerCompleta(id);
+    await this.exigirAcceso(vacante, solicitante);
+
+    const versiones = await Promise.all(
+      vacante.ejercicios.map((enlace) =>
+        this.ejerciciosDelBanco.versionVigenteDe(enlace.idEjercicio),
+      ),
+    );
+
+    // Un ejercicio sin ninguna version no deberia existir —se crea con la v1 en
+    // la misma operacion—, pero si lo hubiera se omite en vez de romper la
+    // pantalla entera del candidato por un dato corrupto de otro modulo.
+    return versiones.filter((v): v is ResumenVersion => v !== null);
   }
 
   // --- Interno ---
@@ -406,4 +543,13 @@ export class VacantesService {
       }),
     );
   }
+}
+
+/** Las cifras de vacantes que el panel de la empresa (A02) necesita. */
+export interface PanelDeVacantes {
+  /** Identificadores de las vacantes de la empresa, para que otros cuenten. */
+  ids: string[];
+  porEstado: Record<EstadoVacante, number>;
+  /** Personas contratadas en toda la empresa, no en una vacante. */
+  contratados: number;
 }

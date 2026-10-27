@@ -187,7 +187,7 @@ describe('integracion: reportes consolidados', () => {
       });
     });
 
-    it('el ranking va de mayor a menor, con una fila por candidato y su nombre', async () => {
+    it('el ranking va de mayor a menor, con una fila por candidato y SIN su nombre', async () => {
       const { body } = await api(app)
         .get(`/api/v1/reportes/vacantes/${idVacante}`)
         .set(auth(reclutador))
@@ -199,9 +199,50 @@ describe('integracion: reportes consolidados', () => {
         posicion: 1,
         notaFinal: 88,
         intentosEvaluados: 2,
-        candidato: { nombre: 'Ana Maria Rojas', correo: 'ana@ejemplo.com' },
       });
+      // El proposito del producto es reducir el sesgo: el ranking se compara
+      // sin nombres. Esta es la asercion que lo sostiene.
+      expect(body.ranking[0].alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
+      expect(JSON.stringify(body)).not.toContain('ana@ejemplo.com');
       expect(body.ranking[1]).toMatchObject({ posicion: 2, notaFinal: 72, intentosEvaluados: 1 });
+    });
+
+    it('cada fila trae su habilidad destacada, del intento que puntua (A06)', async () => {
+      const sara = await registrarCandidato(app, 'sara-habilidad@ejemplo.com', 'Sara Ruiz');
+      await sembrarEvaluacion({
+        idCandidato: sara.id,
+        notaFinal: 95,
+        creadaEn: '2026-10-04T10:00:00Z',
+        criterios: [
+          // 8 de 20 es el 40 %; 4 de 5 es el 80 %. Gana el porcentaje, no el
+          // puntaje crudo.
+          { criterio: 'Arquitectura', puntaje: 8, escalaMaxima: 20, peso: 60 },
+          { criterio: 'Pruebas automatizadas', puntaje: 4, escalaMaxima: 5, peso: 40 },
+        ],
+      });
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const deSara = (body.ranking as { idCandidato: string; habilidadDestacada: unknown }[]).find(
+        (f) => f.idCandidato === sara.id,
+      );
+      expect(deSara?.habilidadDestacada).toEqual({
+        criterio: 'Pruebas automatizadas',
+        porcentajeLogrado: 80,
+        peso: 40,
+      });
+
+      // Y el CSV lleva la misma columna: es la tabla que el reclutador pega en
+      // su hoja de seguimiento.
+      const exportado = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/exportar`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(exportado.text ?? String(exportado.body)).toContain('Habilidad destacada');
     });
 
     it('las cifras consolidadas cuadran con lo sembrado', async () => {
@@ -232,7 +273,8 @@ describe('integracion: reportes consolidados', () => {
         .set(auth(reclutador))
         .expect(200);
 
-      expect(body.candidato.nombre).toBe('Ana Maria Rojas');
+      expect(body.alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
       expect(body.posicionEnLaVacante).toBe(1);
       expect(body.intentos).toHaveLength(2);
       // Del mas reciente al mas viejo.
@@ -314,6 +356,106 @@ describe('integracion: reportes consolidados', () => {
     });
   });
 
+  describe('CRITERIO: revelar la identidad es una accion, y deja rastro', () => {
+    beforeEach(async () => {
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-02T10:00:00Z',
+      });
+    });
+
+    it('devuelve nombre y correo, y el alias para cruzarlo con el ranking', async () => {
+      const { body } = await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toMatchObject({
+        idCandidato: ana.id,
+        nombre: 'Ana Maria Rojas',
+        correo: 'ana@ejemplo.com',
+      });
+      expect(body.alias).toMatch(/^Candidato ••••[0-9a-f]{6}$/);
+    });
+
+    it('el alias que devuelve es EL MISMO que muestra el ranking', async () => {
+      // Si no coincidiera, el reclutador no podria saber a que fila corresponde
+      // la identidad que acaba de pedir, y la pantalla seria inutil.
+      const { body: reporte } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+      const { body: revelada } = await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const fila = reporte.ranking.find((f: { idCandidato: string }) => f.idCandidato === ana.id);
+      expect(revelada.alias).toBe(fila.alias);
+    });
+
+    it('queda registrado quien la revelo y cuando', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ idCandidato: ana.id, idUsuario: reclutador.id });
+      // El registro NO lleva el nombre: guardarlo ahi seria copiar el dato
+      // personal a una segunda tabla para auditar que alguien lo miro.
+      expect(JSON.stringify(body)).not.toContain('Ana Maria Rojas');
+    });
+
+    it('revelar dos veces deja DOS registros: es un log de accesos', async () => {
+      // Una tabla de estado diria "ya la vio" y perderia cuantas veces y
+      // cuando, que es justo lo que mira una auditoria.
+      for (let i = 0; i < 2; i++) {
+        await api(app)
+          .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+          .set(auth(reclutador))
+          .expect(200);
+      }
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(body).toHaveLength(2);
+    });
+
+    it('el reclutador de otra empresa no revela nada', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(404);
+      await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/revelaciones`)
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(404);
+    });
+
+    it('no se revela la identidad de quien no participa en la vacante', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${luis.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(404);
+    });
+
+    it('un candidato no puede revelar identidades', async () => {
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(ana))
+        .expect(403);
+    });
+  });
+
   describe('exportacion basica del reporte', () => {
     it('descarga un CSV con cabecera y una fila por candidato', async () => {
       await sembrarEvaluacion({
@@ -335,12 +477,21 @@ describe('integracion: reportes consolidados', () => {
       const texto = respuesta.text ?? String(respuesta.body);
       // El BOM va primero: sin el, Excel en Windows destroza los acentos.
       expect(texto.startsWith('﻿')).toBe(true);
-      expect(texto).toContain('Posicion,Candidato,Correo,Nota final');
-      expect(texto).toContain('Ana Maria Rojas');
+      expect(texto).toContain('Posicion,Candidato,Nota final');
+      expect(texto).toContain('Candidato ••••');
       expect(texto).toContain('88');
+      // Un export que filtra lo que la pantalla protege no protege nada, y un
+      // CSV se reenvia con mas facilidad todavia.
+      expect(texto).not.toContain('Ana Maria Rojas');
+      expect(texto).not.toContain('ana@ejemplo.com');
     });
 
-    it('SEGURIDAD: un nombre que empieza por guion sale neutralizado', async () => {
+    it('SEGURIDAD: el CSV sigue neutralizando formulas, ahora sobre el alias', async () => {
+      // El nombre peligroso ya no llega al CSV —ahora va alias—, pero la
+      // defensa sigue viva para cualquier celda: la evidencia, un titulo de
+      // vacante o lo que se exporte manana. La prueba de la funcion pura
+      // cubre los seis caracteres; aqui se comprueba de extremo a extremo que
+      // ninguna celda empieza por uno de ellos sin apostrofo.
       await sembrarEvaluacion({
         idCandidato: candidatoConNombrePeligroso.id,
         notaFinal: 90,
@@ -353,9 +504,269 @@ describe('integracion: reportes consolidados', () => {
         .expect(200);
 
       const texto = respuesta.text ?? String(respuesta.body);
-      // Con el apostrofo delante, la hoja de calculo lo trata como texto.
-      expect(texto).toContain("'-Sara Gomez");
-      expect(texto).not.toMatch(/,-Sara Gomez/);
+      expect(texto).not.toContain('-Sara Gomez');
+
+      // Ninguna celda puede empezar por un caracter que una hoja de calculo
+      // interprete como formula.
+      const PELIGROSOS = ['=', '+', '-', '@', String.fromCharCode(9), String.fromCharCode(13)];
+      const filas = texto.slice(1).trim().split(String.fromCharCode(13, 10)).slice(1);
+      expect(filas.length).toBeGreaterThan(0);
+      for (const fila of filas) {
+        for (const celda of fila.split(',')) {
+          expect(PELIGROSOS.some((p) => celda.startsWith(p))).toBe(false);
+        }
+      }
+    });
+  });
+
+  /**
+   * El puesto que ve el candidato (pantalla B22).
+   *
+   * La ruta vive en el modulo de evaluacion —reportes depende de evaluacion, no
+   * al contrario—, pero la prueba vive aqui porque lo que importa comprobar es
+   * que el numero que ve el candidato y el ranking que ve el reclutador NO se
+   * pueden separar. Son dos implementaciones del mismo concepto: una agrupacion
+   * en SQL y una funcion pura. Si alguien cambia una, esta prueba lo dice.
+   */
+  describe('CRITERIO: el candidato ve su puesto, y solo con el proceso cerrado', () => {
+    const invitar = (quien: Sesion) =>
+      api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: quien.id })
+        .expect(200);
+
+    const cerrar = () =>
+      api(app).post(`/api/v1/vacantes/${idVacante}/cerrar`).set(auth(reclutador)).expect(200);
+
+    const miPuesto = (quien: Sesion) =>
+      api(app).get(`/api/v1/evaluaciones/vacante/${idVacante}/mi-puesto`).set(auth(quien));
+
+    beforeEach(async () => {
+      await invitar(ana);
+      await invitar(luis);
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-02T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 72,
+        creadaEn: '2026-10-01T11:00:00Z',
+      });
+    });
+
+    it('con el proceso abierto no da el puesto, y dice por que', async () => {
+      // El puesto cambia cada vez que otro entrega: con la vacante abierta no
+      // es informacion del candidato, es un canal lateral sobre los demas.
+      const { body } = await miPuesto(ana).expect(200);
+
+      expect(body).toMatchObject({
+        disponible: false,
+        motivo: 'proceso_en_curso',
+        puesto: null,
+        total: null,
+      });
+      // Ni de refilon: tampoco su propia nota por esta via, que para eso esta
+      // la evaluacion de su entrega.
+      expect(body.notaFinal).toBeNull();
+    });
+
+    it('con la vacante cerrada da su puesto y cuanta gente participo', async () => {
+      await cerrar();
+
+      const { body: deAna } = await miPuesto(ana).expect(200);
+      expect(deAna).toMatchObject({ disponible: true, puesto: 1, total: 2, notaFinal: 88 });
+
+      const { body: deLuis } = await miPuesto(luis).expect(200);
+      expect(deLuis).toMatchObject({ disponible: true, puesto: 2, total: 2, notaFinal: 72 });
+    });
+
+    it('no filtra nada de los demas: ni alias, ni identificadores, ni notas ajenas', async () => {
+      await cerrar();
+
+      const { body } = await miPuesto(luis).expect(200);
+      const comoTexto = JSON.stringify(body);
+
+      expect(comoTexto).not.toContain(ana.id);
+      expect(comoTexto).not.toContain('Ana Maria Rojas');
+
+      // La nota de Ana (88) no puede salir por ningun campo. Buscarla en el
+      // texto no sirve: un UUID puede contener "88" por casualidad, y de hecho
+      // lo hizo. Se miran los valores, y se fija la forma de la respuesta para
+      // que un campo nuevo no se cuele sin que nadie lo revise.
+      expect(Object.values(body)).not.toContain(88);
+      expect(Object.keys(body).sort()).toEqual([
+        'disponible',
+        'estadoVacante',
+        'idVacante',
+        'notaFinal',
+        'puesto',
+        'total',
+      ]);
+    });
+
+    it('el puesto del candidato es EL MISMO que el del ranking del reclutador', async () => {
+      // Con empate, que es donde dos implementaciones se separan: los dos
+      // primeros comparten el puesto 1 y el siguiente salta al 3.
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-03T10:00:00Z',
+      });
+      const sara = await registrarCandidato(app, 'sara-puesto@ejemplo.com', 'Sara Lopez');
+      await invitar(sara);
+      await sembrarEvaluacion({
+        idCandidato: sara.id,
+        notaFinal: 60,
+        creadaEn: '2026-10-01T09:00:00Z',
+      });
+      await cerrar();
+
+      const { body: reporte } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const posicionEnElRanking = (id: string): number =>
+        (reporte.ranking as { idCandidato: string; posicion: number }[]).find(
+          (f) => f.idCandidato === id,
+        )!.posicion;
+
+      for (const quien of [ana, luis, sara]) {
+        const { body } = await miPuesto(quien).expect(200);
+        expect(body.puesto).toBe(posicionEnElRanking(quien.id));
+        expect(body.total).toBe(reporte.ranking.length);
+      }
+
+      // Y el empate es de verdad un empate, no una coincidencia de la prueba.
+      expect(posicionEnElRanking(ana.id)).toBe(1);
+      expect(posicionEnElRanking(luis.id)).toBe(1);
+      expect(posicionEnElRanking(sara.id)).toBe(3);
+    });
+
+    it('invitado pero sin ninguna entrega evaluada: no es un error, es que no participo', async () => {
+      const mudo = await registrarCandidato(app, 'mudo@ejemplo.com', 'Pedro Silencio');
+      await invitar(mudo);
+      await cerrar();
+
+      const { body } = await miPuesto(mudo).expect(200);
+      expect(body).toMatchObject({ disponible: false, motivo: 'sin_evaluacion', puesto: null });
+    });
+
+    it('un candidato que no fue invitado recibe 404, no un puesto', async () => {
+      const ajeno = await registrarCandidato(app, 'ajeno@ejemplo.com', 'Nadie Invitado');
+      await cerrar();
+
+      // 404 y no 403: con un 403 podria averiguar que vacantes existen
+      // probando identificadores.
+      await miPuesto(ajeno).expect(404);
+      await api(app)
+        .get(`/api/v1/evaluaciones/vacante/${uuid()}/mi-puesto`)
+        .set(auth(ana))
+        .expect(404);
+    });
+
+    it('la ruta es del candidato: el reclutador tiene el ranking, no un puesto', async () => {
+      await cerrar();
+
+      await miPuesto(reclutador).expect(403);
+      await api(app)
+        .get(`/api/v1/evaluaciones/vacante/${idVacante}/mi-puesto`)
+        .set(auth(admin))
+        .expect(403);
+    });
+  });
+
+  describe('CRITERIO: el panel de la empresa en una sola llamada (A02)', () => {
+    const panel = (quien: Sesion) => api(app).get('/api/v1/reportes/panel').set(auth(quien));
+
+    it('las cifras cuadran con lo sembrado, y los retos retirados no se cuentan', async () => {
+      // Una vacante mas en borrador y otra cerrada, sobre la publicada del
+      // montaje.
+      const { body: borrador } = await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({ titulo: 'Analista de datos', descripcion: 'Para el equipo de datos.' })
+        .expect(201);
+      expect(borrador.estado).toBe('borrador');
+
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: ana.id })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos/${ana.id}/contratar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await sembrarEntrega(luis.id, 'en_evaluacion', 1);
+      await sembrarEntrega(luis.id, 'evaluada', 2);
+      await sembrarEntrega(ana.id, 'fallida', 3);
+
+      const retirado = await crearEjercicioEnElBanco(app, reclutador, `Retirado ${uuid()}`);
+      await api(app).delete(`/api/v1/ejercicios/${retirado}`).set(auth(reclutador)).expect(200);
+
+      const { body } = await panel(reclutador).expect(200);
+
+      expect(body.vacantes).toEqual({ borradores: 1, publicadas: 1, cerradas: 0 });
+      expect(body).toMatchObject({
+        entregasPorEvaluar: 2,
+        entregasEvaluadas: 1,
+        entregasFallidas: 1,
+        contratados: 1,
+        // El del montaje. El retirado se conserva para que las evaluaciones
+        // emitidas sigan siendo auditables, pero ya no es material disponible.
+        retosEnElBanco: 1,
+      });
+    });
+
+    it('cuenta PERSONAS en finalistas y ENTREGAS en la cola: la diferencia son los reintentos', async () => {
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await sembrarEntrega(ana.id, 'en_evaluacion', 2);
+
+      const { body } = await panel(reclutador).expect(200);
+
+      // Una sola persona esperando, con dos entregas. Si el panel contara
+      // entregas, diria que hay dos finalistas donde hay una.
+      expect(body.finalistasEnEvaluacion).toBe(1);
+      expect(body.entregasPorEvaluar).toBe(2);
+    });
+
+    it('no mezcla empresas: la vecina ve su propio panel en ceros', async () => {
+      await sembrarEntrega(ana.id, 'recibida', 1);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: ana.id })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos/${ana.id}/contratar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await panel(reclutadorDeOtraEmpresa).expect(200);
+
+      expect(body.vacantes).toEqual({ borradores: 0, publicadas: 0, cerradas: 0 });
+      expect(body).toMatchObject({
+        finalistasEnEvaluacion: 0,
+        entregasPorEvaluar: 0,
+        contratados: 0,
+        retosEnElBanco: 0,
+      });
+    });
+
+    it('un administrador de plataforma no tiene panel: no pertenece a ninguna empresa', async () => {
+      // Devolver ceros seria peor: pareceria una empresa sin actividad.
+      const { body } = await panel(admin).expect(400);
+      expect(body.mensaje).toMatch(/empresa/i);
+    });
+
+    it('un candidato no ve el panel de la empresa', async () => {
+      await panel(ana).expect(403);
     });
   });
 });

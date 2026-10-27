@@ -16,10 +16,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
+  ApiPropertyOptional,
   ApiTags,
 } from '@nestjs/swagger';
 import { ColaDeEvaluacionService } from './cola/cola-de-evaluacion.service.js';
-import { EvaluacionService } from './evaluacion.service.js';
+import { EvaluacionService, type MiPuesto } from './evaluacion.service.js';
 import { EvaluacionRespuesta, aRespuesta } from './dto/evaluacion.dto.js';
 import { RequierePermiso, Rol, type UsuarioAutenticado } from '../autenticacion/index.js';
 import { LimiteEvaluacion } from '../../common/rate-limit/index.js';
@@ -32,6 +33,26 @@ class MetricasDeColaRespuesta {
   @ApiProperty({ description: 'Agotaron los reintentos; se conservan 30 dias.' }) fallidos!: number;
   @ApiProperty({ description: 'Completados en las ultimas 24 horas.' }) completados!: number;
   @ApiProperty({ description: 'Si este proceso consume la cola.' }) workerActivo!: boolean;
+}
+
+class MiPuestoRespuesta {
+  @ApiProperty({ format: 'uuid' }) idVacante!: string;
+  @ApiProperty({ enum: ['borrador', 'publicada', 'cerrada'] }) estadoVacante!: string;
+  @ApiProperty({
+    description:
+      'Falso mientras el proceso sigue abierto, o si el candidato no tiene ninguna entrega evaluada. La pantalla tiene que poder dibujar ese estado.',
+  })
+  disponible!: boolean;
+  @ApiPropertyOptional({ enum: ['proceso_en_curso', 'sin_evaluacion'] })
+  motivo?: string;
+  @ApiProperty({
+    nullable: true,
+    example: 3,
+    description: 'Empieza en 1. Empatados comparten puesto.',
+  })
+  puesto!: number | null;
+  @ApiProperty({ nullable: true, example: 12 }) total!: number | null;
+  @ApiProperty({ nullable: true, example: 82.5 }) notaFinal!: number | null;
 }
 
 class ReintentoRespuesta {
@@ -82,6 +103,22 @@ export class EvaluacionesController {
   async mias(@Req() p: Peticion): Promise<EvaluacionRespuesta[]> {
     // Sin el analisis: al candidato no se le dice que patron se detecto.
     return (await this.evaluacion.mias(solicitanteDe(p))).map((e) => aRespuesta(e));
+  }
+
+  @Get('vacante/:idVacante/mi-puesto')
+  @RequierePermiso('evaluaciones:leerPropias')
+  @ApiOperation({
+    summary: 'Puesto del propio candidato en la vacante',
+    description:
+      'Lo que la pantalla B22 muestra junto a la nota. Solo con la vacante CERRADA: mientras el proceso esta abierto el puesto cambia cada vez que otro candidato entrega, asi que no seria informacion suya sino un canal lateral sobre la actividad de los demas. Nunca devuelve el puesto de otro: la posicion se calcula para quien pregunta.',
+  })
+  @ApiOkResponse({ type: MiPuestoRespuesta })
+  @ApiNotFoundResponse({ description: 'La vacante no existe, o no fue invitado a ella.' })
+  miPuesto(
+    @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
+    @Req() p: Peticion,
+  ): Promise<MiPuesto> {
+    return this.evaluacion.miPuestoEn(idVacante, solicitanteDe(p));
   }
 
   @Get('vacante/:idVacante')

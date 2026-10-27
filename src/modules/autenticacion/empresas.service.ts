@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -10,6 +11,7 @@ import { Repository } from 'typeorm';
 import { Empresa } from './entities/empresa.entity.js';
 import { Usuario } from './entities/usuario.entity.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
+import { esNitValido } from './dominio/nit.js';
 import type { UsuarioAutenticado } from './guardias/autenticacion.guard.js';
 import type { CrearEmpresaDto, CrearUsuarioDeEmpresaDto } from './dto/index.js';
 
@@ -43,13 +45,33 @@ export class EmpresasService {
       throw new ForbiddenException('Solo un administrador de la plataforma crea empresas.');
     }
 
-    const empresa = this.empresas.create({ nombre: datos.nombre, activa: true });
+    // El digito de verificacion se comprueba aqui y no en el DTO porque es
+    // aritmetica sobre los digitos, no forma: asi el 400 de forma y el de
+    // calculo dicen cosas distintas, y quien se equivoco sabe en que.
+    if (datos.nit !== undefined && !esNitValido(datos.nit)) {
+      throw new BadRequestException(
+        'El NIT no cuadra con su digito de verificacion. Revise el ultimo numero.',
+      );
+    }
+
+    const empresa = this.empresas.create({
+      nombre: datos.nombre,
+      sector: datos.sector,
+      nit: datos.nit ?? null,
+      activa: true,
+    });
     try {
       await this.empresas.save(empresa);
     } catch (e) {
-      // El indice unico va sobre lower(nombre): "Acme" y "ACME" chocan.
+      // Dos indices unicos distintos, y el mensaje tiene que decir cual choco:
+      // "ya existe esa empresa" cuando el que se repite es el NIT manda a
+      // corregir el nombre, que esta bien.
       if (esViolacionDeUnicidad(e)) {
-        throw new ConflictException('Ya existe una empresa con ese nombre.');
+        throw new ConflictException(
+          choco(e, 'nit')
+            ? 'Ya existe una empresa con ese NIT.'
+            : 'Ya existe una empresa con ese nombre.',
+        );
       }
       throw e;
     }
@@ -131,4 +153,10 @@ export class EmpresasService {
 
 function esViolacionDeUnicidad(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505';
+}
+
+/** Que indice unico se violo, segun lo que PostgreSQL devuelve en el error. */
+function choco(e: unknown, parte: string): boolean {
+  const constraint = (e as { constraint?: string }).constraint ?? '';
+  return constraint.includes(parte);
 }
