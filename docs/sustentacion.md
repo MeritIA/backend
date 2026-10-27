@@ -37,10 +37,10 @@ escrita, pero **dispersa en comentarios de código**, que no se proyecta.
 | 2 | Cómo trabajar en equipo | Trabajo por paquetes de la EDT; PR con cinco verificaciones en CI; 450 pruebas; commits con coautoría real | Una definición de «listo» por paquete, y **quién sustenta qué** |
 | 3 | Alinearse con los objetivos del proyecto | Cada paquete se cierra contra los criterios de aceptación del Diccionario de la EDT | La Declaración de Alcance sigue en **borrador sin ratificar** |
 | 4 | Cómo se dio solución mediante la tecnología | `docs/arquitectura.md` (44 KB, por módulo) | Nada grave: es lo mejor cubierto |
-| 5 | Cómo se cumplen los **objetivos de negocio** y los atributos de calidad | Parcial | **El hueco más grande.** No existe el mapeo objetivo de negocio → atributo de calidad → medida. Hoy se puede *afirmar* que el sistema es rápido y aislado; no se puede mostrar en una tabla que eso sirve a un objetivo del negocio |
-| 6 | **Por qué esa arquitectura y no otra** | La razón de cada decisión está en el código y en `arquitectura.md` | Un documento de decisiones proyectable: `docs/adr/` |
-| 7 | Cuáles son los fuertes | Ver §3 | Elegir **tres**, no doce |
-| 8 | Plan de actualización tecnológica: el monolito y cómo cambia con el tiempo | La arquitectura ya es un **monolito modular** con fronteras verificadas por ESLint y un esquema de base por módulo, que es justo lo que hace posible partirlo después | El plan con **disparadores medidos**: a qué número se parte qué. Va en `docs/evolucion-tecnologica.md` |
+| 5 | Cómo se cumplen los **objetivos de negocio** y los atributos de calidad | El mapeo está en el **§3 de este documento**: cada objetivo con su atributo, su medida y dónde se comprueba | Dos filas de esa tabla están en amarillo, y son las que hay que poder defender |
+| 6 | **Por qué esa arquitectura y no otra** | **[`adr/`](adr/)**: doce decisiones, cada una con la alternativa descartada y lo que cuesta | Nada: es lo que el punto pedía. Falta elegir **cuáles tres** se cuentan en media hora |
+| 7 | Cuáles son los fuertes | Ver §4 | Elegir **tres**, no doce |
+| 8 | Plan de actualización tecnológica: el monolito y cómo cambia con el tiempo | **[`evolucion-tecnologica.md`](evolucion-tecnologica.md)**: cinco etapas, cada una con su disparador medido, más el plan de dependencias | La etapa 1 no se puede empezar sin entorno desplegado (punto 9) |
 | 9 | Lo mejor de DevOps | CI con Gitleaks, `npm audit`, lint/build/contrato, pruebas con cobertura y SonarQube; acciones ancladas por SHA; Dependabot; entorno local de un comando | **No hay despliegue.** No existe entorno desplegado ni CD. Es lo que más se nota en una sustentación de DevOps |
 | 10 | Lo mejor del negocio, emprendimiento, producto, **cuánto vale la empresa** | Nada desde el backend | No es trabajo de backend. Lo único que el repositorio puede aportar son **los datos** que sostengan la cifra, y para eso hace falta el punto 11 |
 | 11 | Qué **tipo** de empresas y de convocatorias; cuántas convocatorias al año por empresa (ej.: sector financiero) | Nada | **Toca el modelo de datos.** `Empresa` solo tiene nombre y si está activa. Sin `sector` esa pregunta se responde en una diapositiva, no con el sistema |
@@ -49,7 +49,27 @@ escrita, pero **dispersa en comentarios de código**, que no se proyecta.
 | 14 | Producto de **marca blanca**: uno lo configura y se adapta a la empresa | La multiempresa ya es la base: aislamiento total de datos, probado | Marca blanca es **configuración por empresa** (logo, colores, dominio, textos). No existe, y es ampliación de alcance |
 | 15 | Las **dos fuentes de ingresos** | Nada | Todo el cobro está marcado ⛔ en la matriz. Las dos que el producto insinúa: pago por convocatoria (A04) y suscripción al banco de retos (A10) |
 
-## 3. Los fuertes que yo defendería en la sustentación técnica
+## 3. Objetivo de negocio → atributo de calidad → medida
+
+Esto es lo que pedía el punto 5, y es la tabla que convierte «el sistema es
+bueno» en algo que se puede comprobar delante de alguien. La columna que importa
+es la última: **dónde se mira para saber si es verdad**.
+
+| Objetivo de negocio | Atributo de calidad | Medida concreta | Dónde se comprueba | Estado |
+|---|---|---|---|---|
+| Reducir el sesgo en la selección — es el propósito del producto | Confidencialidad | El ranking **no contiene** nombres ni correos; ver una identidad es una acción aparte y **queda registrada** con quién, a quién y cuándo | Prueba de integración que falla si un nombre aparece en el reporte; tabla `revelaciones_de_identidad` | ✅ |
+| Que un resultado se pueda **defender ante una disputa** | Trazabilidad e integridad | La nota dice **contra qué versión de rúbrica** se calificó, con evidencia por criterio; los ejercicios de una vacante **no se pueden cambiar** tras publicarla | `admiteCambioDeEjercicios`, `ResumenVersion`, historial de estados de la entrega | ✅ |
+| Que una empresa **nunca** vea datos de otra, que es la condición para que un cliente entre | Confidencialidad / control de acceso | A lo ajeno se responde **404 y no 403**, para no confirmar que existe; probado módulo por módulo | ADR 0012, pruebas de aislamiento en los seis módulos | ✅ |
+| Evaluar más rápido y más barato que leer CVs | Rendimiento y capacidad | **79 pet/s** sostenidas con **p95 83 ms**; punto de caída conocido en 50 it/s; pasado el tope se rechaza con 503 en vez de colapsar | `rendimiento.md`, ADR 0011 | 🟡 el rechazo con 503 **está sin re-medir** |
+| Que el candidato reciba algo por su trabajo, y no solo silencio | Transparencia / usabilidad | Lee el **enunciado y la rúbrica** antes de entregar, y al cerrarse el proceso ve **su puesto y el total** | `GET /vacantes/{id}/ejercicios`, `GET /evaluaciones/vacante/{id}/mi-puesto` (D-8) | ✅ |
+| Que una empresa pueda operar sola sin pedirnos nada | Disponibilidad | La caída del proveedor de IA **retrasa notas, no rechaza entregas**: la cola evalúa al volver | D-2, ADR 0007, health check | ✅ |
+| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **493 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
+| Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push | ADR 0006, CI | 🟡 faltan **consentimientos** y «descargar/eliminar mis datos» (B12, B24) |
+
+Las tres filas en amarillo son las que conviene llevar preparadas, porque son
+las que un profesor que lea con atención va a preguntar.
+
+## 4. Los fuertes que yo defendería en la sustentación técnica
 
 De todo lo construido, lo que distingue a este backend de un CRUD con IA
 encima son cinco cosas, y conviene llevar **tres**:
@@ -76,18 +96,34 @@ encima son cinco cosas, y conviene llevar **tres**:
    vive en el backend; el servicio de IA recibe texto ya extraído. Un
    `.zip` malicioso no llega al proceso que habla con el modelo.
 
-## 4. Lo que esto cambia en el backend
+## 5. Lo que esto cambia en el backend
 
 Separado en lo que **sí** es trabajo de backend y lo que no, porque mezclarlo es
 cómo se llega a diciembre con diapositivas y sin producto.
 
-**Entra al MVP ahora** (el equipo ya aprobó el MVP de diez pantallas de
-`matriz-pantallas.md` §8):
+**Hecho el 26 y 27/10**, a partir de estas notas y del MVP de diez pantallas que
+el equipo aprobó (`matriz-pantallas.md` §8):
 
-- `sector` y `nit` en `Empresa` — sin eso, el punto 11 no tiene respuesta.
-- El mapeo objetivo de negocio → atributo de calidad → medida, para el punto 5.
-- `docs/adr/` con las decisiones y las alternativas descartadas, para el punto 6.
-- `docs/evolucion-tecnologica.md` con disparadores medidos, para el punto 8.
+- ✅ `sector` y `nit` en `Empresa` — sin eso, el punto 11 no tenía respuesta. El
+  NIT se verifica por su dígito, que es la única comprobación posible mientras no
+  exista la integración con Cámara de Comercio.
+- ✅ El mapeo objetivo → atributo → medida del punto 5, en el §3 de aquí.
+- ✅ [`adr/`](adr/): doce decisiones con su alternativa descartada, para el punto 6.
+- ✅ [`evolucion-tecnologica.md`](evolucion-tecnologica.md) con disparadores
+  medidos, para el punto 8.
+- ✅ Las cuatro pantallas del MVP que no se podían construir: el panel de la
+  empresa (A02, una llamada en vez de N), la habilidad destacada del ranking
+  (A06), el registro de contratación (A08) y el puesto del candidato (B22).
+
+**Lo siguiente que sí es backend, por orden de lo que desbloquea:**
+
+- «Avance» y «cierre estimado» de A02, y «finalistas a evaluar» de A04: son
+  campos nuevos en `Vacante`, sin lógica.
+- Los consentimientos de B12 y «descargar / eliminar mis datos» de B24. **No son
+  adorno**: son obligaciones de la Ley 1581 que el producto ya promete en
+  pantalla, y hoy no tienen ruta.
+- El E2E de flujo completo y el *soak* de horas, que son las dos filas amarillas
+  del §3.
 
 **No entra, y hay que decidirlo antes de que alguien lo programe:**
 
@@ -102,7 +138,7 @@ cómo se llega a diciembre con diapositivas y sin producto.
 desplegado. Quedan cuatro semanas. La sustentación de aula máxima se hace con
 producto a la vista, y hoy el producto solo se ve por `curl` y por Swagger.
 
-## 5. Lo que no se puede responder desde este repositorio
+## 6. Lo que no se puede responder desde este repositorio
 
 Queda dicho para que nadie lo espere de aquí:
 

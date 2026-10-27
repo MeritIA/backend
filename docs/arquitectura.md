@@ -717,6 +717,12 @@ cambio en la API aparezca en el diff de la revisión por pares.
 
 ## 9. Decisiones y por qué
 
+Esta tabla es el resumen de una línea por decisión. El **por qué extendido —con
+la alternativa que se descartó y lo que la decisión cuesta—** está en
+[`adr/`](adr/), una decisión por archivo. Y cómo cambia todo esto con el tiempo,
+con disparadores medidos, en
+[`evolucion-tecnologica.md`](evolucion-tecnologica.md).
+
 | Decisión | Motivo | Fuente |
 |---|---|---|
 | Monolito modular | Equipo pequeño, sin necesidad de despliegue independiente | Planteamiento de arquitectura |
