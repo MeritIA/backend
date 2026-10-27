@@ -16,11 +16,12 @@ import { EjerciciosModule } from './modules/ejercicios/index.js';
 import { EntregasModule } from './modules/entregas/index.js';
 import { EvaluacionModule } from './modules/evaluacion/index.js';
 import { ReportesModule } from './modules/reportes/index.js';
+import { NotificacionesModule } from './modules/notificaciones/index.js';
 
 /**
  * Raiz del monolito modular.
  *
- * Los seis modulos de negocio se registran aqui, cada uno con su frontera
+ * Los modulos de negocio se registran aqui, cada uno con su frontera
  * explicita. La regla que sostiene el orden es que ningun modulo importa una
  * entidad o un repositorio de otro: toda interaccion pasa por el servicio de
  * aplicacion que el modulo reexporta en su index, o por eventos internos.
@@ -50,6 +51,8 @@ import { ReportesModule } from './modules/reportes/index.js';
     EntregasModule,
     EvaluacionModule,
     ReportesModule,
+    // Ultimo a proposito: solo escucha y no lo importa nadie.
+    NotificacionesModule,
   ],
   controllers: [AppController, SaludController],
   providers: [AppService],

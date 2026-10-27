@@ -1498,6 +1498,89 @@
           "reportes"
         ]
       }
+    },
+    "/notificaciones/vacantes/{idVacante}": {
+      "get": {
+        "description": "No devuelve direcciones de correo: el ranking se ve por alias hasta que se revela una identidad, y eso queda auditado. Devolver los correos aqui seria la puerta de atras de ese control.",
+        "operationId": "NotificacionesController_estado",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvisoRespuesta"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe o no es de tu empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Que avisos se enviaron de una vacante, y en que quedo cada uno",
+        "tags": [
+          "notificaciones"
+        ]
+      }
+    },
+    "/notificaciones/vacantes/{idVacante}/reenviar": {
+      "post": {
+        "description": "Se puede apretar dos veces sin consecuencias: nunca toca un aviso ya enviado, asi que no existe el correo repetido. Tambien crea el aviso de quien se evaluo despues del cierre. Si la vacante no esta cerrada no envia nada y lo dice en \"omitido\".",
+        "operationId": "NotificacionesController_reenviar",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenDeAvisosRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La vacante no existe o no es de tu empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Reintenta los avisos que no salieron de una vacante cerrada",
+        "tags": [
+          "notificaciones"
+        ]
+      }
     }
   },
   "info": {
@@ -2748,6 +2831,108 @@
           "idCandidato",
           "idUsuario",
           "reveladaEn"
+        ]
+      },
+      "AvisoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "vacante_cerrada"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviando",
+              "enviada",
+              "fallida",
+              "sin_canal"
+            ],
+            "description": "pendiente: registrado y sin enviar. enviando: reservado por una ronda en curso. enviada: entregado al servidor de correo. sin_canal: no hay SMTP configurado. fallida: el servidor rechazo el envio."
+          },
+          "intentos": {
+            "type": "number",
+            "minimum": 0
+          },
+          "enviadoEn": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "ultimoError": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "idCandidato",
+          "tipo",
+          "estado",
+          "intentos",
+          "enviadoEn",
+          "ultimoError"
+        ]
+      },
+      "ResumenDeAvisosRespuesta": {
+        "type": "object",
+        "properties": {
+          "idVacante": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "considerados": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Candidatos con al menos una entrega evaluada: los que pueden recibir aviso."
+          },
+          "nuevos": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Avisos creados en esta ronda."
+          },
+          "enviados": {
+            "type": "number",
+            "minimum": 0
+          },
+          "sinCanal": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Sin enviar porque no hay SMTP configurado."
+          },
+          "fallidos": {
+            "type": "number",
+            "minimum": 0
+          },
+          "yaAvisados": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Ya los tenian enviados y no se volvieron a tocar."
+          },
+          "omitido": {
+            "type": "string",
+            "enum": [
+              "vacante_inexistente",
+              "vacante_no_cerrada",
+              "canal_apagado"
+            ],
+            "description": "Por que no se envio nada. canal_apagado significa que NOTIFICACIONES_A_CANDIDATOS esta en false: los avisos quedaron registrados como pendientes y un reenvio los recoge cuando se encienda."
+          }
+        },
+        "required": [
+          "idVacante",
+          "considerados",
+          "nuevos",
+          "enviados",
+          "sinCanal",
+          "fallidos",
+          "yaAvisados"
         ]
       }
     }
