@@ -506,6 +506,34 @@
       }
     },
     "/vacantes/{id}/ejercicios": {
+      "get": {
+        "description": "Lo que necesita quien va a resolver el reto: el enunciado y los criterios con sus pesos. Es la unica forma en que un candidato invitado lee su ejercicio, porque el banco de ejercicios de la empresa no es visible para el. Devuelve la version vigente de cada uno, que es la misma contra la que se califica: la rubrica es publica y es igual para todos los finalistas.",
+        "operationId": "VacantesController_ejercicios",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o quien pregunta no tiene acceso a ella. Un candidato solo accede si fue invitado y la vacante ya esta publicada."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enunciado y rubrica de los ejercicios de la vacante",
+        "tags": [
+          "vacantes"
+        ]
+      },
       "put": {
         "description": "Reemplaza la lista completa. Solo mientras la vacante es un borrador: cambiarlos despues dejaria a dos candidatos del mismo proceso resolviendo pruebas distintas, y sus resultados dejarian de ser comparables.",
         "operationId": "VacantesController_asociarEjercicios",

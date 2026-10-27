@@ -26,6 +26,7 @@ import {
   EditarVacanteDto,
 } from './dto/index.js';
 import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
+import type { ResumenVersion } from '../ejercicios/index.js';
 import type { Vacante } from './entities/vacante.entity.js';
 
 interface Peticion {
@@ -79,6 +80,27 @@ export class VacantesController {
     @Req() p: Peticion,
   ): Promise<Vacante> {
     return this.vacantes.obtenerPara(id, solicitanteDe(p));
+  }
+
+  @Get(':id/ejercicios')
+  @RequierePermiso('vacantes:leer')
+  @ApiOperation({
+    summary: 'Enunciado y rubrica de los ejercicios de la vacante',
+    description:
+      'Lo que necesita quien va a resolver el reto: el enunciado y los criterios con sus pesos. ' +
+      'Es la unica forma en que un candidato invitado lee su ejercicio, porque el banco de ejercicios ' +
+      'de la empresa no es visible para el. Devuelve la version vigente de cada uno, que es la misma ' +
+      'contra la que se califica: la rubrica es publica y es igual para todos los finalistas.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'La vacante no existe, o quien pregunta no tiene acceso a ella. Un candidato solo accede si fue invitado y la vacante ya esta publicada.',
+  })
+  ejercicios(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() p: Peticion,
+  ): Promise<ResumenVersion[]> {
+    return this.vacantes.ejerciciosDeLaVacante(id, solicitanteDe(p));
   }
 
   @Patch(':id')

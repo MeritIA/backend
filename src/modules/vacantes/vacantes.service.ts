@@ -11,7 +11,7 @@ import {
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
 import { Rol } from '../autenticacion/index.js';
-import { EjerciciosService } from '../ejercicios/index.js';
+import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
 
 /** Quien pide, tal como lo resolvio el guardia de autenticacion. */
@@ -333,6 +333,49 @@ export class VacantesService {
     const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
     if (!vacante) throw new NotFoundException('La vacante no existe.');
     return vacante.intentosPermitidos;
+  }
+
+  /**
+   * El enunciado y la rubrica de los ejercicios de la vacante.
+   *
+   * POR QUE ESTO EXISTE
+   *
+   * `GET /vacantes/:id` devuelve las filas de enlace (`idEjercicio`, `orden`),
+   * no el enunciado. Y `ejercicios:leer` esta concedido a reclutador y
+   * administrador, **no a candidato**. El resultado era que se invitaba a una
+   * persona a resolver un ejercicio que no tenia forma de leer: podia entregar
+   * un archivo, pero no saber que se le pedia ni como se le iba a calificar.
+   *
+   * POR QUE AQUI Y NO EN EL MODULO DE EJERCICIOS
+   *
+   * El permiso para leer esto no nace del banco de ejercicios, nace de la
+   * vacante: se concede por estar invitado a ELLA. Por eso la puerta es esta, y
+   * reusa `exigirAcceso`, que ya decide quien entra —el dueno, un administrador,
+   * o un candidato invitado a una vacante que no sea borrador— y responde 404 a
+   * los demas. Un candidato sigue sin poder leer el banco de la empresa.
+   *
+   * SE DEVUELVE LA VERSION VIGENTE, LA MISMA CON LA QUE SE CALIFICA
+   *
+   * `versionVigenteDe` es exactamente lo que el modulo de evaluacion consulta
+   * para fijar contra que rubrica califica. Que las dos lean lo mismo es lo que
+   * sostiene la promesa del producto: la rubrica es publica y es la misma para
+   * todos los finalistas. Si un dia se versiona un ejercicio con una vacante ya
+   * publicada, las dos cambian a la vez, no una sin la otra.
+   */
+  async ejerciciosDeLaVacante(id: string, solicitante: Solicitante): Promise<ResumenVersion[]> {
+    const vacante = await this.obtenerCompleta(id);
+    await this.exigirAcceso(vacante, solicitante);
+
+    const versiones = await Promise.all(
+      vacante.ejercicios.map((enlace) =>
+        this.ejerciciosDelBanco.versionVigenteDe(enlace.idEjercicio),
+      ),
+    );
+
+    // Un ejercicio sin ninguna version no deberia existir —se crea con la v1 en
+    // la misma operacion—, pero si lo hubiera se omite en vez de romper la
+    // pantalla entera del candidato por un dato corrupto de otro modulo.
+    return versiones.filter((v): v is ResumenVersion => v !== null);
   }
 
   // --- Interno ---
