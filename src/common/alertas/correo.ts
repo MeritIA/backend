@@ -1,27 +1,44 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
 
+/** Lo que paso con un envio. Se guarda tal cual en la tabla de notificaciones. */
+export type ResultadoDeEnvio = 'enviado' | 'sin_canal' | 'fallido';
+
 /**
- * Envio de correo para las alertas (paquete 5.5).
+ * Envio de correo. Lo usan dos cosas distintas y conviene tenerlo claro:
  *
- * El equipo eligio el correo como canal. Va aparte del servicio de alertas
- * para que las reglas —cuando avisar— se puedan probar sin tocar SMTP, y para
- * que cambiar de canal manana sea escribir otra clase como esta.
+ * 1. Las ALERTAS DE SEGURIDAD (paquete 5.5) con `enviar()`, que van siempre a
+ *    los destinatarios fijos de `ALERTAS_DESTINO` —el equipo—.
+ * 2. Las NOTIFICACIONES A CANDIDATOS con `enviarA()`, que van a una direccion
+ *    que llega como argumento.
+ *
+ * Va aparte del servicio de alertas para que las reglas —cuando avisar— se
+ * puedan probar sin tocar SMTP, y para que cambiar de canal manana sea escribir
+ * otra clase como esta.
  *
  * SIN CONFIGURAR NO ROMPE NADA
  *
- * Si faltan las variables de SMTP, el correo queda deshabilitado y la alerta se
- * registra en el log con un aviso. Es lo mismo que hace el servicio de IA: un
- * entorno de desarrollo sin credenciales tiene que poder arrancar, y un entorno
- * de produccion sin canal de alertas tiene que decirlo en voz alta en vez de
- * fallar al enviar el primer aviso.
+ * Si faltan las variables de SMTP, el correo queda deshabilitado y lo que se
+ * iba a enviar se registra en el log con un aviso. Es lo mismo que hace el
+ * servicio de IA: un entorno de desarrollo sin credenciales tiene que poder
+ * arrancar, y un entorno de produccion sin canal tiene que decirlo en voz alta
+ * en vez de fallar al enviar el primer aviso.
+ *
+ * LA REDIRECCION, Y POR QUE EXISTE
+ *
+ * `CORREO_REDIRECCION` manda TODO el correo a candidatos a una sola direccion,
+ * con el destinatario real escrito en el cuerpo. No es un adorno de pruebas: el
+ * dia que un entorno de preproduccion tenga SMTP de verdad, sin esto el primer
+ * `docker compose up` con datos sembrados le escribe a personas reales. Las
+ * alertas no se redirigen: ya van al equipo.
  */
 @Injectable()
 export class CorreoService {
-  private readonly logger = new Logger('Alertas');
+  private readonly logger = new Logger('Correo');
   private transporte: Transporter | undefined;
   private readonly desde: string;
   private readonly destinatarios: string[];
+  private readonly redireccion: string | undefined;
 
   /**
    * `env` va como @Optional() para que Nest no intente inyectarlo: es un
@@ -37,8 +54,11 @@ export class CorreoService {
       .split(',')
       .map((d) => d.trim())
       .filter(Boolean);
+    this.redireccion = env.CORREO_REDIRECCION?.trim() || undefined;
 
-    if (!host || this.destinatarios.length === 0) return;
+    // El transporte depende solo del host: `ALERTAS_DESTINO` es cosa de las
+    // alertas, y exigirlo aqui dejaria sin canal al correo a candidatos.
+    if (!host) return;
 
     this.transporte = createTransport({
       host,
@@ -51,46 +71,91 @@ export class CorreoService {
     });
   }
 
+  /** El canal de ALERTAS: hace falta el servidor y a quien avisar. */
   get configurado(): boolean {
+    return this.transporte !== undefined && this.destinatarios.length > 0;
+  }
+
+  /** Hay servidor de salida, sin importar a quien. Lo que mira el correo a candidatos. */
+  get hayTransporte(): boolean {
     return this.transporte !== undefined;
   }
 
   /**
-   * Envia el aviso. Nunca lanza: una alerta que tumba la peticion que la
-   * origino convierte un problema en dos.
+   * Envia el aviso de seguridad al equipo. Nunca lanza: una alerta que tumba la
+   * peticion que la origino convierte un problema en dos.
    */
   async enviar(asunto: string, cuerpo: string): Promise<boolean> {
-    if (!this.transporte) {
-      this.logger.warn(
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level: 'warn',
-          eventType: 'alerta_sin_canal',
-          message: 'Alerta sin enviar: falta configurar SMTP_HOST y ALERTAS_DESTINO',
-          metadata: { asunto },
-        }),
-      );
+    if (!this.configurado) {
+      this.registrar('warn', 'alerta_sin_canal', {
+        asunto,
+        detalle: 'Alerta sin enviar: falta configurar SMTP_HOST y ALERTAS_DESTINO',
+      });
       return false;
     }
+    return (await this.entregar(this.destinatarios, asunto, cuerpo, 'alerta')) === 'enviado';
+  }
 
+  /**
+   * Envia a una direccion concreta. Tampoco lanza: quien notifica a un
+   * candidato guarda el resultado y sigue con el siguiente, porque un buzon
+   * lleno no puede dejar sin aviso a los demas.
+   *
+   * No se registra la direccion en el log: es un dato personal y el log no es
+   * el lugar. Se registra a quien corresponde por identificador, que es lo que
+   * hace falta para auditar.
+   */
+  async enviarA(para: string, asunto: string, cuerpo: string): Promise<ResultadoDeEnvio> {
+    if (!this.transporte) {
+      this.registrar('warn', 'correo_sin_canal', { asunto });
+      return 'sin_canal';
+    }
+
+    if (this.redireccion) {
+      return this.entregar(
+        [this.redireccion],
+        `[redirigido] ${asunto}`,
+        `Este correo iba a: ${para}\n` +
+          `Se redirigio porque CORREO_REDIRECCION esta puesta en este entorno.\n` +
+          `${'-'.repeat(60)}\n\n${cuerpo}`,
+        'notificacion',
+      );
+    }
+
+    return this.entregar([para], asunto, cuerpo, 'notificacion');
+  }
+
+  private async entregar(
+    para: string[],
+    asunto: string,
+    cuerpo: string,
+    clase: 'alerta' | 'notificacion',
+  ): Promise<ResultadoDeEnvio> {
     try {
-      await this.transporte.sendMail({
+      await this.transporte?.sendMail({
         from: this.desde,
-        to: this.destinatarios,
+        to: para,
         subject: asunto,
         text: cuerpo,
       });
-      return true;
+      return 'enviado';
     } catch (e) {
-      this.logger.error(
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level: 'error',
-          eventType: 'alerta_no_enviada',
-          metadata: { asunto, detalle: e instanceof Error ? e.message : String(e) },
-        }),
-      );
-      return false;
+      this.registrar('error', clase === 'alerta' ? 'alerta_no_enviada' : 'correo_no_enviado', {
+        asunto,
+        detalle: e instanceof Error ? e.message : String(e),
+      });
+      return 'fallido';
     }
+  }
+
+  private registrar(nivel: 'warn' | 'error', eventType: string, metadata: object): void {
+    const linea = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: nivel,
+      eventType,
+      metadata,
+    });
+    if (nivel === 'warn') this.logger.warn(linea);
+    else this.logger.error(linea);
   }
 }

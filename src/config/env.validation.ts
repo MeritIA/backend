@@ -237,6 +237,39 @@ export class VariablesDeEntorno {
   @IsOptional()
   @IsString()
   ALERTAS_DESTINO?: string;
+
+  /**
+   * Manda TODO el correo a candidatos a una sola direccion, con el destinatario
+   * real escrito en el cuerpo.
+   *
+   * Existe para que un entorno de preproduccion con SMTP de verdad no le
+   * escriba a personas reales con datos sembrados. Las alertas de seguridad no
+   * se redirigen: ya van al equipo.
+   */
+  @IsOptional()
+  @IsString()
+  CORREO_REDIRECCION?: string;
+
+  /**
+   * Avisar por correo a los candidatos cuando se cierra una vacante.
+   *
+   * Apagado si no se pone en 'true', y no por timidez: SMTP existe hoy para
+   * mandar alertas de seguridad al equipo, asi que sin interruptor el dia que
+   * alguien lo configure para eso empezaria a escribirle a candidatos reales
+   * de rebote. Con el canal apagado los avisos se registran igual en estado
+   * pendiente, y el reenvio los recoge cuando se encienda.
+   */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  NOTIFICACIONES_A_CANDIDATOS?: string;
+
+  /**
+   * Donde entra el candidato a ver su resultado. Si falta, el correo no la
+   * inventa: dice que el resultado esta en la plataforma y no pone enlace.
+   */
+  @IsOptional()
+  @IsString()
+  URL_PLATAFORMA?: string;
 }
 
 export function validarEntorno(configuracion: Record<string, unknown>): VariablesDeEntorno {
