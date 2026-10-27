@@ -776,6 +776,10 @@ EDT ni backend que lo soporte.** Antes de construir el frontend hay que decidir
 cuáles de las 27 son el MVP; si se toman todas, falta backend que nadie ha
 planificado.
 
+El mapeo completo —pantalla por pantalla, qué endpoint existe, qué falta y qué
+amplía el alcance— está en **`docs/matriz-pantallas.md`**, junto con las ocho
+contradicciones que el cruce destapó entre los mockups y lo construido.
+
 **Esquema de reportes.** El *Diccionario de la EDT* lista "esquema de reportes"
 entre los recursos del paquete 5.1. El módulo se implementó **sin esquema
 propio**, porque no es dueño de ningún dato y una copia de las notas se
