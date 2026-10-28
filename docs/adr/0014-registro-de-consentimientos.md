@@ -1,4 +1,4 @@
-# 0014 · Los consentimientos son un historial, y el backend declara que no los hace cumplir
+# 0014 · Los consentimientos son un historial, y cada permiso dice si alguien lo hace cumplir
 
 **Estado:** vigente
 
@@ -35,8 +35,11 @@ administrador. El usuario sale del token y no hay identificador en la URL. Las
 rutas tampoco llevan permiso de la matriz de roles: ser titular de los propios
 datos no es un rol.
 
-**3. El backend registra y NO hace cumplir, y lo dice.** Cada permiso viaja con
-`vigilado: false` en la respuesta.
+**3. Cada permiso declara si alguien lo hace cumplir.** El campo `vigilado`
+viaja en la respuesta. El 28/10 pasó a `true` el de **calificación por IA**:
+`POST /entregas` lo exige antes de aceptar nada y responde **403** con el texto
+que dice cómo volver atrás. Los otros tres siguen en `false` porque las
+funciones que gobiernan no existen.
 
 ## Alternativas descartadas
 
@@ -59,9 +62,17 @@ datos no es un rol.
   esquema, así que aquí sí era posible. Se deja fuera porque «eliminar cuenta»
   de B24 tiene que poder borrar al usuario y **conservar** la prueba de que un
   día consintió, que es justo lo que la cascada destruiría.
-- **Hacer cumplir los permisos ahora.** Es lo que uno querría, y no se puede sin
-  inventar producto: las cuatro funciones que gobiernan —proctoring (B15/B16),
-  banco de talento (B24), Mentor IA (B22)— no existen en el backend.
+- **Hacer cumplir los cuatro permisos.** No se puede sin inventar producto:
+  proctoring (B15/B16), banco de talento (B24) y Mentor IA (B22) no existen en
+  el backend. El único que sí tenía dónde aplicarse es el de calificación por
+  IA, y se aplica.
+- **Para «calificación por IA», ofrecer una evaluación humana alterna** —que es
+  lo que el propio texto del permiso insinúa al hablar de «revisión humana
+  previa»—. Sería lo mejor para el candidato y es el flujo C de moderación, que
+  no tiene paquete ni backend: prometerlo sería prometer lo que no existe.
+- **Para ese mismo permiso, que revocarlo sacara del proceso en curso.**
+  Obligaría a decidir qué pasa con las entregas ya evaluadas y con el pago del
+  reto, que es cobro y está fuera de alcance.
 - **Callar que no se hacen cumplir.** Sería la opción cómoda. Una pantalla que
   promete control sobre algo que nadie vigila es peor que no prometer nada, y en
   materia de datos personales es una promesa que un día hay que sostener ante
@@ -74,16 +85,21 @@ datos no es un rol.
 
 **Lo que cuesta:**
 
-- **Un permiso registrado no es un permiso respetado.** Hoy los cuatro están en
-  `vigilado: false`. Cuando se construya proctoring, el banco de talento o el
-  Mentor IA, cada uno tiene que llamar a `ConsentimientosService.autoriza()`
-  antes de tratar nada, y mover ese campo a `true`. Si alguien construye una de
-  esas funciones y no lo hace, el registro se convierte en decoración y nada en
-  el código se lo impide.
-- **Queda una contradicción abierta y es grande**: si «calificación por IA
-  generativa» se puede revocar, quien lo apague no puede ser evaluado, y evaluar
-  es el producto entero. Las tres salidas posibles están en el §6.10 de la matriz
-  de pantallas. El backend no la decide.
+- **Tres de los cuatro permisos siguen sin vigilar.** Cuando se construya
+  proctoring, el banco de talento o el Mentor IA, cada uno tiene que llamar a
+  `ConsentimientosService.autoriza()` antes de tratar nada, y mover `vigilado` a
+  `true`. Si alguien construye una de esas funciones y no lo hace, el registro se
+  convierte en decoración y **nada en el código se lo impide**.
+- **Revocar la calificación por IA impide participar**, y eso es duro. Es la
+  consecuencia honesta de que B12 lo muestre como revocable: el producto es
+  evaluar con IA. Queda un trabajo de **diseño**, no de backend: B12 lo pinta
+  como un interruptor más, junto a uno marcado «Opcional», sin advertir lo que
+  cuesta apagarlo. El backend devuelve ese aviso en el campo `efecto` de cada
+  permiso para que la pantalla lo muestre antes, no después.
+- **Revocar no detiene una entrega que ya está en la cola.** La revocación mira
+  hacia adelante y ese entregable se envió bajo un consentimiento válido en su
+  momento. La ventana es de minutos; cerrarla obligaría a inventar un estado de
+  entrega que hoy no existe. Está dicho en la D-17 y probado.
 - La tabla crece sin límite y nunca se purga. Es intencional —es un registro
   legal— pero significa que «eliminar cuenta» tendrá que decidir qué hacer con
   ella en vez de borrarla sin pensar.
