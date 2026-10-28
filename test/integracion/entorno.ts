@@ -199,6 +199,7 @@ export async function vaciarTablas(): Promise<void> {
   await cliente.connect();
   await cliente.query(`
     TRUNCATE
+      "notificaciones"."avisos",
       "evaluacion"."calificaciones_criterio",
       "evaluacion"."evaluaciones",
       "entregas"."historial_estados",

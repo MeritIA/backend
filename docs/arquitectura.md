@@ -41,7 +41,7 @@ del resto: picos de cómputo, respuestas de segundos o minutos y dependencia de
 un proveedor externo. Aislarlo evita que su carga afecte a la plataforma y
 permite cambiar de proveedor sin tocar el dominio.
 
-## 3. Los seis módulos
+## 3. Los módulos
 
 | Módulo | Responsabilidad | Esquema en PostgreSQL |
 |---|---|---|
@@ -51,10 +51,21 @@ permite cambiar de proveedor sin tocar el dominio.
 | `entregas` | Intentos de los candidatos y su estado | `entregas` |
 | `evaluacion` | Orquesta la calificación contra el servicio de IA | `evaluacion` |
 | `reportes` | Resultados consolidados por vacante o candidato | `reportes` |
+| `notificaciones` | Avisos por correo a los candidatos, y el registro de lo enviado | `notificaciones` |
 
 Los nombres van en español porque así los nombran el planteamiento de
 arquitectura y la EDT. Un paquete como *2.2 CRUD de Vacantes* apunta a
 `src/modules/vacantes/` sin traducción de por medio.
+
+**Son siete y los documentos dicen seis.** El séptimo nació el 27/10/2026 con la
+decisión de avisar por correo al cerrar una vacante (D-10). Se deja dicho en voz
+alta y no resuelto en silencio: el planteamiento de arquitectura y la EDT
+enumeran seis, y `notificaciones` no está en ninguno de los dos.
+
+Lo que hace que el añadido no cambie la arquitectura: **no suma ninguna arista al
+grafo de dependencias**. Importa a `vacantes`, `evaluacion` y `autenticacion`, y
+ninguno de los siete lo importa a él. El razonamiento completo —por qué no cabía
+dentro de `vacantes` ni de `reportes`— está en el [ADR 0013](adr/0013-aviso-por-correo-al-cerrar.md).
 
 ### 3.1 La regla de fronteras
 
@@ -78,6 +89,21 @@ El canal es `BusDeEventos` (`src/common/events/`). Quien publica no sabe quién
 escucha: entregas publica `entregas.entrega-completada` con solo identificadores,
 y evaluación (4.5) se suscribirá por ese nombre sin importar nada más de
 entregas que el nombre y el tipo de los datos.
+
+Hoy circulan tres eventos, y los tres llevan **solo identificadores**: nunca una
+entidad, nunca un archivo, nunca un dato personal.
+
+| Evento | Lo publica | Lo escucha |
+|---|---|---|
+| `entregas.entrega-completada` | `entregas` | `evaluacion` (encola la calificación) |
+| `evaluacion.evaluacion-finalizada` | `evaluacion` | disponible para `reportes` (paquete 4.5) |
+| `vacantes.vacante-cerrada` | `vacantes` | `notificaciones` (avisa a los participantes) |
+
+El bus es **en memoria**, y eso tiene una consecuencia que no se tapa: si el
+proceso muere entre la publicación y la entrega, el evento se pierde. Por eso
+cada suscriptor guarda su propio rastro en base de datos —el estado `recibida` de
+la entrega, la fila `pendiente` del aviso— y existe una forma de reprocesar lo
+que se quedó a medias.
 
 - **Se publica después del commit.** Si se publicara dentro de la transacción,
   un suscriptor podría buscar una entrega que aún no existe para nadie más.
@@ -231,7 +257,7 @@ y destroza cualquier acento. El equipo trabaja en español.
 ```
 src/
 ├── main.ts                  arranque, CORS y publicación de OpenAPI
-├── app.module.ts            raíz: registra los seis módulos
+├── app.module.ts            raíz: registra los módulos de negocio
 ├── config/                  validación de variables de entorno
 ├── database/                conexión, esquemas y migraciones versionadas
 ├── docs/                    generación de la especificación OpenAPI
@@ -240,7 +266,7 @@ src/
 │   ├── cors/                política por tipo de cliente
 │   ├── rate-limit/          límites multicapa con Redis
 │   └── events/             contrato de los eventos de dominio
-└── modules/                 los seis módulos de negocio
+└── modules/                 los módulos de negocio
     └── <modulo>/
         ├── index.ts         interfaz pública: lo que no se reexporta es interno
         ├── <modulo>.module.ts

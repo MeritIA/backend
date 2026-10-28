@@ -10,7 +10,9 @@ import {
   admiteEdicion,
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
+import { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';
 import { Rol } from '../autenticacion/index.js';
+import { BusDeEventos } from '../../common/events/index.js';
 import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
 
@@ -48,6 +50,7 @@ export class VacantesService {
     private readonly asignaciones: Repository<VacanteCandidato>,
     private readonly dataSource: DataSource,
     private readonly ejerciciosDelBanco: EjerciciosService,
+    private readonly bus: BusDeEventos,
   ) {}
 
   async crear(datos: CrearVacanteDto, solicitante: Solicitante): Promise<Vacante> {
@@ -203,6 +206,21 @@ export class VacantesService {
     await this.vacantes.save(vacante);
 
     this.registrar('vacante_cerrada', solicitante, { idVacante: id });
+
+    // Despues de guardar, nunca antes: un suscriptor que avisara de un cierre
+    // que luego no se guarda escribiria a los candidatos por un cierre que no
+    // existio. La entrega del bus es asincrona, asi que esto no hace esperar al
+    // reclutador.
+    this.bus.publicar<EventoVacanteCerrada>({
+      name: VACANTE_CERRADA,
+      occurredAt: new Date(),
+      payload: {
+        idVacante: id,
+        idEmpresa: vacante.idEmpresa,
+        idUsuarioQueCerro: solicitante.id,
+      },
+    });
+
     return this.obtenerCompleta(id);
   }
 
@@ -371,6 +389,34 @@ export class VacantesService {
           });
 
     return { ids, porEstado, contratados };
+  }
+
+  /**
+   * Lo que el modulo de notificaciones necesita para redactar el aviso de
+   * cierre: el titulo, la empresa y el estado.
+   *
+   * El titulo va porque un correo que dice "se cerro un proceso" sin decir cual
+   * no sirve de nada a quien se postulo a tres. El estado va para que el
+   * suscriptor pueda comprobar por su cuenta que la vacante sigue cerrada: el
+   * evento pudo publicarse hace rato, y un reenvio manual no debe avisar de un
+   * cierre que ya no es cierto.
+   *
+   * No lleva comprobacion de acceso y por eso devuelve lo minimo: ni candidatos
+   * ni ejercicios. Quien la llama lo hace por un evento de este mismo modulo o
+   * desde un endpoint que ya comprobo la propiedad de la vacante.
+   */
+  async datosParaNotificar(idVacante: string): Promise<DatosParaNotificar | null> {
+    const vacante = await this.vacantes.findOne({
+      where: { id: idVacante },
+      select: { id: true, titulo: true, idEmpresa: true, estado: true },
+    });
+    if (!vacante) return null;
+    return {
+      idVacante: vacante.id,
+      titulo: vacante.titulo,
+      idEmpresa: vacante.idEmpresa,
+      estado: vacante.estado,
+    };
   }
 
   /**
@@ -552,4 +598,12 @@ export interface PanelDeVacantes {
   porEstado: Record<EstadoVacante, number>;
   /** Personas contratadas en toda la empresa, no en una vacante. */
   contratados: number;
+}
+
+/** Lo justo para redactar el aviso de cierre de una vacante. */
+export interface DatosParaNotificar {
+  readonly idVacante: string;
+  readonly titulo: string;
+  readonly idEmpresa: string;
+  readonly estado: EstadoVacante;
 }

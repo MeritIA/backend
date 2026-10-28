@@ -51,6 +51,12 @@ export const PERMISOS = {
   'reportes:revelarIdentidad': [Rol.Reclutador, Rol.Administrador],
   'reportes:verAuditoria': [Rol.Reclutador, Rol.Administrador],
 
+  // Los avisos por correo de una vacante: mirar que salio y reintentar lo que
+  // no. Los mismos roles que ven los reportes de la vacante, porque es la misma
+  // persona la que cierra el proceso y responde por lo que se comunico.
+  'notificaciones:verDeLaVacante': [Rol.Reclutador, Rol.Administrador],
+  'notificaciones:reenviar': [Rol.Reclutador, Rol.Administrador],
+
   'usuarios:administrar': [Rol.Administrador],
   'empresas:administrar': [Rol.Administrador],
 } as const satisfies Record<string, readonly Rol[]>;

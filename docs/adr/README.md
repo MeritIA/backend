@@ -13,7 +13,7 @@ consecuencias malas no es una decisión, es publicidad.
 
 | # | Decisión | Estado |
 |---|---|---|
-| [0001](0001-monolito-modular.md) | Monolito modular de seis módulos, no microservicios | Vigente |
+| [0001](0001-monolito-modular.md) | Monolito modular, no microservicios | Vigente |
 | [0002](0002-un-esquema-por-modulo.md) | Un esquema de PostgreSQL por módulo, sin claves foráneas entre ellos | Vigente |
 | [0003](0003-postgresql-unica-base.md) | PostgreSQL como única base de datos | Vigente |
 | [0004](0004-rest-con-openapi.md) | REST con contrato OpenAPI, no GraphQL | Vigente |
@@ -25,6 +25,7 @@ consecuencias malas no es una decisión, es publicidad.
 | [0010](0010-reportes-sin-esquema-propio.md) | Reportes compone en vivo y no guarda una copia | Vigente, con disparador de revisión |
 | [0011](0011-control-de-admision.md) | Control de admisión en el middleware, 503 antes de ahogarse | Vigente, pendiente de re-medir |
 | [0012](0012-404-en-vez-de-403.md) | A un recurso ajeno se responde 404, no 403 | Vigente |
+| [0013](0013-aviso-por-correo-al-cerrar.md) | Cerrar una vacante avisa por correo, y el aviso no lleva el resultado | Vigente, apagado por defecto |
 
 El **plan de actualización tecnológica** —cómo cambia el monolito con el tiempo,
 y a qué número se parte qué— está en

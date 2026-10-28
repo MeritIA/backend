@@ -13,7 +13,7 @@ el día que alguien se aburre en vez del día que hace falta.
 
 ## 1. Dónde estamos: etapa 0
 
-Un proceso, seis módulos, PostgreSQL y Redis. Lo medido con `k6`
+Un proceso, siete módulos, PostgreSQL y Redis. Lo medido con `k6`
 (`rendimiento.md`):
 
 | Medida | Valor |
@@ -127,7 +127,7 @@ desapareció. De ahí tres prácticas que ya están puestas:
 
 **Cadencia.** Dependabot abre los PR; el equipo los agrupa semanalmente. Los
 `patch` y `minor` entran si la CI está verde —cinco verificaciones: Gitleaks,
-`npm audit`, lint/build/contrato, 493 pruebas con cobertura, y SonarQube—. Las
+`npm audit`, lint/build/contrato, 521 pruebas con cobertura, y SonarQube—. Las
 **mayores se tratan de una en una**, cada una en su rama, porque una mayor es un
 cambio de comportamiento y no una actualización.
 

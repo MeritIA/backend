@@ -9,7 +9,7 @@
   en tres flujos (A empresa ×10, B candidato ×14, C moderación ×3) y tres
   diagramas de flujo.
 - **Fuente de los endpoints**: `docs/openapi.json`, generado del código.
-  **40 operaciones** en el momento de escribir esto.
+  **45 operaciones** en el momento de escribir esto.
 - **Fecha**: 26 de octubre de 2026.
 
 ---
@@ -54,7 +54,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | A05 | Pago rechazado | ✗ ⛔ | Ruta de excepción completa del cobro. Lo único que ya se sostiene es que la vacante quede **en borrador**, que es el estado que la pantalla describe. |
 | A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
-| A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/candidatos/{idCandidato}/contratar`, `POST .../cerrar`, `POST .../revelar` | **Marcar contratado ya existe**, con quién lo registró y cuándo. Falta **notificar el resultado a los finalistas** (§6.3, decisión abierta) y el mensaje al seleccionado ⛔. |
+| A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/candidatos/{idCandidato}/contratar`, `POST .../cerrar`, `POST .../revelar`, `GET /notificaciones/vacantes/{id}` | **Marcar contratado ya existe**, con quién lo registró y cuándo, y **cerrar ya avisa por correo** a quienes participaron (§6.3, D-10): la pantalla puede mostrar el estado de cada aviso y reintentar lo que no salió. Falta el **mensaje directo al seleccionado**, que es decisión de la empresa y no un aviso automático ⛔. |
 | A09 | Informe de auditoría | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar` | La **auditoría de sesgo** exige un dato que hoy no se recoge (§6.8). Las métricas de integridad vienen de moderación ⛔. «Descargar informe» es PDF; hoy solo hay CSV. |
 | A10 | Banco de retos | ◐ `GET /ejercicios`, `GET /ejercicios/{id}`, `DELETE /ejercicios/{id}` | El banco **ya es reutilizable y versionado**. Faltan: estadísticas de uso por ejercicio, estado de validación, y toda la **suscripción** ⛔. |
 
@@ -111,7 +111,7 @@ invitado**. En B13 descubre vacantes por **% de afinidad**, y A04 promete que
 finalistas». Eso es un motor de preselección que no existe, y cambia quién
 invita a quién: hoy invita el reclutador, uno por uno.
 
-### 6.3 Cerrar la vacante contra revelar la identidad — **medio decidida**
+### 6.3 Cerrar la vacante contra revelar la identidad — **decidida**
 
 En A08 **cerrar es lo que revela** la identidad del seleccionado y notifica el
 resultado a los quince finalistas. En el backend, `cerrar` y `revelar` son dos
@@ -125,13 +125,25 @@ sin exigir que la identidad se haya revelado antes: pedirlo obligaría a
 `vacantes` a preguntarle a `reportes`, que ya depende de `vacantes`, y no
 protegería nada —quien no reveló no sabe a quién contrató—.
 
-**Lo que sigue abierto, y es decisión del equipo:** si cerrar debe **notificar
-por correo a los finalistas**. El canal existe (`CorreoService`, paquete 5.5),
-pero hoy solo envía alertas de seguridad al equipo, no mensajes a personas
-externas. Son dos preguntas, no una: qué dice ese correo —«el proceso se cerró»
-no es lo mismo que «no fuiste seleccionado»— y quién aprueba que el sistema
-empiece a escribirle a candidatos reales el día que se configure SMTP. Por eso
-no se programó de oficio.
+**Lo decidido el 27/10 (D-10): cerrar sí avisa por correo**, y a quienes
+tuvieron al menos una entrega evaluada. El aviso dice que el proceso se cerró y
+que el resultado está en la plataforma; **no lleva la nota, ni el puesto, ni si
+la persona fue seleccionada**. Las dos preguntas abiertas quedaron respondidas
+así:
+
+- **Qué dice.** «El proceso se cerró», nunca «no fuiste seleccionado». Cerrar no
+  es contratar, y comunicar un rechazo es una decisión de la empresa sobre su
+  reputación, no el efecto secundario de un trabajo automático. La nota no va en
+  el correo: se mira autenticada, junto a la rúbrica que la explica.
+- **Quién aprueba escribirle a personas reales.** Nadie lo aprueba por omisión:
+  `NOTIFICACIONES_A_CANDIDATOS` nace apagado (**D-11**) y existe
+  `CORREO_REDIRECCION` para que el primer entorno con SMTP de verdad mande todo
+  a una sola dirección del equipo. Con el canal apagado los avisos se registran
+  igual como pendientes, así que encenderlo no deja a nadie sin aviso.
+
+Queda **un límite escrito**: a quien fue invitado y no entregó nada no se le
+avisa, porque el texto le sería falso —no tiene resultado que mirar—. Mandarle
+otro texto es trabajo de producto que nadie ha decidido.
 
 ### 6.4 La entrega es un archivo, no una sesión
 
@@ -240,12 +252,11 @@ Con eso se demuestra el núcleo del producto: una empresa define un reto con su
 rúbrica, invita candidatos, la IA califica contra esa rúbrica, y el reclutador
 compara **sin ver nombres** hasta que decide a quién contactar, dejando rastro.
 
-De los tres impedimentos que esta matriz encontró para arrancar, **dos ya están
-resueltos**: §6.5 (el candidato lee su reto) y §6.6 (ve su puesto, con el
-proceso cerrado). Queda uno:
-
-1. **§6.3** — si cerrar la vacante revela la identidad y notifica a los
-   finalistas, o si siguen siendo acciones separadas.
+Los tres impedimentos que esta matriz encontró para arrancar **están
+resueltos**: §6.5 (el candidato lee su reto), §6.6 (ve su puesto, con el proceso
+cerrado) y §6.3 (cerrar no revela identidades, pero sí avisa por correo). **El
+front puede empezar por cualquiera de las diez pantallas sin esperar una
+decisión de backend.**
 
 Lo demás —pagos, proctoring, moderación, MentorIA, perfil público, cesión de
 derechos— está anotado en `docs/arquitectura.md` §10 como ampliación de alcance,

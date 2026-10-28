@@ -145,6 +145,32 @@ export class EvaluacionService {
     };
   }
 
+  // --- Consultas que otros modulos pueden necesitar, por esta puerta ---
+
+  /**
+   * Quienes tienen al menos una entrega evaluada en la vacante.
+   *
+   * La usa el modulo de notificaciones para saber a quien avisar del cierre.
+   * Devuelve identificadores y nada mas: ni notas ni puestos, que no le hacen
+   * falta a quien solo tiene que escribir un correo.
+   *
+   * `distinct` porque un candidato puede tener varios intentos evaluados y el
+   * aviso es uno por persona, no uno por intento. Esa diferencia es la que
+   * convierte un correo en tres.
+   *
+   * No lleva comprobacion de acceso: no recibe nada de una peticion de usuario
+   * —la vacante la pone un evento de dominio o un endpoint que ya comprobo la
+   * propiedad— y lo que devuelve no identifica a nadie por si solo.
+   */
+  async candidatosConEvaluacionEn(idVacante: string): Promise<string[]> {
+    const filas = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('distinct e.idCandidato', 'idCandidato')
+      .where('e.idVacante = :idVacante', { idVacante })
+      .getRawMany<{ idCandidato: string }>();
+    return filas.map((f) => f.idCandidato);
+  }
+
   private async exigirAcceso(evaluacion: Evaluacion, solicitante: Solicitante): Promise<void> {
     if (solicitante.rol === Rol.Candidato) {
       if (evaluacion.idCandidato === solicitante.id) return;

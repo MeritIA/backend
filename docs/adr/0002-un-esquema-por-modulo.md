@@ -4,7 +4,7 @@
 
 ## Contexto
 
-Los seis módulos comparten una base. Si comparten también el espacio de nombres,
+Los módulos comparten una base. Si comparten también el espacio de nombres,
 la frontera del ADR 0001 se queda en el código: nada impide que una consulta de
 reportes lea `usuarios` y se acople a su forma.
 
