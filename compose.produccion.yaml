@@ -1,0 +1,155 @@
+# MeritIA en un servidor. No sustituye a `compose.yaml`: aquel es el entorno de
+# desarrollo y este es lo que corre en la maquina desplegada.
+#
+#   docker compose -f compose.produccion.yaml up -d
+#
+# TRES DIFERENCIAS CON EL DE DESARROLLO, Y LAS TRES IMPORTAN
+#
+# 1. El backend NO se construye aqui: se baja por digest de GHCR. La imagen que
+#    corre es exactamente la que la CI construyo y probo, no una compilada en
+#    el servidor con quien sabe que version de Node.
+# 2. PostgreSQL, Redis y el almacenamiento NO publican puertos. En desarrollo
+#    se publican para poder conectarse con un cliente; en un servidor con IP
+#    publica eso es exponer la base de datos a internet. Solo se alcanzan desde
+#    la red interna de compose.
+# 3. Hay un proxy delante con TLS, y no es un lujo: ver abajo.
+#
+# POR QUE TLS ES OBLIGATORIO Y NO UNA MEJORA
+#
+# La cookie de sesion se emite con `secure: NODE_ENV === 'production'`. Sobre
+# HTTP plano el navegador la descarta sin avisar, asi que el login "funciona"
+# --200, sin error-- y la siguiente peticion va sin sesion. Se veria como un
+# bucle de vuelta a la pantalla de entrar, sin nada en los registros.
+#
+# Por eso hace falta un DOMINIO: Let's Encrypt no emite certificados para una
+# IP. Si no hay uno propio, un subdominio gratuito de DuckDNS sirve.
+#
+# TODO EN EL MISMO ORIGEN
+#
+# Caddy sirve el frontend en `/` y hace de proxy del backend en `/api`. No es
+# por comodidad: la cookie va con `SameSite=strict`, asi que un frontend en
+# otro dominio no la enviaria nunca. Mismo origen y el problema no existe.
+
+name: meritia
+
+services:
+  proxy:
+    image: caddy:2.10-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      # Sin dominio no hay certificado, y sin certificado el navegador
+      # descarta la cookie de sesion. Por eso es obligatorio.
+      DOMINIO: '${DOMINIO:?falta DOMINIO; sin el no hay TLS y la sesion no funciona}'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # El build del frontend. Mientras no haya uno, Caddy sirve un 404 en `/`
+      # y la API sigue funcionando en `/api`.
+      - ./web:/srv/web:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    # La pone el despliegue, por digest. Sin valor por omision a proposito:
+    # arrancar esto sin saber que imagen es seria desplegar a ciegas.
+    image: ${IMAGEN:?falta IMAGEN, el digest de ghcr.io que publico la CI}
+    environment:
+      NODE_ENV: production
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:-meritia}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?definelo en el .env del servidor}
+      DATABASE_NAME: ${DATABASE_NAME:-meritia}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://almacenamiento:8333
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?definelo en el .env del servidor}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?definelo en el .env del servidor}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?definelo en el .env del servidor}
+      PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY:?definelo en el .env del servidor}
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:?definelo en el .env del servidor}
+      # El frontend vive en el mismo origen, asi que este es el unico permitido.
+      ALLOWED_ORIGINS: https://${DOMINIO}
+      URL_PLATAFORMA: https://${DOMINIO}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-}
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-}
+      # Correo a candidatos: sigue apagado hasta que alguien lo decida (D-11).
+      NOTIFICACIONES_A_CANDIDATOS: ${NOTIFICACIONES_A_CANDIDATOS:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ALERTAS_DESTINO: ${ALERTAS_DESTINO:-}
+      CORREO_REDIRECCION: ${CORREO_REDIRECCION:-}
+    # Sin `ports`: solo el proxy lo alcanza, por la red interna.
+    expose:
+      - '3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      almacenamiento:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-meritia}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?definelo en el .env del servidor}
+      POSTGRES_DB: ${DATABASE_NAME:-meritia}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-meritia} -d ${DATABASE_NAME:-meritia}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  almacenamiento:
+    image: chrislusf/seaweedfs:4.48
+    entrypoint:
+      - sh
+      - -c
+      - >
+        printf '{"identities":[{"name":"meritia","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -s3 -s3.config=/tmp/s3.json -dir=/data -ip=0.0.0.0
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?definelo en el .env del servidor}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?definelo en el .env del servidor}
+    volumes:
+      - almacenamiento-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(curl -s -o /dev/null -w %{http_code} --max-time 3 http://localhost:8333/)" = 403
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  almacenamiento-data:
+  caddy-data:
+  caddy-config:
