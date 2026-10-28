@@ -699,13 +699,12 @@ describe('integracion: entregas', () => {
           decisiones: [
             { tipo: 'biometria', concedido: false },
             { tipo: 'perfil_publico', concedido: false },
-            { tipo: 'mentor_ia', concedido: false },
           ],
         })
         .expect(200);
 
-      // Los otros tres estan en `vigilado: false` y tienen que seguir sin
-      // efecto: inventarles uno seria inventar producto.
+      // Las otras dos finalidades estan en `vigilado: false` y tienen que
+      // seguir sin efecto: inventarles uno seria inventar producto.
       await entregar(candidato, idVacante, ejercicios[0]).expect(201);
     });
 

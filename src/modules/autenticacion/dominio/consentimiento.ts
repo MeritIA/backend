@@ -1,36 +1,48 @@
 /**
  * Los permisos que el titular de los datos concede o revoca.
  *
- * DE DONDE SALE ESTA LISTA
+ * DE DONDE SALE ESTA LISTA, Y POR QUE ES ESTA Y NO OTRA
  *
- * De las dos pantallas que los muestran, no de la cabeza de nadie: B12
- * ("Antes de continuar, decide que autorizas", paso 2 de 3 del registro) y el
- * panel "Privacidad de tus datos" de B24. Los textos de abajo son los de esas
- * pantallas.
+ * Del **Taller 2 · BPM y Wireframes**, que es donde el propio equipo audito su
+ * proceso. Entre los defectos que encontro en el BPM:
  *
- * LAS DOS PANTALLAS NO COINCIDEN, Y ESO NO SE RESUELVE AQUI
+ *   "El consentimiento inicial se asume suficiente para cubrir todo el ciclo
+ *    del dato: grabacion biometrica, calificacion por IA y exposicion
+ *    posterior del perfil 'visible para otras empresas' en el banco de
+ *    talento. No se modela un consentimiento diferenciado por cada uso
+ *    posterior del dato."
  *
- * B12 pide tres permisos: biometria, calificacion por IA y publicacion del
- * perfil. B24 ofrece revocar otros tres: perfil visible, grabaciones
- * biometricas y **datos para el Mentor IA**. O sea:
+ * Y el cambio que decidio:
  *
- * - "Datos para el Mentor IA" se puede revocar en B24 pero **nunca se pidio**.
- *   Tratar datos para una finalidad que el titular no autorizo es justo lo que
- *   la Ley 1581 prohibe, asi que aqui nace en `false` y hace falta pedirlo.
- * - "Calificacion por IA generativa" se pide en B12 y **no aparece** en el
- *   panel de revocacion, aunque la propia B12 promete que "cada permiso es
- *   independiente y puedes revocarlo cuando quieras desde Mi perfil >
- *   Privacidad".
+ *   "Separar el consentimiento unico en pasos diferenciados por finalidad
+ *    (grabacion/biometria, calificacion por IA, publicacion del perfil a
+ *    terceros en el banco de talento), cada uno revocable de forma
+ *    independiente por el candidato."
  *
- * Esa segunda era la de verdad incomoda: si se puede revocar, un candidato que
- * lo apague no puede ser evaluado, y evaluar es el producto entero. Se decidio
- * el 28/10 (D-17, contradiccion §6.10 de la matriz): **si es revocable, y
- * revocarlo significa no poder entregar**. El modulo de entregas lo exige antes
- * de aceptar nada, y el candidato recibe un 403 que dice como volver atras.
+ * TRES finalidades, nombradas. Son exactamente las tres tarjetas de la
+ * pantalla B12, en ese orden: B12 no es un mockup mas, es la implementacion de
+ * esa correccion. Por eso esta lista manda sobre cualquier otra (D-18).
  *
- * Los otros tres se **registran y no se hacen cumplir**, y el campo `vigilado`
- * lo dice en la respuesta en vez de callarlo: las funciones que gobiernan
- * —proctoring, banco de talento, Mentor IA— no existen todavia en el backend.
+ * QUE PASO CON "DATOS PARA EL MENTOR IA"
+ *
+ * Aparece en el panel de B24 y en ningun documento mas: ni en el Taller 2, ni
+ * en la EDT, ni en el Charter, ni en el Plan de Seguridad. El Modelo de
+ * Negocio dice ademas que el mentor arranca "con datos publicos de mercado
+ * laboral", o sea sin tratar datos del candidato para una finalidad nueva.
+ * No es una finalidad documentada hoy, asi que no se pide: pedir un permiso
+ * que nadie necesita entrena a la gente a decir que si sin leer.
+ *
+ * Cuando el mentor pase a usar "datos propios de contratacion" —que es lo que
+ * el mismo Modelo de Negocio planea— volvera a ser una finalidad, habra que
+ * anadirlo aqui y B12 tendra que preguntarlo.
+ */
+/**
+ * Todo lo que la tabla de consentimientos PUEDE contener, historia incluida.
+ *
+ * No es lo mismo que el catalogo: una finalidad que se dejo de ofrecer sigue
+ * teniendo filas, y un registro de consentimientos que no puede leer su propio
+ * pasado no sirve para lo que existe. `mentor_ia` esta aqui por eso y no
+ * aparece en `CATALOGO`.
  */
 export enum TipoDeConsentimiento {
   Biometria = 'biometria',
@@ -39,6 +51,7 @@ export enum TipoDeConsentimiento {
   MentorIA = 'mentor_ia',
 }
 
+/** Todo lo que la tabla puede guardar, retiradas incluidas. */
 export const TIPOS_DE_CONSENTIMIENTO = Object.values(TipoDeConsentimiento);
 
 /** Desde donde se tomo la decision. Sirve para probar como se obtuvo. */
@@ -80,6 +93,12 @@ export interface PermisoDelCatalogo {
   readonly vigilado: boolean;
 }
 
+/**
+ * Las finalidades que HOY se piden. Tres, las del Taller 2.
+ *
+ * Es deliberadamente mas corto que `TipoDeConsentimiento`: lo que se ofrece
+ * cambia con el producto, lo que la tabla guarda no se puede encoger.
+ */
 export const CATALOGO: readonly PermisoDelCatalogo[] = [
   {
     tipo: TipoDeConsentimiento.Biometria,
@@ -122,18 +141,20 @@ export const CATALOGO: readonly PermisoDelCatalogo[] = [
     efecto: 'El perfil deja de aparecer en el banco de talento.',
     vigilado: false,
   },
-  {
-    tipo: TipoDeConsentimiento.MentorIA,
-    titulo: 'Datos para el Mentor IA',
-    descripcion: 'Recomendaciones personalizadas.',
-    // Aparece en B24 y NO en B12: nadie lo pide. Nace apagado porque tratar
-    // datos para una finalidad no autorizada es lo que la Ley 1581 prohibe.
-    sePideEnElRegistro: false,
-    porOmision: false,
-    efecto: 'El Mentor IA deja de usar el historial de retos para recomendar.',
-    vigilado: false,
-  },
 ];
+
+/**
+ * Las finalidades que se pueden enviar hoy. Es lo que el contrato publica.
+ *
+ * Se deriva del catalogo en vez de escribirse aparte: dos listas que hay que
+ * acordarse de mover juntas acaban siendo una lista y un error.
+ */
+export const TIPOS_OFRECIDOS = CATALOGO.map((p) => p.tipo);
+
+/** Si esta finalidad se puede decidir hoy. Una retirada se lee, no se escribe. */
+export function seOfrece(tipo: TipoDeConsentimiento): boolean {
+  return CATALOGO.some((p) => p.tipo === tipo);
+}
 
 export function permisoDelCatalogo(tipo: TipoDeConsentimiento): PermisoDelCatalogo {
   const permiso = CATALOGO.find((p) => p.tipo === tipo);

@@ -63,7 +63,7 @@ es la última: **dónde se mira para saber si es verdad**.
 | Evaluar más rápido y más barato que leer CVs | Rendimiento y capacidad | **79 pet/s** sostenidas con **p95 83 ms**; punto de caída conocido en 50 it/s; pasado el tope se rechaza con 503 en vez de colapsar | `rendimiento.md`, ADR 0011 | 🟡 el rechazo con 503 **está sin re-medir** |
 | Que el candidato reciba algo por su trabajo, y no solo silencio | Transparencia / usabilidad | Lee el **enunciado y la rúbrica** antes de entregar, y al cerrarse el proceso ve **su puesto y el total** | `GET /vacantes/{id}/ejercicios`, `GET /evaluaciones/vacante/{id}/mi-puesto` (D-8) | ✅ |
 | Que una empresa pueda operar sola sin pedirnos nada | Disponibilidad | La caída del proveedor de IA **retrasa notas, no rechaza entregas**: la cola evalúa al volver | D-2, ADR 0007, health check | ✅ |
-| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **582 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
+| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **584 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
 | Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push, y **consentimientos con historial** que el backend hace cumplir donde puede | ADR 0006, ADR 0014, CI | 🟡 **consentimientos hechos** (B12 y el panel de B24, con historial); faltan «descargar mis datos» y «eliminar cuenta» |
 
 Las tres filas en amarillo son las que conviene llevar preparadas, porque son
@@ -111,6 +111,12 @@ el equipo aprobó (`matriz-pantallas.md` §8):
 - ✅ [`adr/`](adr/): catorce decisiones con su alternativa descartada, para el punto 6.
 - ✅ [`evolucion-tecnologica.md`](evolucion-tecnologica.md) con disparadores
   medidos, para el punto 8.
+- ✅ [`flujo-extremo-a-extremo.md`](flujo-extremo-a-extremo.md): el BPM del
+  equipo, transcrito del Figma el 28/10, con qué paso tiene backend y cuál no.
+  De sus catorce pasos, el backend cubre **uno entero y parte de dos**: verlo
+  en secuencia deja claro que pagos, moderación y proctoring son **la mitad
+  del proceso**, no extras. Confirmó la D-17 y destapó dos contradicciones
+  nuevas (§6.11 y §6.12).
 - ✅ Las cuatro pantallas del MVP que no se podían construir: el panel de la
   empresa (A02, una llamada en vez de N), la habilidad destacada del ranking
   (A06), el registro de contratación (A08) y el puesto del candidato (B22).

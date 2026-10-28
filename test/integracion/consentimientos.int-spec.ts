@@ -63,15 +63,14 @@ describe('integracion: consentimientos del titular', () => {
   }, 60_000);
 
   describe('el catalogo que la pantalla pinta', () => {
-    it('devuelve los cuatro permisos aunque no se haya decidido ninguno', async () => {
+    it('devuelve las tres finalidades del Taller 2 aunque no se haya decidido ninguna', async () => {
       const { body } = await mios(ana).expect(200);
 
-      expect(body.permisos).toHaveLength(4);
+      expect(body.permisos).toHaveLength(3);
       expect(body.permisos.map((p: Permiso) => p.tipo)).toEqual([
         'biometria',
         'calificacion_ia',
         'perfil_publico',
-        'mentor_ia',
       ]);
       // La pantalla tiene que poder pintar los cuatro interruptores sin saber
       // cuales se guardaron alguna vez.
@@ -88,11 +87,10 @@ describe('integracion: consentimientos del titular', () => {
 
       expect(permisos.get('biometria')?.concedido).toBe(true);
       expect(permisos.get('calificacion_ia')?.concedido).toBe(true);
-      // El unico que B12 marca "Opcional", apagado en la pantalla.
+      // El unico que B12 marca "Opcional", apagado en la pantalla. Y lo que
+      // decide que nazca apagado NO es la pantalla: el paso 13 del BPM publica
+      // el perfil de todo el mundo, y manda el Taller 2 (D-18).
       expect(permisos.get('perfil_publico')?.concedido).toBe(false);
-      // Y el que nadie pide: nace apagado porque tratar datos para una
-      // finalidad no autorizada es lo que la ley prohibe.
-      expect(permisos.get('mentor_ia')?.concedido).toBe(false);
     });
 
     it('declara cual hace cumplir y cuales no', async () => {
@@ -162,21 +160,21 @@ describe('integracion: consentimientos del titular', () => {
 
     it('repetir la misma decision no guarda nada', async () => {
       await decidir(ana, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
       }).expect(200);
 
       const { body } = await decidir(ana, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
       }).expect(200);
 
       // Cien filas identicas harian mas dificil, no mas facil, responder
       // "desde cuando autoriza esto".
       expect(body.registradas).toBe(0);
-      expect(porTipo(body).get('mentor_ia')?.concedido).toBe(true);
+      expect(porTipo(body).get('perfil_publico')?.concedido).toBe(true);
 
       const [{ total }] = await consultar<{ total: string }>(
         `select count(*)::int as total from autenticacion.consentimientos
-          where id_usuario = $1 and tipo = 'mentor_ia'`,
+          where id_usuario = $1 and tipo = 'perfil_publico'`,
         [ana.id],
       );
       expect(Number(total)).toBe(1);
@@ -215,7 +213,7 @@ describe('integracion: consentimientos del titular', () => {
     });
 
     it('el origen por omision es el perfil', async () => {
-      await decidir(ana, { decisiones: [{ tipo: 'mentor_ia', concedido: true }] }).expect(200);
+      await decidir(ana, { decisiones: [{ tipo: 'perfil_publico', concedido: true }] }).expect(200);
 
       const [fila] = await consultar<{ origen: string }>(
         `select origen from autenticacion.consentimientos where id_usuario = $1`,
@@ -229,8 +227,8 @@ describe('integracion: consentimientos del titular', () => {
     it('rechaza el mismo permiso dos veces en una llamada', async () => {
       const { body } = await decidir(ana, {
         decisiones: [
-          { tipo: 'mentor_ia', concedido: true },
-          { tipo: 'mentor_ia', concedido: false },
+          { tipo: 'perfil_publico', concedido: true },
+          { tipo: 'perfil_publico', concedido: false },
         ],
       }).expect(400);
 
@@ -238,12 +236,22 @@ describe('integracion: consentimientos del titular', () => {
       expect(body.mensaje).toMatch(/dos veces/i);
     });
 
+    it('rechaza una finalidad retirada: el historial se lee, no se reescribe', async () => {
+      // `mentor_ia` sigue en el enum para poder leer filas viejas, pero ya no
+      // se ofrece: aparecia en el panel de B24 y en ningun documento mas.
+      const { body } = await decidir(ana, {
+        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+      }).expect(400);
+
+      expect(body.mensaje).toMatch(/ya no se pide/i);
+    });
+
     it('rechaza un permiso inventado, una decision sin booleano y una lista vacia', async () => {
       await decidir(ana, { decisiones: [{ tipo: 'lo_que_sea', concedido: true }] }).expect(400);
-      await decidir(ana, { decisiones: [{ tipo: 'mentor_ia', concedido: 'si' }] }).expect(400);
+      await decidir(ana, { decisiones: [{ tipo: 'perfil_publico', concedido: 'si' }] }).expect(400);
       await decidir(ana, { decisiones: [] }).expect(400);
       await decidir(ana, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
         origen: 'x',
       }).expect(400);
     });
@@ -252,7 +260,7 @@ describe('integracion: consentimientos del titular', () => {
       // Con forbidNonWhitelisted, mandar `idUsuario` es 400 y no un cambio
       // silencioso sobre otra persona.
       await decidir(ana, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
         idUsuario: luis.id,
       }).expect(400);
     });
@@ -273,7 +281,7 @@ describe('integracion: consentimientos del titular', () => {
       // La Ley 1581 no reparte este derecho por rol: exigir un permiso de la
       // matriz aqui dejaria a un reclutador sin poder revocar nada sobre si.
       const { body } = await decidir(reclutador, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
       }).expect(200);
 
       expect(body.registradas).toBe(1);
@@ -325,7 +333,7 @@ describe('integracion: consentimientos del titular', () => {
 
     it('no guarda la IP ni el navegador', async () => {
       await decidir(ana, {
-        decisiones: [{ tipo: 'mentor_ia', concedido: true }],
+        decisiones: [{ tipo: 'perfil_publico', concedido: true }],
       }).expect(200);
 
       const [fila] = await consultar<Record<string, unknown>>(

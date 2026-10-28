@@ -248,6 +248,40 @@ La primera salida —que no fuera revocable— se descarta porque contradice el 
 
 Los otros tres permisos siguen **registrados y sin vigilar** (`vigilado: false`), porque las funciones que gobiernan —proctoring, banco de talento, Mentor IA— no existen.
 
+### 6.11 El flujo publica el perfil de todo el mundo — **resuelta (D-18)**
+
+El BPM termina su camino feliz en el paso 13: **«Fin: pago recibido y perfil publicado — el candidato queda visible en el banco de talento»**. Automático, sin preguntar. B12 marca ese mismo permiso **«Opcional»** y lo deja **apagado**.
+
+**Manda B12, y no es una opinión: el propio equipo ya había diagnosticado el defecto.** En el *Taller 2 · BPM y Wireframes*, entre los hallazgos del proceso:
+
+> El consentimiento inicial se asume suficiente para cubrir todo el ciclo del dato: grabación biométrica, calificación por IA y **exposición posterior del perfil «visible para otras empresas» en el banco de talento**. No se modela un consentimiento diferenciado por cada uso posterior del dato.
+
+Y el cambio que ese mismo documento propuso:
+
+> Separar el consentimiento único en pasos diferenciados por finalidad **(grabación/biometría, calificación por IA, publicación del perfil a terceros en el banco de talento)**, cada uno revocable de forma independiente por el candidato.
+
+Tres finalidades, nombradas. **Son exactamente las tres tarjetas de B12, en ese orden.** B12 no es un mockup más: es la implementación de esa corrección.
+
+**Por qué el BPM sigue diciendo lo contrario.** El Taller 2 propuso seis cambios. El diagrama que hoy está en Figma aplicó tres —conectó la rama del falso positivo (Excepción 1), añadió la compuerta de pago con reintento (Excepción 2) y puso la auditoría de sesgo (Riesgo ético)— **y se dejó justo el del consentimiento**. No es que el BPM defienda otra postura: es que ese paso quedó sin rehacer.
+
+Y el **Modelo de Negocio** lo confirma por el otro lado: las dos fuentes de ingreso son el **pago por adelantado al publicar la vacante, según el número de finalistas a evaluar** y la **suscripción mensual al banco de retos**. Ninguna depende de que el perfil de cada candidato se publique, así que pedir permiso no le quita dinero a nadie.
+
+**Qué hay que cambiar:** el paso 13 del BPM, para que publique el perfil **solo con el permiso concedido**. El backend ya está así.
+
+### 6.12 El Mentor IA no es una finalidad documentada — **resuelta (D-18)**
+
+El paso 9 del BPM ejecuta el Mentor IA para todo el que no fue descalificado, y B24 ofrece un interruptor **«Datos para el Mentor IA»** que B12 nunca pide.
+
+**Manda la lista del Taller 2, y el Mentor IA no está en ella.** Las finalidades documentadas son tres y están nombradas una por una. «Datos para el Mentor IA» aparece **solo en el panel de B24**: no en el Taller 2, no en la EDT —que no lo menciona en ningún paquete—, no en el Charter, no en el Plan de Seguridad, no en la propuesta tecnológica.
+
+El Modelo de Negocio añade el dato que lo cierra: el mentor arranca **«con datos públicos de mercado laboral y después con datos propios de contratación a medida que crece el volumen»**. Al principio no trata datos del candidato para una finalidad nueva, así que **hoy no hay nada que consentir**.
+
+**Decisión:** el permiso **se retira del catálogo**. Pedir un permiso que nadie necesita no es prudencia: entrena a la gente a decir que sí sin leer, que es lo contrario de lo que una pantalla de consentimientos busca. Sigue en el enum de la base para poder leer el historial —un registro de consentimientos que no puede leer su propio pasado no sirve para lo que existe— y escribirlo devuelve **400**.
+
+**Cuando el mentor pase a usar «datos propios de contratación»**, como el propio Modelo de Negocio planea, vuelve a ser una finalidad: se añade al catálogo y **B12 tiene que preguntarla**.
+
+**Qué hay que cambiar en el diseño:** el panel de B24 tiene dos errores, no uno. Le sobra «Datos para el Mentor IA» y **le falta «Calificación por IA»**, que sí es una de las tres y cuya revocación el backend ya hace cumplir (D-17).
+
 ## 7. Lo que el backend ya tiene y ninguna pantalla usa
 
 El mapeo también funciona al revés, y ahí aparecen huecos de diseño:
