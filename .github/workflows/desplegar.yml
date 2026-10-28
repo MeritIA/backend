@@ -7,7 +7,11 @@
 #     de ese Environment (desarrollo, pruebas o produccion).
 #   - No se usa `secrets: inherit`: los secretos del repositorio no llegan aqui.
 #   - Los secretos de la aplicacion NO deben crearse a nivel de repositorio,
-#     solo por Environment (ver docs/ci-cd.md).
+#     solo por Environment (ver docs/despliegue.md).
+#
+# QUE HACE: entra por SSH al servidor del ambiente, deja alli la configuracion
+# que viene del repositorio, escribe el .env desde los secretos, corre las
+# migraciones y levanta la imagen que la CI publico en GHCR, por digest.
 
 name: Despliegue
 
@@ -41,23 +45,122 @@ jobs:
           PASETO_PUBLIC_KEY: ${{ secrets.PASETO_PUBLIC_KEY }}
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          DOMINIO: ${{ secrets.DOMINIO }}
         run: |
           faltan=0
-          for nombre in DATABASE_PASSWORD ENCRYPTION_KEY PASETO_PRIVATE_KEY PASETO_PUBLIC_KEY S3_ACCESS_KEY S3_SECRET_KEY; do
+          for nombre in DATABASE_PASSWORD ENCRYPTION_KEY PASETO_PRIVATE_KEY PASETO_PUBLIC_KEY S3_ACCESS_KEY S3_SECRET_KEY SSH_HOST SSH_USER SSH_KEY DOMINIO; do
             if [ -z "${!nombre}" ]; then
-              echo "::error::Falta el secreto $nombre en el Environment '$AMBIENTE'."
+              echo "::error::Falta el secreto $nombre en el Environment '$AMBIENTE'. Ver docs/despliegue.md."
               faltan=1
             fi
           done
           exit "$faltan"
 
-      # El comando concreto depende del proveedor de nube, que el proyecto aun
-      # no ha elegido. Falla a proposito: activar DESPLIEGUE_HABILITADO sin
-      # implementar este paso debe notarse, no pasar en verde sin desplegar nada.
-      - name: Desplegar la imagen
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # La clave va a un fichero con permisos 600 y no a ssh-agent: el agente
+      # sobrevive al paso y queda disponible para cualquier cosa que corra
+      # despues en el mismo runner.
+      - name: Preparar el acceso al servidor
         env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_despliegue
+          chmod 600 ~/.ssh/id_despliegue
+          # Sin esto, ssh pregunta por la huella del servidor y se queda
+          # esperando una respuesta que nadie va a escribir.
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # La configuracion viaja desde el repositorio, asi que lo que corre en el
+      # servidor es lo que esta en main y no lo que alguien edito alli a mano
+      # hace tres semanas.
+      - name: Copiar la configuracion al servidor
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          AMBIENTE: ${{ inputs.ambiente }}
+        run: |
+          destino="/opt/meritia/$AMBIENTE"
+          ssh -i ~/.ssh/id_despliegue "$SSH_USER@$SSH_HOST" "mkdir -p $destino"
+          scp -i ~/.ssh/id_despliegue compose.produccion.yaml Caddyfile "$SSH_USER@$SSH_HOST:$destino/"
+
+      # El .env se arma EN el servidor y nunca se escribe en el disco del
+      # runner: los valores van por la tuberia de ssh directamente a un fichero
+      # creado con umask 077.
+      - name: Escribir el entorno en el servidor
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
           AMBIENTE: ${{ inputs.ambiente }}
           IMAGEN: ${{ inputs.imagen }}
+          DOMINIO: ${{ secrets.DOMINIO }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          PASETO_PRIVATE_KEY: ${{ secrets.PASETO_PRIVATE_KEY }}
+          PASETO_PUBLIC_KEY: ${{ secrets.PASETO_PUBLIC_KEY }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          AI_SERVICE_URL: ${{ secrets.AI_SERVICE_URL }}
+          AI_SERVICE_API_KEY: ${{ secrets.AI_SERVICE_API_KEY }}
         run: |
-          echo "::error::Paso de despliegue pendiente de proveedor de nube. Imagen: $IMAGEN, ambiente: $AMBIENTE."
+          {
+            echo "IMAGEN=$IMAGEN"
+            echo "DOMINIO=$DOMINIO"
+            echo "DATABASE_PASSWORD=$DATABASE_PASSWORD"
+            echo "ENCRYPTION_KEY=$ENCRYPTION_KEY"
+            echo "PASETO_PRIVATE_KEY=$PASETO_PRIVATE_KEY"
+            echo "PASETO_PUBLIC_KEY=$PASETO_PUBLIC_KEY"
+            echo "S3_ACCESS_KEY=$S3_ACCESS_KEY"
+            echo "S3_SECRET_KEY=$S3_SECRET_KEY"
+            echo "AI_SERVICE_URL=$AI_SERVICE_URL"
+            echo "AI_SERVICE_API_KEY=$AI_SERVICE_API_KEY"
+          } | ssh -i ~/.ssh/id_despliegue "$SSH_USER@$SSH_HOST" "umask 077 && cat > /opt/meritia/$AMBIENTE/.env"
+
+      - name: Levantar la version nueva
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          AMBIENTE: ${{ inputs.ambiente }}
+          GHCR_USUARIO: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          orden='set -e
+          cd /opt/meritia/AMBIENTE_AQUI
+          echo "TOKEN_AQUI" | docker login ghcr.io -u "USUARIO_AQUI" --password-stdin
+          docker compose -f compose.produccion.yaml pull
+          docker compose -f compose.produccion.yaml run --rm backend npm run migration:run
+          docker compose -f compose.produccion.yaml up -d --remove-orphans
+          docker image prune -f'
+          orden="${orden//AMBIENTE_AQUI/$AMBIENTE}"
+          orden="${orden//TOKEN_AQUI/$GHCR_TOKEN}"
+          orden="${orden//USUARIO_AQUI/$GHCR_USUARIO}"
+          ssh -i ~/.ssh/id_despliegue "$SSH_USER@$SSH_HOST" "$orden"
+
+      # Las migraciones corren ANTES de levantar, en el paso anterior: un
+      # contenedor nuevo contra un esquema viejo no falla al arrancar, falla en
+      # la primera consulta de un usuario.
+      #
+      # Y este paso existe porque un `up -d` que devuelve cero no significa que
+      # la aplicacion responda. Si no responde, el despliegue falla.
+      - name: Comprobar que responde
+        env:
+          DOMINIO: ${{ secrets.DOMINIO }}
+        run: |
+          for intento in $(seq 1 30); do
+            codigo=$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMINIO/api/salud" || true)
+            if [ "$codigo" = "200" ]; then
+              echo "Responde 200 en el intento $intento."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::La aplicacion no respondio 200 en https://$DOMINIO/api/salud tras 5 minutos."
           exit 1
