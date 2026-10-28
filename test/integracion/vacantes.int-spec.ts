@@ -235,6 +235,42 @@ describe('integracion: vacantes', () => {
       await api(app).get(`/api/v1/vacantes/${id}`).set(auth(candidato)).expect(200);
     });
 
+    it('sigue viendo el proceso DESPUES de cerrarlo: ahi esta su resultado', async () => {
+      const id = await vacantePublicada();
+      await api(app)
+        .post(`/api/v1/vacantes/${id}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+      await api(app).post(`/api/v1/vacantes/${id}/cerrar`).set(auth(reclutador)).expect(200);
+
+      // El aviso de cierre le dice "tu resultado ya esta disponible en
+      // MeritIA" (D-10). Si la vacante desaparece de su lista, no tiene
+      // forma de llegar a el. Lo que se esconde es el borrador, no lo
+      // terminado.
+      const { body } = await api(app).get('/api/v1/vacantes').set(auth(candidato)).expect(200);
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ id, estado: 'cerrada' });
+    });
+
+    it('un borrador NO se le muestra, aunque este invitado', async () => {
+      const id = await crearVacante();
+      await api(app)
+        .put(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [await ejercicio()] })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${id}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+
+      // Esto es lo que el filtro existe para esconder, y sigue escondido.
+      const { body } = await api(app).get('/api/v1/vacantes').set(auth(candidato)).expect(200);
+      expect(body).toHaveLength(0);
+    });
+
     it('invitar a uno no se la muestra a otro', async () => {
       const id = await vacantePublicada();
       await api(app)

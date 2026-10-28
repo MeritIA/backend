@@ -80,8 +80,10 @@ export class VacantesService {
    * Listado, distinto segun quien pregunta.
    *
    * Tercer criterio de aceptacion: un candidato solo ve las vacantes que le han
-   * sido asignadas. Y ademas solo las publicadas: una vacante en borrador
-   * todavia no esta lista para que nadie la vea.
+   * sido asignadas. Y de esas, las publicadas y las cerradas: lo que se
+   * esconde es el BORRADOR, que todavia no esta listo para que nadie lo vea.
+   * Un proceso cerrado si se muestra, porque es donde el candidato va a mirar
+   * su resultado cuando le llega el aviso.
    */
   async listar(solicitante: Solicitante): Promise<Vacante[]> {
     if (solicitante.rol === Rol.Candidato) {
@@ -92,8 +94,17 @@ export class VacantesService {
       const ids = asignadas.map((a) => a.idVacante);
       if (ids.length === 0) return [];
 
+      // Publicadas Y CERRADAS. El filtro existe para esconder los borradores
+      // —una vacante sin publicar todavia no esta lista para que nadie la
+      // vea—, no para esconder los procesos terminados: el aviso de cierre le
+      // dice al candidato "tu resultado ya esta disponible en MeritIA" (D-10),
+      // y dejar la vacante fuera de su lista le quita la unica forma de
+      // llegar a el. Se encontro recorriendo el flujo con el front.
       return this.vacantes.find({
-        where: { id: In(ids), estado: EstadoVacante.Publicada },
+        where: {
+          id: In(ids),
+          estado: In([EstadoVacante.Publicada, EstadoVacante.Cerrada]),
+        },
         relations: { ejercicios: true },
         order: { publicadaEn: 'DESC' },
       });
