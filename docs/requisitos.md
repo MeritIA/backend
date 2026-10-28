@@ -96,7 +96,8 @@ respaldo.
 
 | ID | Requisito | Dónde | Estado |
 |---|---|---|---|
-| RF-CON-1 | El titular ve los cuatro permisos del catálogo con el texto que acepta, decididos o no | `dominio/consentimiento · CATALOGO` | implementado |
+| RF-CON-1 | El titular ve las **tres finalidades del Taller 2** con el texto que acepta, decididas o no | `dominio/consentimiento · CATALOGO` | implementado (D-18) |
+| RF-CON-8 | Una finalidad **retirada** se lee en el historial pero no se puede volver a decidir | `seOfrece`, 400 en el controlador | implementado (D-18) |
 | RF-CON-2 | Concede y revoca cada permiso de forma independiente y en cualquier momento | `PUT /autenticacion/consentimientos` | implementado |
 | RF-CON-3 | Cada decisión guarda **qué, cuándo, a qué versión del aviso y desde dónde** | `Consentimiento`, tabla que solo crece | implementado |
 | RF-CON-4 | Revocar **no borra** la decisión anterior: añade una fila | prueba de integración | implementado |

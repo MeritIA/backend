@@ -9,7 +9,7 @@ import {
 } from '@nestjs/swagger';
 import { ConsentimientosService } from './consentimientos.service.js';
 import { ConsentimientosRespuesta, RegistrarConsentimientosDto } from './dto/index.js';
-import { TipoDeConsentimiento, VERSION_DEL_AVISO } from './dominio/consentimiento.js';
+import { seOfrece, TipoDeConsentimiento, VERSION_DEL_AVISO } from './dominio/consentimiento.js';
 import type { UsuarioAutenticado } from './guardias/autenticacion.guard.js';
 
 interface Peticion {
@@ -83,6 +83,14 @@ export class ConsentimientosController {
       if (decisiones.has(d.tipo)) {
         throw new BadRequestException(
           `El permiso "${d.tipo}" viene dos veces en la misma llamada.`,
+        );
+      }
+      // El enum guarda finalidades retiradas para poder leer el historial; eso
+      // no significa que se puedan volver a decidir. Sin esto, una pantalla
+      // vieja seguiria escribiendo consentimientos de algo que ya no se pide.
+      if (!seOfrece(d.tipo)) {
+        throw new BadRequestException(
+          `El permiso "${d.tipo}" ya no se pide. Consulta el catalogo vigente con GET.`,
         );
       }
       decisiones.set(d.tipo, d.concedido);

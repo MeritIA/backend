@@ -248,35 +248,39 @@ La primera salida —que no fuera revocable— se descarta porque contradice el 
 
 Los otros tres permisos siguen **registrados y sin vigilar** (`vigilado: false`), porque las funciones que gobiernan —proctoring, banco de talento, Mentor IA— no existen.
 
-### 6.11 El flujo publica el perfil de todo el mundo; la pantalla dice que es opcional
+### 6.11 El flujo publica el perfil de todo el mundo — **resuelta (D-18)**
 
-El BPM del equipo (ver [`flujo-extremo-a-extremo.md`](flujo-extremo-a-extremo.md)) termina su camino feliz en el paso 13: **«Fin: pago recibido y perfil publicado — el candidato queda visible en el banco de talento»**. Automático, sin preguntar.
+El BPM termina su camino feliz en el paso 13: **«Fin: pago recibido y perfil publicado — el candidato queda visible en el banco de talento»**. Automático, sin preguntar. B12 marca ese mismo permiso **«Opcional»** y lo deja **apagado**.
 
-Pero en B12 ese mismo permiso, «Publicación de tu perfil a otras empresas», es el único marcado **«Opcional»**, y nace **apagado**. Y B24 lo ofrece como un interruptor que se revoca cuando uno quiera.
+**Manda B12, y no es una opinión: el propio equipo ya había diagnosticado el defecto.** En el *Taller 2 · BPM y Wireframes*, entre los hallazgos del proceso:
 
-O sea: **el flujo trata como automático algo que la pantalla presenta como una elección.** Si el banco de talento se construye siguiendo el diagrama, publica a gente que no lo autorizó.
+> El consentimiento inicial se asume suficiente para cubrir todo el ciclo del dato: grabación biométrica, calificación por IA y **exposición posterior del perfil «visible para otras empresas» en el banco de talento**. No se modela un consentimiento diferenciado por cada uso posterior del dato.
 
-Dos salidas, y ninguna la decide el backend:
+Y el cambio que ese mismo documento propuso:
 
-- **Manda la pantalla:** el paso 13 publica el perfil **solo si el permiso está concedido**, y para quien no lo concedió el proceso termina igual, sin publicar. Es lo coherente con la Ley 1581 y con lo que ya está implementado.
-- **Manda el flujo:** publicar el perfil es parte del servicio y deja de ser opcional. Entonces B12 no puede seguir marcándolo «Opcional», y habría que decir qué pasa con quien lo rechaza.
+> Separar el consentimiento único en pasos diferenciados por finalidad **(grabación/biometría, calificación por IA, publicación del perfil a terceros en el banco de talento)**, cada uno revocable de forma independiente por el candidato.
 
-El backend ya está del lado de la primera: el permiso nace apagado y nada publica nada. **Pero eso es la posición por omisión, no una decisión tomada.**
+Tres finalidades, nombradas. **Son exactamente las tres tarjetas de B12, en ese orden.** B12 no es un mockup más: es la implementación de esa corrección.
 
-### 6.12 El Mentor IA corre para todos y nadie lo autoriza
+**Por qué el BPM sigue diciendo lo contrario.** El Taller 2 propuso seis cambios. El diagrama que hoy está en Figma aplicó tres —conectó la rama del falso positivo (Excepción 1), añadió la compuerta de pago con reintento (Excepción 2) y puso la auditoría de sesgo (Riesgo ético)— **y se dejó justo el del consentimiento**. No es que el BPM defienda otra postura: es que ese paso quedó sin rehacer.
 
-El paso 9 del BPM, **«Mentor IA genera retroalimentación»**, está en la línea principal del flujo: le pasa a todo el que no fue descalificado.
+Y el **Modelo de Negocio** lo confirma por el otro lado: las dos fuentes de ingreso son el **pago por adelantado al publicar la vacante, según el número de finalistas a evaluar** y la **suscripción mensual al banco de retos**. Ninguna depende de que el perfil de cada candidato se publique, así que pedir permiso no le quita dinero a nadie.
 
-Y «Datos para el Mentor IA» es exactamente el permiso que **B24 deja revocar y que B12 nunca pide** (§6.10, punto 1). Hasta ahora eso parecía un descuido del mockup. El diagrama dice que no: **el flujo da por hecho un tratamiento de datos que nadie autoriza en ninguna pantalla.**
+**Qué hay que cambiar:** el paso 13 del BPM, para que publique el perfil **solo con el permiso concedido**. El backend ya está así.
 
-Tratar datos para una finalidad que el titular no autorizó es justo lo que prohíbe la Ley 1581. En el backend el permiso **nace apagado** por eso (D-16), lo que significa que, si el Mentor IA se construyera mañana respetando el permiso, **no se ejecutaría para nadie** —porque nadie lo ha concedido—.
+### 6.12 El Mentor IA no es una finalidad documentada — **resuelta (D-18)**
 
-Lo que hay que hacer es una de dos, y es trabajo de diseño:
+El paso 9 del BPM ejecuta el Mentor IA para todo el que no fue descalificado, y B24 ofrece un interruptor **«Datos para el Mentor IA»** que B12 nunca pide.
 
-- **Pedirlo en B12**, como cuarta tarjeta, marcada «Opcional». El backend ya lo sirve en `GET /autenticacion/consentimientos` con su texto, listo para pintarlo.
-- **Quitarlo de B24**, si se decide que el Mentor IA no trata datos personales más allá de lo que el candidato ya entregó. Entonces deja de ser un permiso y no se pide.
+**Manda la lista del Taller 2, y el Mentor IA no está en ella.** Las finalidades documentadas son tres y están nombradas una por una. «Datos para el Mentor IA» aparece **solo en el panel de B24**: no en el Taller 2, no en la EDT —que no lo menciona en ningún paquete—, no en el Charter, no en el Plan de Seguridad, no en la propuesta tecnológica.
 
-Lo que no se puede es dejarlo como está: revocable en una pantalla, invisible en la otra y obligatorio en el diagrama.
+El Modelo de Negocio añade el dato que lo cierra: el mentor arranca **«con datos públicos de mercado laboral y después con datos propios de contratación a medida que crece el volumen»**. Al principio no trata datos del candidato para una finalidad nueva, así que **hoy no hay nada que consentir**.
+
+**Decisión:** el permiso **se retira del catálogo**. Pedir un permiso que nadie necesita no es prudencia: entrena a la gente a decir que sí sin leer, que es lo contrario de lo que una pantalla de consentimientos busca. Sigue en el enum de la base para poder leer el historial —un registro de consentimientos que no puede leer su propio pasado no sirve para lo que existe— y escribirlo devuelve **400**.
+
+**Cuando el mentor pase a usar «datos propios de contratación»**, como el propio Modelo de Negocio planea, vuelve a ser una finalidad: se añade al catálogo y **B12 tiene que preguntarla**.
+
+**Qué hay que cambiar en el diseño:** el panel de B24 tiene dos errores, no uno. Le sobra «Datos para el Mentor IA» y **le falta «Calificación por IA»**, que sí es una de las tres y cuya revocación el backend ya hace cumplir (D-17).
 
 ## 7. Lo que el backend ya tiene y ninguna pantalla usa
 
