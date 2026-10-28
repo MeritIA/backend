@@ -3,10 +3,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 import { Usuario } from './entities/usuario.entity.js';
 import { Empresa } from './entities/empresa.entity.js';
+import { Consentimiento } from './entities/consentimiento.entity.js';
 import { AutenticacionService } from './autenticacion.service.js';
 import { AutenticacionController } from './autenticacion.controller.js';
 import { EmpresasService } from './empresas.service.js';
 import { EmpresasController } from './empresas.controller.js';
+import { ConsentimientosService } from './consentimientos.service.js';
+import { ConsentimientosController } from './consentimientos.controller.js';
 import { PasetoService } from './servicios/paseto.service.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
 import { AutenticacionGuard } from './guardias/autenticacion.guard.js';
@@ -21,16 +24,17 @@ import { RolesGuard } from './guardias/roles.guard.js';
  * solo lo decorado: un olvido deja el endpoint cerrado, no abierto.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Usuario, Empresa])],
-  controllers: [AutenticacionController, EmpresasController],
+  imports: [TypeOrmModule.forFeature([Usuario, Empresa, Consentimiento])],
+  controllers: [AutenticacionController, EmpresasController, ConsentimientosController],
   providers: [
     AutenticacionService,
     EmpresasService,
+    ConsentimientosService,
     PasetoService,
     ContrasenasService,
     { provide: APP_GUARD, useClass: AutenticacionGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AutenticacionService, EmpresasService],
+  exports: [AutenticacionService, EmpresasService, ConsentimientosService],
 })
 export class AutenticacionModule {}

@@ -388,6 +388,79 @@
         ]
       }
     },
+    "/autenticacion/consentimientos": {
+      "get": {
+        "description": "Devuelve SIEMPRE los cuatro permisos del catalogo, decididos o no, con el texto que la pantalla debe mostrar. `porOmision: true` significa que el titular nunca lo decidio y vale el valor inicial. `vigilado` dice si el backend lo hace cumplir hoy.",
+        "operationId": "ConsentimientosController_mios",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentimientosRespuesta"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesion."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mis permisos sobre el tratamiento de mis datos",
+        "tags": [
+          "autenticacion"
+        ]
+      },
+      "put": {
+        "description": "Cada decision queda registrada con la version del aviso y desde donde se tomo. Las decisiones que no cambian nada no se guardan, para que el historial siga respondiendo desde cuando el titular autoriza cada cosa.",
+        "operationId": "ConsentimientosController_registrar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarConsentimientosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentimientosRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Un tipo repetido o una decision mal formada."
+          },
+          "401": {
+            "description": "Sin sesion."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Concede o revoca mis permisos",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
     "/vacantes": {
       "post": {
         "description": "La vacante nace en borrador y a nombre de quien la crea. El estado y el reclutador no se aceptan en el cuerpo: enviarlos devuelve 400.",
@@ -1910,6 +1983,138 @@
           "nombreCompleto",
           "rol",
           "idEmpresa"
+        ]
+      },
+      "PermisoRespuesta": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "biometria",
+              "calificacion_ia",
+              "perfil_publico",
+              "mentor_ia"
+            ]
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "El texto que la pantalla muestra y que el titular acepta."
+          },
+          "concedido": {
+            "type": "boolean"
+          },
+          "porOmision": {
+            "type": "boolean",
+            "description": "true si vale el valor por omision porque el titular nunca lo decidio."
+          },
+          "decididoEn": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "versionDelAviso": {
+            "type": "string",
+            "nullable": true,
+            "description": "Version del aviso que acepto."
+          },
+          "sePideEnElRegistro": {
+            "type": "boolean",
+            "description": "Si la pantalla de registro (B12) lo pregunta."
+          },
+          "efecto": {
+            "type": "string",
+            "description": "Que pasaria al revocarlo."
+          },
+          "vigilado": {
+            "type": "boolean",
+            "description": "Si el backend lo hace cumplir HOY. Los cuatro estan en false: las funciones que gobiernan no existen todavia. Va aqui a proposito, para que la pantalla no prometa un control que nadie vigila."
+          }
+        },
+        "required": [
+          "tipo",
+          "titulo",
+          "descripcion",
+          "concedido",
+          "porOmision",
+          "decididoEn",
+          "versionDelAviso",
+          "sePideEnElRegistro",
+          "efecto",
+          "vigilado"
+        ]
+      },
+      "ConsentimientosRespuesta": {
+        "type": "object",
+        "properties": {
+          "permisos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermisoRespuesta"
+            }
+          },
+          "versionDelAviso": {
+            "type": "string",
+            "description": "Version vigente del aviso de privacidad."
+          },
+          "registradas": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Decisiones guardadas en esta llamada. Las que no cambian nada no se guardan."
+          }
+        },
+        "required": [
+          "permisos",
+          "versionDelAviso"
+        ]
+      },
+      "DecisionDto": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "biometria",
+              "calificacion_ia",
+              "perfil_publico",
+              "mentor_ia"
+            ]
+          },
+          "concedido": {
+            "type": "boolean",
+            "description": "true lo concede, false lo revoca."
+          }
+        },
+        "required": [
+          "tipo",
+          "concedido"
+        ]
+      },
+      "RegistrarConsentimientosDto": {
+        "type": "object",
+        "properties": {
+          "decisiones": {
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionDto"
+            }
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "registro",
+              "perfil"
+            ],
+            "default": "perfil",
+            "description": "Desde donde se decidio. Forma parte de la prueba del consentimiento."
+          }
+        },
+        "required": [
+          "decisiones"
         ]
       },
       "CrearVacanteDto": {

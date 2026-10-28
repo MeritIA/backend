@@ -8,3 +8,9 @@ export {
   EmpresaRespuesta,
   UsuarioDeEmpresaRespuesta,
 } from './empresas.dto.js';
+export {
+  DecisionDto,
+  RegistrarConsentimientosDto,
+  PermisoRespuesta,
+  ConsentimientosRespuesta,
+} from './consentimientos.dto.js';
