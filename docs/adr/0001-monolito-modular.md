@@ -1,4 +1,4 @@
-# 0001 · Monolito modular de seis módulos, no microservicios
+# 0001 · Monolito modular, no microservicios
 
 **Estado:** vigente · **Origen:** paquete 1.4, sostenida desde entonces
 
@@ -10,7 +10,7 @@ reportes. El equipo son tres personas, sin plataforma de despliegue propia.
 
 ## Decisión
 
-Un solo proceso desplegable, partido en seis módulos con **fronteras
+Un solo proceso desplegable, partido en módulos con **fronteras
 verificadas por herramienta**: cada módulo expone su interfaz pública en un
 `index.ts`, y ESLint falla si otro módulo importa algo que no esté ahí.
 

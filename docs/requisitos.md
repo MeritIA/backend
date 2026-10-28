@@ -89,6 +89,21 @@ respaldo.
 | RF-REP-7 | La empresa ve sus cifras en una sola llamada: vacantes por estado, finalistas en evaluación, contratados y retos del banco | `reportes.service · panelDeLaEmpresa`, pantalla A02 | implementado |
 | RF-REP-8 | El candidato ve su puesto y el total de participantes, solo con la vacante cerrada | `evaluacion.service · miPuestoEn`, pantalla B22 | implementado (D-8) |
 
+### RF-NOT — Avisos a los candidatos (decisión del 27/10/2026, D-10)
+
+No sale de ningún paquete de la EDT: sale de la decisión de producto del
+27/10/2026. Se escribe aquí con la misma forma que el resto para que sea
+trazable igual.
+
+| ID | Requisito | Traza | Estado |
+|---|---|---|---|
+| RF-NOT-1 | Al cerrarse una vacante se avisa por correo a cada candidato con al menos una entrega evaluada | `notificaciones.service · avisarDelCierre`, evento `vacantes.vacante-cerrada` | implementado |
+| RF-NOT-2 | El aviso no contiene la calificación, ni el puesto, ni si la persona fue seleccionada, ni datos de otros participantes | `dominio/plantillas · avisoDeCierre` y sus pruebas | implementado (D-10) |
+| RF-NOT-3 | Ningún candidato recibe el mismo aviso dos veces, ni por un evento repetido ni por un reenvío manual | índice único `(vacante, candidato, tipo)` + reserva en estado `enviando` | implementado |
+| RF-NOT-4 | Lo que no se pudo enviar queda registrado con su motivo y se puede reintentar sin repetir lo ya enviado | `POST /notificaciones/vacantes/:id/reenviar` | implementado |
+| RF-NOT-5 | El reclutador ve el estado de los avisos de su vacante, sin direcciones de correo | `GET /notificaciones/vacantes/:id` | implementado |
+| RF-NOT-6 | El envío a candidatos se puede apagar sin dejar de registrar a quién había que avisar | `NOTIFICACIONES_A_CANDIDATOS` | implementado (D-11) |
+
 ### RF-OBS — Observabilidad y alertas (paquete 5.5)
 
 | ID | Requisito | Traza | Estado |
@@ -138,7 +153,7 @@ respaldo.
 | RNF-OPE-1 | El entorno local se levanta con un comando | implementado (`compose.yaml`) |
 | RNF-OPE-2 | Servicios separados; imagen con usuario no-root y healthcheck | implementado |
 | RNF-OPE-3 | Configuración por entorno, validada al arrancar | implementado |
-| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (40 operaciones) |
+| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (45 operaciones) |
 
 ## Qué queda fuera, a propósito
 

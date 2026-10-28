@@ -59,11 +59,11 @@ es la última: **dónde se mira para saber si es verdad**.
 |---|---|---|---|---|
 | Reducir el sesgo en la selección — es el propósito del producto | Confidencialidad | El ranking **no contiene** nombres ni correos; ver una identidad es una acción aparte y **queda registrada** con quién, a quién y cuándo | Prueba de integración que falla si un nombre aparece en el reporte; tabla `revelaciones_de_identidad` | ✅ |
 | Que un resultado se pueda **defender ante una disputa** | Trazabilidad e integridad | La nota dice **contra qué versión de rúbrica** se calificó, con evidencia por criterio; los ejercicios de una vacante **no se pueden cambiar** tras publicarla | `admiteCambioDeEjercicios`, `ResumenVersion`, historial de estados de la entrega | ✅ |
-| Que una empresa **nunca** vea datos de otra, que es la condición para que un cliente entre | Confidencialidad / control de acceso | A lo ajeno se responde **404 y no 403**, para no confirmar que existe; probado módulo por módulo | ADR 0012, pruebas de aislamiento en los seis módulos | ✅ |
+| Que una empresa **nunca** vea datos de otra, que es la condición para que un cliente entre | Confidencialidad / control de acceso | A lo ajeno se responde **404 y no 403**, para no confirmar que existe; probado módulo por módulo | ADR 0012, pruebas de aislamiento en todos los módulos | ✅ |
 | Evaluar más rápido y más barato que leer CVs | Rendimiento y capacidad | **79 pet/s** sostenidas con **p95 83 ms**; punto de caída conocido en 50 it/s; pasado el tope se rechaza con 503 en vez de colapsar | `rendimiento.md`, ADR 0011 | 🟡 el rechazo con 503 **está sin re-medir** |
 | Que el candidato reciba algo por su trabajo, y no solo silencio | Transparencia / usabilidad | Lee el **enunciado y la rúbrica** antes de entregar, y al cerrarse el proceso ve **su puesto y el total** | `GET /vacantes/{id}/ejercicios`, `GET /evaluaciones/vacante/{id}/mi-puesto` (D-8) | ✅ |
 | Que una empresa pueda operar sola sin pedirnos nada | Disponibilidad | La caída del proveedor de IA **retrasa notas, no rechaza entregas**: la cola evalúa al volver | D-2, ADR 0007, health check | ✅ |
-| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **493 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
+| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **521 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
 | Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push | ADR 0006, CI | 🟡 faltan **consentimientos** y «descargar/eliminar mis datos» (B12, B24) |
 
 Las tres filas en amarillo son las que conviene llevar preparadas, porque son
@@ -108,12 +108,18 @@ el equipo aprobó (`matriz-pantallas.md` §8):
   NIT se verifica por su dígito, que es la única comprobación posible mientras no
   exista la integración con Cámara de Comercio.
 - ✅ El mapeo objetivo → atributo → medida del punto 5, en el §3 de aquí.
-- ✅ [`adr/`](adr/): doce decisiones con su alternativa descartada, para el punto 6.
+- ✅ [`adr/`](adr/): trece decisiones con su alternativa descartada, para el punto 6.
 - ✅ [`evolucion-tecnologica.md`](evolucion-tecnologica.md) con disparadores
   medidos, para el punto 8.
 - ✅ Las cuatro pantallas del MVP que no se podían construir: el panel de la
   empresa (A02, una llamada en vez de N), la habilidad destacada del ranking
   (A06), el registro de contratación (A08) y el puesto del candidato (B22).
+- ✅ **El aviso por correo al cerrar una vacante** (D-10), que era el último
+  impedimento de la matriz de pantallas. Con él, las tres contradicciones que esa
+  matriz encontró quedan resueltas y el front puede empezar por cualquiera de las
+  diez pantallas sin esperar nada del backend.
+- ✅ Ratificada la lista de catorce sectores (D-6), que estaba en el código sin
+  que ningún documento la respaldara.
 
 **Lo siguiente que sí es backend, por orden de lo que desbloquea:**
 
