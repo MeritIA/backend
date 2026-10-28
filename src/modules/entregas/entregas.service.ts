@@ -343,6 +343,36 @@ export class EntregasService {
     return Number(fila?.total ?? 0);
   }
 
+  /**
+   * Cuantas PERSONAS distintas han entregado algo, vacante por vacante.
+   *
+   * Es la mitad del "avance" de cada tarjeta de A02. Va separado de los
+   * conteos por estado porque responde otra pregunta: aquellos dicen en que
+   * punto esta la cola, y este dice cuanta gente de la invitada se movio. Un
+   * proceso donde nadie entrega y otro donde todos entregaron y la cola va
+   * lenta se ven iguales en el conteo por estado, y piden cosas distintas del
+   * reclutador.
+   *
+   * Cuenta `distinct id_candidato`: quien reintenta sigue siendo una persona.
+   *
+   * Sobre el acceso vale lo dicho en `conteosPorEstadoDeVacantes`.
+   */
+  async candidatosConEntregaPorVacante(
+    idsDeVacantes: readonly string[],
+  ): Promise<Record<string, number>> {
+    if (idsDeVacantes.length === 0) return {};
+
+    const filas = await this.entregas
+      .createQueryBuilder('e')
+      .select('e.id_vacante', 'idVacante')
+      .addSelect('count(distinct e.id_candidato)::int', 'total')
+      .where('e.id_vacante IN (:...idsDeVacantes)', { idsDeVacantes })
+      .groupBy('e.id_vacante')
+      .getRawMany<{ idVacante: string; total: number }>();
+
+    return Object.fromEntries(filas.map((f) => [f.idVacante, Number(f.total)]));
+  }
+
   async obtenerPara(id: string, solicitante: Solicitante): Promise<Entrega> {
     const entrega = await this.obtenerConHistorial(id);
     await this.exigirAcceso(entrega, solicitante);
