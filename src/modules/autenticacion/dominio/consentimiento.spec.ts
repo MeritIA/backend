@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CATALOGO,
   permisoDelCatalogo,
+  seOfrece,
   TipoDeConsentimiento,
-  TIPOS_DE_CONSENTIMIENTO,
   VERSION_DEL_AVISO,
 } from './consentimiento.js';
 
@@ -13,11 +13,23 @@ import {
  * una decision y no un descuido.
  */
 describe('catalogo de consentimientos', () => {
-  it('tiene un permiso por cada tipo, sin sobrar ni faltar', () => {
-    expect(CATALOGO).toHaveLength(TIPOS_DE_CONSENTIMIENTO.length);
-    for (const tipo of TIPOS_DE_CONSENTIMIENTO) {
-      expect(permisoDelCatalogo(tipo).tipo).toBe(tipo);
-    }
+  it('son las TRES finalidades del Taller 2, en su orden', () => {
+    // "Separar el consentimiento unico en pasos diferenciados por finalidad
+    //  (grabacion/biometria, calificacion por IA, publicacion del perfil a
+    //  terceros en el banco de talento)". Son las tres tarjetas de B12.
+    expect(CATALOGO.map((p) => p.tipo)).toEqual([
+      TipoDeConsentimiento.Biometria,
+      TipoDeConsentimiento.CalificacionIA,
+      TipoDeConsentimiento.PerfilPublico,
+    ]);
+  });
+
+  it('el Mentor IA se puede leer del historial pero ya no se ofrece', () => {
+    // Aparece en el panel de B24 y en ningun documento mas. Sigue en el enum
+    // para que las filas viejas se puedan leer; un registro de
+    // consentimientos que no puede leer su pasado no sirve para lo que existe.
+    expect(seOfrece(TipoDeConsentimiento.MentorIA)).toBe(false);
+    expect(seOfrece(TipoDeConsentimiento.PerfilPublico)).toBe(true);
   });
 
   it('todos llevan el texto que el titular acepta', () => {
@@ -30,16 +42,12 @@ describe('catalogo de consentimientos', () => {
     }
   });
 
-  it('B12 pide tres permisos y el Mentor IA no es uno de ellos', () => {
-    const enElRegistro = CATALOGO.filter((p) => p.sePideEnElRegistro).map((p) => p.tipo);
-
-    expect(enElRegistro).toEqual([
-      TipoDeConsentimiento.Biometria,
-      TipoDeConsentimiento.CalificacionIA,
-      TipoDeConsentimiento.PerfilPublico,
-    ]);
-    // Aparece en el panel de B24 y nadie lo pide: esa es la contradiccion §6.9.
-    expect(enElRegistro).not.toContain(TipoDeConsentimiento.MentorIA);
+  it('las tres se piden en el registro: ninguna se trata sin preguntar', () => {
+    // El defecto que el Taller 2 encontro era justo el contrario: un
+    // consentimiento inicial que se daba por bueno para todo el ciclo del dato.
+    for (const permiso of CATALOGO) {
+      expect(permiso.sePideEnElRegistro).toBe(true);
+    }
   });
 
   it('solo nacen encendidos los que B12 muestra encendidos', () => {
@@ -51,12 +59,11 @@ describe('catalogo de consentimientos', () => {
     ]);
   });
 
-  it('lo que nunca se pidio nace apagado', () => {
-    // Tratar datos para una finalidad que el titular no autorizo es lo que la
-    // Ley 1581 prohibe. Si no se pregunta, no se asume que si.
-    for (const permiso of CATALOGO.filter((p) => !p.sePideEnElRegistro)) {
-      expect(permiso.porOmision).toBe(false);
-    }
+  it('la publicacion del perfil nace apagada, pase lo que pase en el BPM', () => {
+    // El paso 13 del BPM publica el perfil de todo el mundo en el banco de
+    // talento. Es el defecto que el Taller 2 marco y que el rediseno no
+    // aplico. Manda el Taller 2 (D-18): sin permiso no se publica.
+    expect(permisoDelCatalogo(TipoDeConsentimiento.PerfilPublico).porOmision).toBe(false);
   });
 
   it('solo la calificacion por IA se hace cumplir, y el resto lo declara', () => {
