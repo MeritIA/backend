@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength, IsInt, Max, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  IsInt,
+  Max,
+  Min,
+  IsISO8601,
+} from 'class-validator';
 
 /** Todo opcional: se edita solo lo que se envia. */
 export class EditarVacanteDto {
@@ -38,4 +47,27 @@ export class EditarVacanteDto {
   @Min(1, { message: 'intentosPermitidos debe ser al menos 1' })
   @Max(10, { message: 'intentosPermitidos no puede superar 10' })
   intentosPermitidos?: number;
+
+  @ApiPropertyOptional({
+    format: 'date-time',
+    nullable: true,
+    description: 'Null borra el estimado. Se aceptan fechas pasadas: ver la entidad.',
+  })
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: 'cierreEstimado debe ser una fecha ISO 8601' })
+  cierreEstimado?: string | null;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 1000,
+    nullable: true,
+    description:
+      'Se puede cambiar con la vacante ya publicada, al contrario que intentosPermitidos: ' +
+      'subirlo o bajarlo no le quita oportunidades a ningun candidato. Null borra el plan.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'finalistasAEvaluar debe ser un entero' })
+  @Min(1, { message: 'finalistasAEvaluar debe ser al menos 1' })
+  @Max(1000, { message: 'finalistasAEvaluar no puede superar 1000' })
+  finalistasAEvaluar?: number | null;
 }
