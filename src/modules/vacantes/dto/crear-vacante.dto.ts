@@ -1,6 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength, IsInt, Max, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  IsInt,
+  Max,
+  Min,
+  IsISO8601,
+} from 'class-validator';
 
 /**
  * OJO A LO QUE NO ESTA AQUI: ni `estado`, ni `idReclutador`, ni `publicadaEn`.
@@ -46,4 +55,29 @@ export class CrearVacanteDto {
   @Min(1, { message: 'intentosPermitidos debe ser al menos 1' })
   @Max(10, { message: 'intentosPermitidos no puede superar 10' })
   intentosPermitidos?: number;
+
+  @ApiPropertyOptional({
+    format: 'date-time',
+    example: '2026-12-15T23:59:59.000Z',
+    description:
+      'Cuando se espera cerrar el proceso. Es informativo: llegada la fecha el backend no cierra nada, ' +
+      'porque cerrar avisa por correo a personas y no puede dispararlo un reloj. Se aceptan fechas pasadas.',
+  })
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: 'cierreEstimado debe ser una fecha ISO 8601' })
+  cierreEstimado?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 1000,
+    description:
+      'Cuantos finalistas se piensa evaluar. Es un plan, no un tope: no impide invitar ni evaluar a mas.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'finalistasAEvaluar debe ser un entero' })
+  @Min(1, { message: 'finalistasAEvaluar debe ser al menos 1' })
+  // La cota alta no es una regla de negocio: evita que un error de captura
+  // guarde un numero absurdo que luego el panel muestre como si fuera un plan.
+  @Max(1000, { message: 'finalistasAEvaluar no puede superar 1000' })
+  finalistasAEvaluar?: number;
 }

@@ -243,8 +243,64 @@ export class VacantesDelPanelRespuesta {
   @ApiProperty() cerradas!: number;
 }
 
+/**
+ * Una tarjeta de vacante abierta en el panel.
+ *
+ * `avance` puede ser null y la pantalla tiene que distinguirlo de 0: null es
+ * "no has invitado a nadie todavia" y 0 es "invitaste y nadie ha avanzado".
+ */
+export class ProgresoDeVacanteRespuesta {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+
+  @ApiProperty({ maxLength: 160 }) titulo!: string;
+
+  @ApiProperty({ nullable: true, type: String, format: 'date-time' })
+  publicadaEn!: Date | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    description: 'Estimado del reclutador. No cierra la vacante y puede estar en el pasado.',
+  })
+  cierreEstimado!: Date | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description: 'Lo planeado al publicar. Los evaluados pueden superarlo: es un plan, no un tope.',
+  })
+  finalistasAEvaluar!: number | null;
+
+  @ApiProperty({ minimum: 0, description: 'Candidatos invitados. Denominador del avance.' })
+  invitados!: number;
+
+  @ApiProperty({ minimum: 0, description: 'PERSONAS con al menos una entrega, no entregas.' })
+  conEntrega!: number;
+
+  @ApiProperty({ minimum: 0, description: 'PERSONAS con evaluacion. Numerador del avance.' })
+  evaluados!: number;
+
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    minimum: 0,
+    maximum: 100,
+    description: 'Porcentaje de invitados ya evaluados. Null si no hay nadie invitado.',
+  })
+  avance!: number | null;
+}
+
 export class PanelDeEmpresaRespuesta {
   @ApiProperty({ type: VacantesDelPanelRespuesta }) vacantes!: VacantesDelPanelRespuesta;
+
+  @ApiProperty({
+    type: [ProgresoDeVacanteRespuesta],
+    description:
+      'Solo las publicadas, ordenadas por cierre estimado y las sin estimado al final. ' +
+      'Los borradores y las cerradas solo salen en los contadores: un borrador no tiene avance.',
+  })
+  abiertas!: ProgresoDeVacanteRespuesta[];
 
   @ApiProperty({
     description:

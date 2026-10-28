@@ -9,7 +9,7 @@
   en tres flujos (A empresa ×10, B candidato ×14, C moderación ×3) y tres
   diagramas de flujo.
 - **Fuente de los endpoints**: `docs/openapi.json`, generado del código.
-  **45 operaciones** en el momento de escribir esto.
+  **47 operaciones** en el momento de escribir esto.
 - **Fecha**: 26 de octubre de 2026.
 
 ---
@@ -48,9 +48,9 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | # | Pantalla | Endpoints que ya existen | Qué falta |
 |---|---|---|---|
 | A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **NIT y sector ya existen** (y el NIT se verifica por su dígito). Sigue faltando que la pantalla sea un **auto-registro**: el endpoint solo deja crear la empresa a un administrador de plataforma. La validación contra Cámara de Comercio es una integración externa ⛔. |
-| A02 | Panel de vacantes | ◐ `GET /reportes/panel`, `GET /vacantes`, `GET /ejercicios` | **Los cuatro contadores ya salen en una sola llamada**, y el concepto de **contratado** existe. Siguen faltando «avance» y «cierre estimado», que piden campos nuevos en `Vacante`. El banco de talento ⛔. |
+| A02 | Panel de vacantes | ◐ `GET /reportes/panel`, `GET /vacantes`, `GET /ejercicios` | **Los cuatro contadores, el «avance» y el «cierre estimado» ya salen en una sola llamada**: `abiertas[]` trae una fila por vacante publicada con invitados, cuántas personas entregaron, cuántas tienen evaluación y el porcentaje, ordenadas por lo que vence antes. El concepto de **contratado** existe. El banco de talento ⛔. |
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
-| A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **Todo el cobro** ⛔: pasarela, referencia, estado, reintento. Y los campos «finalistas a evaluar» y «remuneración por reto» no existen en `Vacante`. Ver contradicción §6.1. |
+| A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **«Finalistas a evaluar» ya existe**, como plan y no como tope: no impide invitar ni evaluar a más gente. Sigue faltando **todo el cobro** ⛔ —pasarela, referencia, estado, reintento— y con él la «remuneración por reto», que es dinero y no un dato suelto. Ver contradicción §6.1. |
 | A05 | Pago rechazado | ✗ ⛔ | Ruta de excepción completa del cobro. Lo único que ya se sostiene es que la vacante quede **en borrador**, que es el estado que la pantalla describe. |
 | A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
@@ -63,7 +63,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | # | Pantalla | Endpoints que ya existen | Qué falta |
 |---|---|---|---|
 | B11 | Crear cuenta | ◐ `POST /autenticacion/registro` | El registro público ya crea **solo candidatos**, como pide el flujo. Faltan los campos **documento**, **ciudad** y **cuenta para recibir pagos** — el documento es dato sensible y exigiría cifrado en reposo, igual que el correo. |
-| B12 | Consentimientos | ✗ | Ningún registro de consentimientos. **No es un adorno**: la pantalla cita la Ley 1581 de 2012 y promete que cada permiso es revocable. Hoy no hay dónde guardarlo ni cómo revocarlo. |
+| B12 | Consentimientos | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | **El registro existe y es revocable**: cada decisión guarda qué, cuándo, a qué versión del aviso y desde dónde, y revocar añade una fila en vez de borrar la anterior. Falta que **algo los haga cumplir**: las cuatro funciones que gobiernan (proctoring, banco de talento, Mentor IA) no existen ⛔, y la respuesta lo declara con `vigilado: false` en vez de callarlo. Ver contradicción §6.10. |
 | B13 | Perfil y reto gratuito | ◐ `GET /evaluaciones/mias` | Las evaluaciones propias con desglose ya están. Faltan: **perfil de habilidades** transversal (hoy los criterios viven dentro de cada ejercicio), **reto gratuito** sin vacante, y el **% de afinidad** ⛔. Ver contradicción §6.2. |
 | B14 | Invitación a reto pagado | ◐ `GET /vacantes/{id}`, `GET /vacantes/{id}/ejercicios` | El enunciado y la rúbrica con sus pesos **ya se leen** (§6.5, arreglado al escribir esta matriz). Faltan: la invitación como objeto con **vencimiento de 72 h**, la remuneración y la elección de derechos ⛔. |
 | B15 | Verificación técnica | ✗ ⛔ | Proctoring: cámara, micrófono, conexión. |
@@ -75,7 +75,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | B21 | Descalificado | ✗ ⛔ | Decisión confirmada y **derecho a disputa** ante un segundo moderador. |
 | B22 | Resultado y Mentor IA | ◐ `GET /evaluaciones/entrega/{idEntrega}`, `GET /evaluaciones/mias` | El puntaje, el desglose, **la versión de rúbrica con la que se calificó** y el **puesto** —con la vacante cerrada, `GET /evaluaciones/vacante/{id}/mi-puesto`— ya están. Faltan insignias, Mentor IA y tendencia del mercado ⛔. |
 | B23 | Pago no procesado | ✗ ⛔ | Dispersión al candidato y su ruta de excepción. |
-| B24 | Perfil público | ✗ | Perfil público, insignias y banco de talento ⛔. Pero **«Descargar mis datos» y «Eliminar cuenta» no son ⛔**: son obligaciones de la Ley 1581 y hoy no tienen ruta. |
+| B24 | Perfil público | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | El panel **«Privacidad de tus datos» ya tiene detrás** sus interruptores, con el historial que la ley exige. Perfil público, insignias y banco de talento ⛔. Siguen sin ruta **«Descargar mis datos» y «Eliminar cuenta»**, que tampoco son ⛔: son obligaciones de la Ley 1581. |
 
 ## 5. Flujo C · Moderación
 
@@ -222,6 +222,21 @@ obligaciones de la Ley 1581 que el producto ya le promete al candidato en
 pantalla.
 
 ---
+
+### 6.10 Las dos pantallas de permisos no piden lo mismo
+
+B12 pide **tres** permisos: grabación biométrica, calificación por IA generativa y publicación del perfil. El panel «Privacidad de tus datos» de B24 ofrece revocar **otros tres**: perfil visible, grabaciones biométricas y **datos para el Mentor IA**. Las dos listas no son la misma, y las dos diferencias importan:
+
+1. **«Datos para el Mentor IA» se puede revocar en B24 pero nunca se pidió.** Tratar datos para una finalidad que el titular no autorizó es justo lo que la Ley 1581 prohíbe. En el backend nace **apagado** por eso, pero la pantalla de registro tendría que preguntarlo.
+2. **«Calificación por IA generativa» se pide en B12 y no aparece en el panel de revocación**, aunque la propia B12 promete que «cada permiso es independiente y puedes revocarlo cuando quieras desde Mi perfil › Privacidad».
+
+La segunda es la incómoda: **si ese permiso se puede revocar, quien lo apague no puede ser evaluado**, y evaluar es el producto entero. Hay tres salidas y ninguna la decide el backend solo:
+
+- **No es revocable** y B12 no debería mostrarlo como interruptor, sino como una condición de uso que se acepta o no se entra. Es lo más honesto con lo que el producto hace.
+- **Sí es revocable** y revocarlo significa salir de los procesos en curso. Hay que decir qué pasa con las entregas ya evaluadas y con el pago del reto.
+- **Sí es revocable** y existe una evaluación humana alterna —que es lo que el propio texto del permiso insinúa al hablar de «revisión humana previa»—. Eso es el flujo C de moderación, que no tiene paquete ni backend ⛔.
+
+Mientras no se decida, el backend **registra la decisión y no la hace cumplir**, y lo dice en la respuesta (`vigilado: false`). Es la única postura que no inventa producto ni miente en pantalla.
 
 ## 7. Lo que el backend ya tiene y ninguna pantalla usa
 

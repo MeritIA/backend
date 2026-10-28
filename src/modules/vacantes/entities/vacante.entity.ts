@@ -71,6 +71,40 @@ export class Vacante {
   @OneToMany('VacanteCandidato', 'vacante', { cascade: true })
   candidatos!: VacanteCandidato[];
 
+  /**
+   * Cuando el reclutador ESPERA cerrar el proceso. Lo muestra la tarjeta de A02.
+   *
+   * ES INFORMATIVO Y NO CIERRA NADA. Llegada la fecha no pasa nada: cerrar
+   * sigue siendo un acto explicito del reclutador (`POST /vacantes/{id}/cerrar`),
+   * porque el cierre dispara avisos a personas reales y eso no puede pasar por
+   * un reloj que nadie miro. Por lo mismo NO se rechaza una fecha pasada: una
+   * vacante que se paso de su estimado es un hecho que el panel debe poder
+   * mostrar, y un frontend que reenvia el objeto completo al editar el titulo
+   * no tiene por que fallar por un estimado viejo.
+   *
+   * Si alguna vez se quiere cierre automatico, este campo deja de ser un dato y
+   * pasa a ser una regla: habra que decidir que hacer con las entregas en vuelo.
+   */
+  @Column({ type: 'timestamptz', name: 'cierre_estimado', nullable: true })
+  cierreEstimado!: Date | null;
+
+  /**
+   * Cuantos finalistas piensa evaluar la empresa. Lo pide la pantalla A04.
+   *
+   * Es un plan, no un limite: el backend NO impide invitar a mas gente ni
+   * evaluar a mas. Ponerlo como tope obligaria a rechazar entregas de alguien
+   * ya invitado, que es peor que pasarse del numero.
+   *
+   * SE PUEDE CAMBIAR CON LA VACANTE PUBLICADA, al contrario que
+   * `intentosPermitidos`. La diferencia no es capricho: cambiar los intentos a
+   * mitad del proceso le da a unos candidatos mas oportunidades que a otros, y
+   * cambiar este numero no le quita nada a nadie. Cuando exista el cobro de A04
+   * eso cambia —sera lo que la empresa pago— y habra que congelarlo tras el
+   * pago; queda anotado como contradiccion §6.1 de la matriz de pantallas.
+   */
+  @Column({ type: 'int', name: 'finalistas_a_evaluar', nullable: true })
+  finalistasAEvaluar!: number | null;
+
   @Column({ type: 'timestamptz', name: 'publicada_en', nullable: true })
   publicadaEn!: Date | null;
 

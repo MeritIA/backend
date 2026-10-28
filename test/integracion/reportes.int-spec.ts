@@ -769,4 +769,325 @@ describe('integracion: reportes consolidados', () => {
       await panel(ana).expect(403);
     });
   });
+
+  /**
+   * El plan de la vacante (A02 y A04) y el avance que el panel calcula con el.
+   *
+   * Se prueba por HTTP y no contra el servicio porque lo que importa es que la
+   * pantalla pueda pintar sus tarjetas con una sola llamada: si el avance
+   * saliera de una consulta por vacante, estas pruebas pasarian igual y el
+   * panel seria inservible con veinte vacantes abiertas.
+   */
+  describe('CRITERIO: cierre estimado, finalistas a evaluar y el avance (A02, A04)', () => {
+    const panel = (quien: Sesion) => api(app).get('/api/v1/reportes/panel').set(auth(quien));
+
+    /** Crea una vacante, le asocia el ejercicio del montaje y la publica. */
+    async function publicarVacante(
+      titulo: string,
+      extra: Record<string, unknown> = {},
+    ): Promise<string> {
+      const { body } = await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({ titulo, descripcion: 'Buscamos una persona para el equipo.', ...extra })
+        .expect(201);
+      const id = body.id as string;
+
+      await api(app)
+        .put(`/api/v1/vacantes/${id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [idEjercicio] })
+        .expect(200);
+      await api(app).post(`/api/v1/vacantes/${id}/publicar`).set(auth(reclutador)).expect(200);
+      return id;
+    }
+
+    const invitar = (id: string, candidato: Sesion) =>
+      api(app)
+        .post(`/api/v1/vacantes/${id}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+
+    async function entregaEn(id: string, candidato: Sesion, intento: number): Promise<void> {
+      await consultar(
+        `insert into entregas.entregas
+           (id_vacante, id_candidato, id_ejercicio, numero_intento, estado,
+            archivo_clave, archivo_bytes, archivo_sha256, archivo_tipo, archivo_nombre)
+         values ($1, $2, $3, $4, 'evaluada', $5, 1024, repeat('a', 64), 'application/zip', 'x')`,
+        [id, candidato.id, idEjercicio, intento, `entregas/${uuid()}.zip`],
+      );
+    }
+
+    describe('los dos campos del plan', () => {
+      it('se guardan al crear y se leen de vuelta', async () => {
+        const { body } = await api(app)
+          .post('/api/v1/vacantes')
+          .set(auth(reclutador))
+          .send({
+            titulo: 'Analista de datos',
+            descripcion: 'Para el equipo de datos y reportes.',
+            cierreEstimado: '2026-12-15T23:59:59.000Z',
+            finalistasAEvaluar: 8,
+          })
+          .expect(201);
+
+        expect(body.cierreEstimado).toBe('2026-12-15T23:59:59.000Z');
+        expect(body.finalistasAEvaluar).toBe(8);
+      });
+
+      it('sin enviarlos quedan en null: nadie planifico nada', async () => {
+        const { body } = await api(app)
+          .post('/api/v1/vacantes')
+          .set(auth(reclutador))
+          .send({ titulo: 'Sin plan', descripcion: 'Una vacante recien creada, sin plan.' })
+          .expect(201);
+
+        // Null y no cero ni una fecha inventada: el panel tiene que poder
+        // distinguir "no planificado" de "planificado en cero".
+        expect(body.cierreEstimado).toBeNull();
+        expect(body.finalistasAEvaluar).toBeNull();
+      });
+
+      it('rechaza un estimado que no es una fecha y un plan de cero o negativo', async () => {
+        const malas = [
+          { cierreEstimado: 'el mes que viene' },
+          { cierreEstimado: '2026-13-45' },
+          { finalistasAEvaluar: 0 },
+          { finalistasAEvaluar: -3 },
+          { finalistasAEvaluar: 2.5 },
+          { finalistasAEvaluar: 100_000 },
+        ];
+
+        for (const mala of malas) {
+          await api(app)
+            .post('/api/v1/vacantes')
+            .set(auth(reclutador))
+            .send({
+              titulo: 'Con dato malo',
+              descripcion: 'Descripcion suficientemente larga.',
+              ...mala,
+            })
+            .expect(400);
+        }
+      });
+
+      it('ACEPTA un estimado en el pasado, a proposito', async () => {
+        const { body } = await api(app)
+          .post('/api/v1/vacantes')
+          .set(auth(reclutador))
+          .send({
+            titulo: 'Vacante vencida',
+            descripcion: 'Un proceso que se paso de su estimado.',
+            cierreEstimado: '2020-01-01T00:00:00.000Z',
+          })
+          .expect(201);
+
+        // Rechazarlo esconderia que el proceso esta vencido, que es justo lo
+        // que el panel tiene que mostrar. Y un frontend que reenvia el objeto
+        // completo al editar el titulo no debe fallar por un estimado viejo.
+        expect(body.cierreEstimado).toBe('2020-01-01T00:00:00.000Z');
+      });
+
+      it('null borra el estimado', async () => {
+        const { body: creada } = await api(app)
+          .post('/api/v1/vacantes')
+          .set(auth(reclutador))
+          .send({
+            titulo: 'Con estimado',
+            descripcion: 'Una vacante con fecha estimada de cierre.',
+            cierreEstimado: '2026-12-01T00:00:00.000Z',
+          })
+          .expect(201);
+
+        const { body } = await api(app)
+          .patch(`/api/v1/vacantes/${creada.id}`)
+          .set(auth(reclutador))
+          .send({ cierreEstimado: null })
+          .expect(200);
+
+        expect(body.cierreEstimado).toBeNull();
+      });
+
+      it('el plan se cambia con la vacante publicada, los intentos no', async () => {
+        const { body } = await api(app)
+          .patch(`/api/v1/vacantes/${idVacante}`)
+          .set(auth(reclutador))
+          .send({ finalistasAEvaluar: 12 })
+          .expect(200);
+        expect(body.finalistasAEvaluar).toBe(12);
+
+        // La diferencia no es capricho: subir el plan no le quita nada a nadie,
+        // y cambiar los intentos a mitad del proceso le da a unos candidatos
+        // mas oportunidades que a otros.
+        const { body: error } = await api(app)
+          .patch(`/api/v1/vacantes/${idVacante}`)
+          .set(auth(reclutador))
+          .send({ intentosPermitidos: 5 })
+          .expect(400);
+        expect(error.mensaje).toMatch(/borrador/i);
+      });
+
+      it('un reclutador de otra empresa no puede ponerle plan a esta vacante', async () => {
+        await api(app)
+          .patch(`/api/v1/vacantes/${idVacante}`)
+          .set(auth(reclutadorDeOtraEmpresa))
+          .send({ finalistasAEvaluar: 4 })
+          .expect(404);
+      });
+    });
+
+    describe('el avance en el panel', () => {
+      it('es el porcentaje de invitados ya evaluados, con las cifras crudas al lado', async () => {
+        await invitar(idVacante, ana);
+        await invitar(idVacante, luis);
+        await invitar(idVacante, candidatoConNombrePeligroso);
+
+        // Ana entrego dos veces y tiene evaluacion; Luis entrego y no se ha
+        // evaluado; la tercera persona no ha hecho nada.
+        await entregaEn(idVacante, ana, 1);
+        await entregaEn(idVacante, ana, 2);
+        await entregaEn(idVacante, luis, 1);
+        await sembrarEvaluacion({
+          idCandidato: ana.id,
+          notaFinal: 70,
+          creadaEn: '2026-10-05T10:00:00Z',
+        });
+
+        const { body } = await panel(reclutador).expect(200);
+
+        expect(body.abiertas).toHaveLength(1);
+        expect(body.abiertas[0]).toMatchObject({
+          id: idVacante,
+          titulo: 'Desarrollador backend junior',
+          invitados: 3,
+          // PERSONAS, no entregas: Ana entrego dos veces y cuenta una.
+          conEntrega: 2,
+          evaluados: 1,
+          avance: 33,
+        });
+      });
+
+      it('dos evaluaciones de la misma persona no la cuentan dos veces', async () => {
+        await invitar(idVacante, ana);
+        await invitar(idVacante, luis);
+
+        for (const creadaEn of ['2026-10-01T10:00:00Z', '2026-10-02T10:00:00Z']) {
+          await sembrarEvaluacion({ idCandidato: ana.id, notaFinal: 60, creadaEn });
+        }
+
+        const { body } = await panel(reclutador).expect(200);
+
+        // Si contara evaluaciones diria 100 % con la mitad de la gente sin evaluar.
+        expect(body.abiertas[0]).toMatchObject({ invitados: 2, evaluados: 1, avance: 50 });
+      });
+
+      it('sin nadie invitado el avance es null, y con invitados sin evaluar es 0', async () => {
+        const { body: recien } = await panel(reclutador).expect(200);
+        expect(recien.abiertas[0].invitados).toBe(0);
+        // Null dice "no ha empezado"; un 0 % diria "esta parado".
+        expect(recien.abiertas[0].avance).toBeNull();
+
+        await invitar(idVacante, ana);
+        const { body } = await panel(reclutador).expect(200);
+        expect(body.abiertas[0].avance).toBe(0);
+      });
+
+      it('los borradores y las cerradas no salen en la lista, solo en los contadores', async () => {
+        await api(app)
+          .post('/api/v1/vacantes')
+          .set(auth(reclutador))
+          .send({ titulo: 'Un borrador', descripcion: 'Todavia no se publica esta vacante.' })
+          .expect(201);
+        const cerrada = await publicarVacante('Para cerrar');
+        await api(app).post(`/api/v1/vacantes/${cerrada}/cerrar`).set(auth(reclutador)).expect(200);
+
+        const { body } = await panel(reclutador).expect(200);
+
+        expect(body.vacantes).toEqual({ borradores: 1, publicadas: 1, cerradas: 1 });
+        expect(body.abiertas.map((v: { id: string }) => v.id)).toEqual([idVacante]);
+      });
+
+      it('ordena por cierre estimado, y las que no tienen estimado al final', async () => {
+        const diciembre = await publicarVacante('Cierra en diciembre', {
+          cierreEstimado: '2026-12-20T00:00:00.000Z',
+        });
+        const noviembre = await publicarVacante('Cierra en noviembre', {
+          cierreEstimado: '2026-11-05T00:00:00.000Z',
+        });
+
+        const { body } = await panel(reclutador).expect(200);
+
+        // Lo que se vence antes, primero. La del montaje no tiene estimado.
+        expect(body.abiertas.map((v: { id: string }) => v.id)).toEqual([
+          noviembre,
+          diciembre,
+          idVacante,
+        ]);
+      });
+
+      it('el plan viaja con cada tarjeta y los evaluados pueden superarlo', async () => {
+        await api(app)
+          .patch(`/api/v1/vacantes/${idVacante}`)
+          .set(auth(reclutador))
+          .send({ finalistasAEvaluar: 1 })
+          .expect(200);
+        await invitar(idVacante, ana);
+        await invitar(idVacante, luis);
+        for (const quien of [ana, luis]) {
+          await sembrarEvaluacion({
+            idCandidato: quien.id,
+            notaFinal: 65,
+            creadaEn: '2026-10-05T10:00:00Z',
+          });
+        }
+
+        const { body } = await panel(reclutador).expect(200);
+
+        // Es un plan, no un tope: la pantalla puede decir "2 evaluados de 1
+        // planeado" y el avance no se recorta por eso.
+        expect(body.abiertas[0]).toMatchObject({
+          finalistasAEvaluar: 1,
+          evaluados: 2,
+          avance: 100,
+        });
+      });
+
+      it('la empresa vecina no ve estas vacantes en su panel', async () => {
+        await invitar(idVacante, ana);
+        await sembrarEvaluacion({
+          idCandidato: ana.id,
+          notaFinal: 90,
+          creadaEn: '2026-10-05T10:00:00Z',
+        });
+
+        const { body } = await panel(reclutadorDeOtraEmpresa).expect(200);
+
+        expect(body.abiertas).toEqual([]);
+      });
+
+      it('el avance de una vacante no cuenta las evaluaciones de otra', async () => {
+        const otra = await publicarVacante('Otra vacante de la misma empresa');
+        await invitar(idVacante, ana);
+        await invitar(otra, ana);
+        await invitar(otra, luis);
+
+        // Solo evaluada en la segunda.
+        await sembrarEvaluacion({
+          idCandidato: ana.id,
+          notaFinal: 80,
+          creadaEn: '2026-10-05T10:00:00Z',
+          idVacanteDistinta: otra,
+        });
+
+        const { body } = await panel(reclutador).expect(200);
+        const porId = new Map(
+          (body.abiertas as { id: string; avance: number | null }[]).map((v) => [v.id, v.avance]),
+        );
+
+        expect(porId.get(idVacante)).toBe(0);
+        expect(porId.get(otra)).toBe(50);
+      });
+    });
+  });
 });

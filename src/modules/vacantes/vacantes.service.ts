@@ -60,6 +60,10 @@ export class VacantesService {
       descripcion: datos.descripcion,
       ubicacion: datos.ubicacion ?? null,
       intentosPermitidos: datos.intentosPermitidos ?? 1,
+      // Los dos son planes del reclutador y pueden no existir: null significa
+      // "no lo planifico", que es distinto de cero o de una fecha inventada.
+      cierreEstimado: datos.cierreEstimado === undefined ? null : new Date(datos.cierreEstimado),
+      finalistasAEvaluar: datos.finalistasAEvaluar ?? null,
       // El reclutador es quien la crea; no se acepta del cuerpo de la peticion.
       idReclutador: solicitante.id,
       // Y la empresa sale de el, tampoco del cuerpo: es la frontera de los datos.
@@ -139,6 +143,16 @@ export class VacantesService {
         );
       }
       vacante.intentosPermitidos = datos.intentosPermitidos;
+    }
+
+    // Sin la comprobacion de estado que llevan los intentos, y a proposito: la
+    // razon esta escrita al lado de la columna en la entidad.
+    if (datos.cierreEstimado !== undefined) {
+      vacante.cierreEstimado =
+        datos.cierreEstimado === null ? null : new Date(datos.cierreEstimado);
+    }
+    if (datos.finalistasAEvaluar !== undefined) {
+      vacante.finalistasAEvaluar = datos.finalistasAEvaluar;
     }
 
     await this.vacantes.save(vacante);
@@ -372,7 +386,14 @@ export class VacantesService {
     // vacantes por empresa es mas barato que agrupar y volver a pedir los ids.
     const filas = await this.vacantes.find({
       where: { idEmpresa },
-      select: { id: true, estado: true },
+      select: {
+        id: true,
+        estado: true,
+        titulo: true,
+        cierreEstimado: true,
+        finalistasAEvaluar: true,
+        publicadaEn: true,
+      },
     });
 
     const porEstado = Object.fromEntries(
@@ -388,7 +409,47 @@ export class VacantesService {
             where: { idVacante: In(ids), contratadoEn: Not(IsNull()) },
           });
 
-    return { ids, porEstado, contratados };
+    return { ids, porEstado, contratados, abiertas: await this.resumirAbiertas(filas) };
+  }
+
+  /**
+   * Las vacantes publicadas con su plan y cuanta gente hay invitada.
+   *
+   * SOLO LAS PUBLICADAS. Un borrador no tiene a quien haya invitado, asi que su
+   * avance seria 0 de 0 —un dato que no dice nada—, y una cerrada ya termino. La
+   * pregunta que el panel responde con esta lista es "como van las abiertas",
+   * que es la unica sobre la que el reclutador puede actuar hoy; cuantos
+   * borradores y cuantas cerradas hay ya lo dicen los contadores.
+   *
+   * ORDENADAS POR CIERRE ESTIMADO, y las que no tienen estimado al final: lo
+   * primero que una pantalla de panel tiene que mostrar es lo que se va a
+   * vencer. Se ordena aqui y no en el frontend para que las dos pantallas que
+   * usen esto no decidan cada una un orden distinto.
+   */
+  private async resumirAbiertas(filas: Vacante[]): Promise<VacanteAbierta[]> {
+    const abiertas = filas.filter((f) => f.estado === EstadoVacante.Publicada);
+    if (abiertas.length === 0) return [];
+
+    const invitados = await this.asignaciones
+      .createQueryBuilder('a')
+      .select('a.id_vacante', 'idVacante')
+      .addSelect('count(*)::int', 'total')
+      .where('a.id_vacante IN (:...ids)', { ids: abiertas.map((a) => a.id) })
+      .groupBy('a.id_vacante')
+      .getRawMany<{ idVacante: string; total: number }>();
+
+    const porVacante = new Map(invitados.map((i) => [i.idVacante, Number(i.total)]));
+
+    return abiertas
+      .map((v) => ({
+        id: v.id,
+        titulo: v.titulo,
+        cierreEstimado: v.cierreEstimado,
+        finalistasAEvaluar: v.finalistasAEvaluar,
+        publicadaEn: v.publicadaEn,
+        invitados: porVacante.get(v.id) ?? 0,
+      }))
+      .sort(compararPorCierre);
   }
 
   /**
@@ -598,6 +659,36 @@ export interface PanelDeVacantes {
   porEstado: Record<EstadoVacante, number>;
   /** Personas contratadas en toda la empresa, no en una vacante. */
   contratados: number;
+  /** Las publicadas, con su plan. El avance lo completa reportes. */
+  abiertas: VacanteAbierta[];
+}
+
+/**
+ * Una vacante abierta tal como la ve el panel.
+ *
+ * Lleva `invitados` porque es el denominador del avance y solo este modulo
+ * sabe a quien se invito. No lleva el avance: eso necesita saber quien entrego
+ * y quien ya tiene evaluacion, y preguntarselo desde aqui cerraria un ciclo
+ * entre modulos. Lo compone reportes, que es el unico autorizado a mezclar.
+ */
+export interface VacanteAbierta {
+  id: string;
+  titulo: string;
+  cierreEstimado: Date | null;
+  finalistasAEvaluar: number | null;
+  publicadaEn: Date | null;
+  invitados: number;
+}
+
+/** Lo que vence antes, primero; lo que no tiene estimado, al final. */
+function compararPorCierre(a: VacanteAbierta, b: VacanteAbierta): number {
+  if (a.cierreEstimado && b.cierreEstimado) {
+    return a.cierreEstimado.getTime() - b.cierreEstimado.getTime();
+  }
+  if (a.cierreEstimado) return -1;
+  if (b.cierreEstimado) return 1;
+  // Ninguna tiene estimado: la mas reciente arriba, como el resto de listados.
+  return (b.publicadaEn?.getTime() ?? 0) - (a.publicadaEn?.getTime() ?? 0);
 }
 
 /** Lo justo para redactar el aviso de cierre de una vacante. */

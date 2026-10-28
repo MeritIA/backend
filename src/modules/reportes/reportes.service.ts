@@ -10,6 +10,7 @@ import {
 } from './dominio/consolidar.js';
 import { aCsv, type Columna } from './dominio/csv.js';
 import { aliasDeCandidato } from './dominio/alias.js';
+import { progresoDe, type ProgresoDeVacante } from './dominio/progreso.js';
 import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
 import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
 import { EjerciciosService } from '../ejercicios/index.js';
@@ -88,11 +89,15 @@ export class ReportesService {
     }
 
     const deVacantes = await this.vacantes.panelDeEmpresa(solicitante.idEmpresa);
-    const [conteosDeEntregas, finalistasEnEvaluacion, retosEnElBanco] = await Promise.all([
-      this.entregas.conteosPorEstadoDeVacantes(deVacantes.ids),
-      this.entregas.candidatosEnEvaluacionDeVacantes(deVacantes.ids),
-      this.ejerciciosDelBanco.cuantosEnElBanco(solicitante.idEmpresa),
-    ]);
+    const idsAbiertas = deVacantes.abiertas.map((v) => v.id);
+    const [conteosDeEntregas, finalistasEnEvaluacion, retosEnElBanco, conEntrega, evaluados] =
+      await Promise.all([
+        this.entregas.conteosPorEstadoDeVacantes(deVacantes.ids),
+        this.entregas.candidatosEnEvaluacionDeVacantes(deVacantes.ids),
+        this.ejerciciosDelBanco.cuantosEnElBanco(solicitante.idEmpresa),
+        this.entregas.candidatosConEntregaPorVacante(idsAbiertas),
+        this.evaluacion.candidatosEvaluadosPorVacante(idsAbiertas),
+      ]);
 
     this.registrar('panel_de_empresa_consultado', solicitante, {
       idEmpresa: solicitante.idEmpresa,
@@ -105,6 +110,7 @@ export class ReportesService {
         cerradas: deVacantes.porEstado[EstadoVacante.Cerrada],
       },
       finalistasEnEvaluacion,
+      abiertas: deVacantes.abiertas.map((v) => progresoDe(v, conEntrega, evaluados)),
       entregasPorEvaluar:
         conteosDeEntregas[EstadoEntrega.Recibida] + conteosDeEntregas[EstadoEntrega.EnEvaluacion],
       entregasEvaluadas: conteosDeEntregas[EstadoEntrega.Evaluada],
@@ -428,6 +434,8 @@ export interface ReporteDeCandidato {
  */
 export interface PanelDeEmpresa {
   vacantes: { borradores: number; publicadas: number; cerradas: number };
+  /** Una fila por vacante publicada, con su avance. Lo que A02 pinta como tarjetas. */
+  abiertas: ProgresoDeVacante[];
   finalistasEnEvaluacion: number;
   entregasPorEvaluar: number;
   entregasEvaluadas: number;

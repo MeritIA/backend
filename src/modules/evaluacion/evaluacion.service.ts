@@ -171,6 +171,35 @@ export class EvaluacionService {
     return filas.map((f) => f.idCandidato);
   }
 
+  /**
+   * Cuantas PERSONAS distintas ya tienen evaluacion, vacante por vacante.
+   *
+   * Es la otra mitad del "avance" de A02: lo que de verdad esta resuelto. Va en
+   * lote porque el panel muestra todas las vacantes abiertas de la empresa y
+   * una llamada por vacante es justo lo que esa pantalla no se puede permitir.
+   *
+   * `distinct id_candidato` por la misma razon que en el aviso de cierre: quien
+   * reintento tiene dos evaluaciones y sigue siendo una persona avanzada.
+   *
+   * No recibe nada de una peticion: la lista de vacantes la arma el panel con
+   * la empresa del token. No hay identificador que un atacante pueda cambiar.
+   */
+  async candidatosEvaluadosPorVacante(
+    idsDeVacantes: readonly string[],
+  ): Promise<Record<string, number>> {
+    if (idsDeVacantes.length === 0) return {};
+
+    const filas = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('e.id_vacante', 'idVacante')
+      .addSelect('count(distinct e.id_candidato)::int', 'total')
+      .where('e.id_vacante IN (:...idsDeVacantes)', { idsDeVacantes })
+      .groupBy('e.id_vacante')
+      .getRawMany<{ idVacante: string; total: number }>();
+
+    return Object.fromEntries(filas.map((f) => [f.idVacante, Number(f.total)]));
+  }
+
   private async exigirAcceso(evaluacion: Evaluacion, solicitante: Solicitante): Promise<void> {
     if (solicitante.rol === Rol.Candidato) {
       if (evaluacion.idCandidato === solicitante.id) return;

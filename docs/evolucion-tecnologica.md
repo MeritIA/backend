@@ -127,7 +127,7 @@ desapareció. De ahí tres prácticas que ya están puestas:
 
 **Cadencia.** Dependabot abre los PR; el equipo los agrupa semanalmente. Los
 `patch` y `minor` entran si la CI está verde —cinco verificaciones: Gitleaks,
-`npm audit`, lint/build/contrato, 521 pruebas con cobertura, y SonarQube—. Las
+`npm audit`, lint/build/contrato, 572 pruebas con cobertura, y SonarQube—. Las
 **mayores se tratan de una en una**, cada una en su rama, porque una mayor es un
 cambio de comportamiento y no una actualización.
 

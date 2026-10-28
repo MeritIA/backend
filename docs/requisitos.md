@@ -44,6 +44,8 @@ respaldo.
 | RF-VAC-4 | El reclutador invita candidatos; sin invitación no hay acceso ni entrega | `vacante-candidato`, `candidatoTieneAcceso` | implementado |
 | RF-VAC-5 | La vacante fija cuántos intentos se permiten (1 a 10) | `intentosPermitidos` | implementado |
 | RF-VAC-6 | La contratación de un candidato se registra con **quién** la registró y **cuándo** | `vacante-candidato · contratadoEn`, pantalla A08 | implementado; **no notifica** a los finalistas (§6.3 de la matriz) |
+| RF-VAC-7 | La vacante guarda un **cierre estimado**, informativo: llegada la fecha el backend no cierra nada | `Vacante · cierreEstimado`, pantalla A02 | implementado; se aceptan fechas pasadas a propósito |
+| RF-VAC-8 | La vacante guarda cuántos **finalistas se piensa evaluar**, como plan y no como tope | `Vacante · finalistasAEvaluar`, pantalla A04 | implementado; se congelará cuando exista el cobro (§6.1) |
 
 ### RF-EJE — Banco de ejercicios y rúbrica (paquete 2.3)
 
@@ -88,6 +90,18 @@ respaldo.
 | RF-REP-6 | El ranking dice en qué criterio destacó cada candidato | `consolidar · habilidadDestacadaDe`, pantalla A06 | implementado |
 | RF-REP-7 | La empresa ve sus cifras en una sola llamada: vacantes por estado, finalistas en evaluación, contratados y retos del banco | `reportes.service · panelDeLaEmpresa`, pantalla A02 | implementado |
 | RF-REP-8 | El candidato ve su puesto y el total de participantes, solo con la vacante cerrada | `evaluacion.service · miPuestoEn`, pantalla B22 | implementado (D-8) |
+| RF-REP-9 | El panel trae el **avance de cada vacante abierta** —invitados, personas que entregaron, personas evaluadas y porcentaje— en la misma llamada | `dominio/progreso · progresoDe`, pantalla A02 | implementado; el denominador son los invitados, no el plan (D-12) |
+
+### RF-CON — Consentimientos del titular (Ley 1581, pantallas B12 y B24)
+
+| ID | Requisito | Dónde | Estado |
+|---|---|---|---|
+| RF-CON-1 | El titular ve los cuatro permisos del catálogo con el texto que acepta, decididos o no | `dominio/consentimiento · CATALOGO` | implementado |
+| RF-CON-2 | Concede y revoca cada permiso de forma independiente y en cualquier momento | `PUT /autenticacion/consentimientos` | implementado |
+| RF-CON-3 | Cada decisión guarda **qué, cuándo, a qué versión del aviso y desde dónde** | `Consentimiento`, tabla que solo crece | implementado |
+| RF-CON-4 | Revocar **no borra** la decisión anterior: añade una fila | prueba de integración | implementado |
+| RF-CON-5 | Nadie —ni un administrador— ve ni cambia los permisos de otra persona | usuario del token, sin identificador en la URL | implementado |
+| RF-CON-6 | La respuesta declara si el backend **hace cumplir** cada permiso | campo `vigilado`, hoy `false` en los cuatro | implementado; nada los hace cumplir todavía (§6.10) |
 
 ### RF-NOT — Avisos a los candidatos (decisión del 27/10/2026, D-10)
 
@@ -153,7 +167,7 @@ trazable igual.
 | RNF-OPE-1 | El entorno local se levanta con un comando | implementado (`compose.yaml`) |
 | RNF-OPE-2 | Servicios separados; imagen con usuario no-root y healthcheck | implementado |
 | RNF-OPE-3 | Configuración por entorno, validada al arrancar | implementado |
-| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (45 operaciones) |
+| RNF-OPE-4 | Contrato OpenAPI publicado | implementado (47 operaciones) |
 
 ## Qué queda fuera, a propósito
 
