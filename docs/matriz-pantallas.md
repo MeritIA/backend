@@ -248,6 +248,36 @@ La primera salida —que no fuera revocable— se descarta porque contradice el 
 
 Los otros tres permisos siguen **registrados y sin vigilar** (`vigilado: false`), porque las funciones que gobiernan —proctoring, banco de talento, Mentor IA— no existen.
 
+### 6.11 El flujo publica el perfil de todo el mundo; la pantalla dice que es opcional
+
+El BPM del equipo (ver [`flujo-extremo-a-extremo.md`](flujo-extremo-a-extremo.md)) termina su camino feliz en el paso 13: **«Fin: pago recibido y perfil publicado — el candidato queda visible en el banco de talento»**. Automático, sin preguntar.
+
+Pero en B12 ese mismo permiso, «Publicación de tu perfil a otras empresas», es el único marcado **«Opcional»**, y nace **apagado**. Y B24 lo ofrece como un interruptor que se revoca cuando uno quiera.
+
+O sea: **el flujo trata como automático algo que la pantalla presenta como una elección.** Si el banco de talento se construye siguiendo el diagrama, publica a gente que no lo autorizó.
+
+Dos salidas, y ninguna la decide el backend:
+
+- **Manda la pantalla:** el paso 13 publica el perfil **solo si el permiso está concedido**, y para quien no lo concedió el proceso termina igual, sin publicar. Es lo coherente con la Ley 1581 y con lo que ya está implementado.
+- **Manda el flujo:** publicar el perfil es parte del servicio y deja de ser opcional. Entonces B12 no puede seguir marcándolo «Opcional», y habría que decir qué pasa con quien lo rechaza.
+
+El backend ya está del lado de la primera: el permiso nace apagado y nada publica nada. **Pero eso es la posición por omisión, no una decisión tomada.**
+
+### 6.12 El Mentor IA corre para todos y nadie lo autoriza
+
+El paso 9 del BPM, **«Mentor IA genera retroalimentación»**, está en la línea principal del flujo: le pasa a todo el que no fue descalificado.
+
+Y «Datos para el Mentor IA» es exactamente el permiso que **B24 deja revocar y que B12 nunca pide** (§6.10, punto 1). Hasta ahora eso parecía un descuido del mockup. El diagrama dice que no: **el flujo da por hecho un tratamiento de datos que nadie autoriza en ninguna pantalla.**
+
+Tratar datos para una finalidad que el titular no autorizó es justo lo que prohíbe la Ley 1581. En el backend el permiso **nace apagado** por eso (D-16), lo que significa que, si el Mentor IA se construyera mañana respetando el permiso, **no se ejecutaría para nadie** —porque nadie lo ha concedido—.
+
+Lo que hay que hacer es una de dos, y es trabajo de diseño:
+
+- **Pedirlo en B12**, como cuarta tarjeta, marcada «Opcional». El backend ya lo sirve en `GET /autenticacion/consentimientos` con su texto, listo para pintarlo.
+- **Quitarlo de B24**, si se decide que el Mentor IA no trata datos personales más allá de lo que el candidato ya entregó. Entonces deja de ser un permiso y no se pide.
+
+Lo que no se puede es dejarlo como está: revocable en una pantalla, invisible en la otra y obligatorio en el diagrama.
+
 ## 7. Lo que el backend ya tiene y ninguna pantalla usa
 
 El mapeo también funciona al revés, y ahí aparecen huecos de diseño:

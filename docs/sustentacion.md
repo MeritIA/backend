@@ -111,6 +111,12 @@ el equipo aprobó (`matriz-pantallas.md` §8):
 - ✅ [`adr/`](adr/): catorce decisiones con su alternativa descartada, para el punto 6.
 - ✅ [`evolucion-tecnologica.md`](evolucion-tecnologica.md) con disparadores
   medidos, para el punto 8.
+- ✅ [`flujo-extremo-a-extremo.md`](flujo-extremo-a-extremo.md): el BPM del
+  equipo, transcrito del Figma el 28/10, con qué paso tiene backend y cuál no.
+  De sus catorce pasos, el backend cubre **uno entero y parte de dos**: verlo
+  en secuencia deja claro que pagos, moderación y proctoring son **la mitad
+  del proceso**, no extras. Confirmó la D-17 y destapó dos contradicciones
+  nuevas (§6.11 y §6.12).
 - ✅ Las cuatro pantallas del MVP que no se podían construir: el panel de la
   empresa (A02, una llamada en vez de N), la habilidad destacada del ranking
   (A06), el registro de contratación (A08) y el puesto del candidato (B22).
