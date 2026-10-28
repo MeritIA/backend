@@ -599,4 +599,141 @@ describe('integracion: entregas', () => {
       await entregar(candidato, 'no-es-uuid', ejercicios[0]).expect(400);
     });
   });
+
+  /**
+   * El permiso de calificacion por IA, que es el unico que el backend hace
+   * cumplir (D-17, contradiccion §6.10 de la matriz de pantallas).
+   *
+   * Lo que se fija aqui no es que un 403 salga: es la consecuencia que el
+   * equipo acepto al decidir que ese permiso SI es revocable. Quien lo apaga
+   * deja de poder entregar, y quien lo vuelve a conceder puede seguir.
+   */
+  describe('CRITERIO: sin consentimiento de calificacion por IA no se acepta la entrega', () => {
+    const RUTA_PERMISOS = '/api/v1/autenticacion/consentimientos';
+
+    const decidir = (quien: Sesion, concedido: boolean) =>
+      api(app)
+        .put(RUTA_PERMISOS)
+        .set(auth(quien))
+        .send({ decisiones: [{ tipo: 'calificacion_ia', concedido }] })
+        .expect(200);
+
+    it('quien nunca decidio puede entregar: el permiso nace concedido', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+
+      // Si el valor por omision fuera false, el dia que esto se desplegara
+      // dejaria de poder entregar todo el mundo a la vez.
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('revocarlo bloquea la entrega con 403 y dice como volver atras', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await decidir(candidato, false);
+
+      const { body } = await entregar(candidato, idVacante, ejercicios[0]).expect(403);
+
+      // 403 y no 404: el candidato SI tiene acceso a esta vacante, lo que pasa
+      // es que tomo una decision sobre sus datos. Esconderselo detras de un
+      // "no existe" seria mentirle sobre algo que el mismo eligio.
+      expect(body.mensaje).toMatch(/calificacion por IA/i);
+      expect(body.mensaje).toMatch(/privacidad/i);
+    });
+
+    it('volver a concederlo deja entregar otra vez', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+
+      await decidir(candidato, false);
+      await entregar(candidato, idVacante, ejercicios[0]).expect(403);
+
+      await decidir(candidato, true);
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('la entrega bloqueada no deja rastro: ni fila ni archivo', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await decidir(candidato, false);
+
+      await entregar(candidato, idVacante, ejercicios[0]).expect(403);
+
+      // Se comprueba ANTES de subir nada, para no dejar en el bucket un archivo
+      // que nadie va a poder evaluar y que contiene datos del candidato.
+      const filas = await consultar<{ total: string }>(
+        `select count(*)::int as total from entregas.entregas where id_candidato = $1`,
+        [candidato.id],
+      );
+      expect(Number(filas[0].total)).toBe(0);
+    });
+
+    it('revocar no gasta un intento', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+
+      await decidir(candidato, false);
+      await entregar(candidato, idVacante, ejercicios[0]).expect(403);
+      await decidir(candidato, true);
+
+      // La vacante permite un intento. Si el rechazo lo hubiera consumido,
+      // este 201 seria un 409.
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('el bloqueo es de quien revoco, no de la vacante', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await api(app)
+        .post(`/api/v1/vacantes/${idVacante}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: otroCandidato.id })
+        .expect(200);
+      await decidir(candidato, false);
+
+      await entregar(candidato, idVacante, ejercicios[0]).expect(403);
+      // El otro esta invitado a la MISMA vacante y no decidio nada.
+      await entregar(otroCandidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('revocar OTRO permiso no bloquea nada', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await api(app)
+        .put(RUTA_PERMISOS)
+        .set(auth(candidato))
+        .send({
+          decisiones: [
+            { tipo: 'biometria', concedido: false },
+            { tipo: 'perfil_publico', concedido: false },
+            { tipo: 'mentor_ia', concedido: false },
+          ],
+        })
+        .expect(200);
+
+      // Los otros tres estan en `vigilado: false` y tienen que seguir sin
+      // efecto: inventarles uno seria inventar producto.
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('revocar DESPUES de entregar no deshace la entrega', async () => {
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+
+      await decidir(candidato, false);
+
+      // Limite conocido y escrito en la D-17: la revocacion mira hacia
+      // adelante, y ese entregable se envio bajo un consentimiento que en su
+      // momento era valido.
+      const filas = await consultar<{ total: string }>(
+        `select count(*)::int as total from entregas.entregas where id_candidato = $1`,
+        [candidato.id],
+      );
+      expect(Number(filas[0].total)).toBe(1);
+    });
+
+    it('quien no esta invitado sigue viendo 404 y no el 403 del permiso', async () => {
+      // `vacanteLista` solo invita a `candidato`, asi que el otro es un
+      // desconocido para esta vacante. Y ademas revoco el permiso.
+      const { idVacante, ejercicios } = await vacanteLista(1);
+      await decidir(otroCandidato, false);
+
+      // El orden importa: si la comprobacion del permiso fuera primero, este
+      // 403 le contaria a alguien sin acceso que la vacante existe.
+      await entregar(otroCandidato, idVacante, ejercicios[0]).expect(404);
+    });
+  });
 });

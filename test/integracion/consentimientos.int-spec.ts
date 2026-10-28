@@ -95,13 +95,13 @@ describe('integracion: consentimientos del titular', () => {
       expect(permisos.get('mentor_ia')?.concedido).toBe(false);
     });
 
-    it('declara que todavia no hace cumplir ninguno', async () => {
+    it('declara cual hace cumplir y cuales no', async () => {
       const { body } = await mios(ana).expect(200);
+      const vigilados = (body.permisos as Permiso[]).filter((p) => p.vigilado).map((p) => p.tipo);
 
-      // Prometer control sobre algo que nadie vigila es peor que no prometerlo.
-      for (const permiso of body.permisos as Permiso[]) {
-        expect(permiso.vigilado).toBe(false);
-      }
+      // Prometer control sobre algo que nadie vigila es peor que no prometerlo,
+      // asi que la respuesta lo dice permiso por permiso.
+      expect(vigilados).toEqual(['calificacion_ia']);
       expect(body.versionDelAviso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 

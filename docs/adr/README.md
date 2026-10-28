@@ -26,7 +26,7 @@ consecuencias malas no es una decisión, es publicidad.
 | [0011](0011-control-de-admision.md) | Control de admisión en el middleware, 503 antes de ahogarse | Vigente, pendiente de re-medir |
 | [0012](0012-404-en-vez-de-403.md) | A un recurso ajeno se responde 404, no 403 | Vigente |
 | [0013](0013-aviso-por-correo-al-cerrar.md) | Cerrar una vacante avisa por correo, y el aviso no lleva el resultado | Vigente, apagado por defecto |
-| [0014](0014-registro-de-consentimientos.md) | Los consentimientos son un historial, y el backend declara que no los hace cumplir | Vigente |
+| [0014](0014-registro-de-consentimientos.md) | Los consentimientos son un historial, y cada permiso dice si alguien lo hace cumplir | Vigente |
 
 El **plan de actualización tecnológica** —cómo cambia el monolito con el tiempo,
 y a qué número se parte qué— está en

@@ -101,7 +101,8 @@ respaldo.
 | RF-CON-3 | Cada decisión guarda **qué, cuándo, a qué versión del aviso y desde dónde** | `Consentimiento`, tabla que solo crece | implementado |
 | RF-CON-4 | Revocar **no borra** la decisión anterior: añade una fila | prueba de integración | implementado |
 | RF-CON-5 | Nadie —ni un administrador— ve ni cambia los permisos de otra persona | usuario del token, sin identificador en la URL | implementado |
-| RF-CON-6 | La respuesta declara si el backend **hace cumplir** cada permiso | campo `vigilado`, hoy `false` en los cuatro | implementado; nada los hace cumplir todavía (§6.10) |
+| RF-CON-6 | La respuesta declara si el backend **hace cumplir** cada permiso | campo `vigilado` | implementado; hoy solo `calificacion_ia` |
+| RF-CON-7 | Sin el permiso de calificación por IA **no se acepta la entrega**, con 403 y cómo volver atrás | `entregas.service · exigirConsentimientoDeEvaluacion` | implementado (D-17); no detiene lo ya encolado |
 
 ### RF-NOT — Avisos a los candidatos (decisión del 27/10/2026, D-10)
 

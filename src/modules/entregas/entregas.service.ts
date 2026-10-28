@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,7 +13,7 @@ import { Entrega } from './entities/entrega.entity.js';
 import { HistorialEstadoEntrega } from './entities/historial-estado-entrega.entity.js';
 import { EstadoEntrega, puedeTransicionar } from './dominio/estado-entrega.js';
 import { ENTREGA_COMPLETADA, type EventoEntregaCompletada } from './dominio/eventos.js';
-import { Rol } from '../autenticacion/index.js';
+import { ConsentimientosService, Rol, TipoDeConsentimiento } from '../autenticacion/index.js';
 import { VacantesService, type Solicitante } from '../vacantes/index.js';
 import {
   AlmacenamientoService,
@@ -77,6 +78,7 @@ export class EntregasService {
     private readonly historial: Repository<HistorialEstadoEntrega>,
     private readonly dataSource: DataSource,
     private readonly vacantes: VacantesService,
+    private readonly consentimientos: ConsentimientosService,
     private readonly almacen: AlmacenamientoService,
     private readonly bus: BusDeEventos,
   ) {}
@@ -120,6 +122,13 @@ export class EntregasService {
       this.registrar('entrega_rechazada_sin_acceso', solicitante, { idVacante });
       throw new NotFoundException('La vacante no existe o no acepta entregas.');
     }
+
+    // Antes de tocar el archivo: si el candidato revoco el permiso de
+    // calificacion por IA, su entregable no puede ir al servicio de evaluacion.
+    // Se comprueba DESPUES del acceso para no contarle a un desconocido que la
+    // vacante existe, y ANTES de subir nada para no dejar en el bucket un
+    // archivo que nadie va a poder evaluar.
+    await this.exigirConsentimientoDeEvaluacion(solicitante);
 
     const ejercicios = await this.vacantes.idsDeEjerciciosDe(idVacante);
     if (!ejercicios.includes(idEjercicio)) {
@@ -477,6 +486,47 @@ export class EntregasService {
   }
 
   // --- Interno ---
+
+  /**
+   * Exige el permiso de calificacion por IA antes de aceptar una entrega.
+   *
+   * POR QUE AQUI Y NO AL EVALUAR
+   *
+   * Porque aqui se le puede decir a la persona. Si se comprobara solo en el
+   * trabajo de la cola, el candidato subiria su entregable, se quedaria
+   * esperando y nadie le explicaria nunca por que no llega la nota. La
+   * respuesta inmediata dice lo que pasa y como arreglarlo.
+   *
+   * QUE PASA CON UNA ENTREGA YA HECHA
+   *
+   * Nada: revocar el permiso NO detiene una entrega que ya esta en la cola. La
+   * revocacion de la Ley 1581 mira hacia adelante —detiene tratamientos
+   * futuros— y ese entregable se envio bajo un consentimiento que en ese
+   * momento era valido. Es un limite conocido y esta escrito en la D-17; la
+   * ventana es de minutos y cerrarla obligaria a inventar un estado de entrega
+   * que hoy no existe.
+   *
+   * 403 Y NO 404
+   *
+   * El candidato si tiene acceso a esta vacante: lo que pasa es que tomo una
+   * decision sobre sus datos que tiene esta consecuencia. Esconderselo detras
+   * de un "no existe" seria mentirle sobre algo que el mismo eligio.
+   */
+  private async exigirConsentimientoDeEvaluacion(solicitante: Solicitante): Promise<void> {
+    const autoriza = await this.consentimientos.autoriza(
+      solicitante.id,
+      TipoDeConsentimiento.CalificacionIA,
+    );
+    if (autoriza) return;
+
+    this.registrar('entrega_rechazada_sin_consentimiento', solicitante, {
+      tipo: TipoDeConsentimiento.CalificacionIA,
+    });
+    throw new ForbiddenException(
+      'Revocaste el permiso de calificacion por IA, y sin el tu entregable no se puede ' +
+        'evaluar. Puedes volver a concederlo en Mi perfil > Privacidad y entregar de nuevo.',
+    );
+  }
 
   private async obtenerConHistorial(id: string): Promise<Entrega> {
     const entrega = await this.entregas.findOne({

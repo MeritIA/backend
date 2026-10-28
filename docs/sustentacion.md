@@ -63,8 +63,8 @@ es la última: **dónde se mira para saber si es verdad**.
 | Evaluar más rápido y más barato que leer CVs | Rendimiento y capacidad | **79 pet/s** sostenidas con **p95 83 ms**; punto de caída conocido en 50 it/s; pasado el tope se rechaza con 503 en vez de colapsar | `rendimiento.md`, ADR 0011 | 🟡 el rechazo con 503 **está sin re-medir** |
 | Que el candidato reciba algo por su trabajo, y no solo silencio | Transparencia / usabilidad | Lee el **enunciado y la rúbrica** antes de entregar, y al cerrarse el proceso ve **su puesto y el total** | `GET /vacantes/{id}/ejercicios`, `GET /evaluaciones/vacante/{id}/mi-puesto` (D-8) | ✅ |
 | Que una empresa pueda operar sola sin pedirnos nada | Disponibilidad | La caída del proveedor de IA **retrasa notas, no rechaza entregas**: la cola evalúa al volver | D-2, ADR 0007, health check | ✅ |
-| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **572 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
-| Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push | ADR 0006, CI | 🟡 **consentimientos hechos** (B12 y el panel de B24, con historial); faltan «descargar mis datos» y «eliminar cuenta» |
+| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **582 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
+| Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push, y **consentimientos con historial** que el backend hace cumplir donde puede | ADR 0006, ADR 0014, CI | 🟡 **consentimientos hechos** (B12 y el panel de B24, con historial); faltan «descargar mis datos» y «eliminar cuenta» |
 
 Las tres filas en amarillo son las que conviene llevar preparadas, porque son
 las que un profesor que lea con atención va a preguntar.
@@ -133,6 +133,13 @@ el equipo aprobó (`matriz-pantallas.md` §8):
   **demostrar** qué autorizó y cuándo. El backend **no los hace cumplir** y lo
   dice en la respuesta, en vez de callarlo. Al transcribir las dos pantallas
   apareció una contradicción entre ellas: §6.10 de la matriz.
+- ✅ **Y uno de ellos ya se hace cumplir** (D-17, que cierra esa §6.10):
+  revocar «calificación por IA» bloquea la entrega con un 403 que dice cómo
+  volver atrás. Es la consecuencia honesta de que la pantalla lo muestre como
+  revocable, y deja un trabajo de **diseño**: B12 lo pinta como un
+  interruptor más, al lado de uno marcado «Opcional», sin advertir que
+  apagarlo impide participar. El backend ya devuelve ese aviso para que la
+  pantalla lo muestre antes y no después.
 
 **Lo siguiente que sí es backend, por orden de lo que desbloquea:**
 
