@@ -22,13 +22,15 @@
  *   independiente y puedes revocarlo cuando quieras desde Mi perfil >
  *   Privacidad".
  *
- * Esa segunda es la de verdad incomoda: si se puede revocar, un candidato que
- * lo apague no puede ser evaluado, y evaluar es el producto entero. Queda
- * anotada como contradiccion §6.9 de la matriz de pantallas, para que la
- * decida el equipo y no un valor por omision escrito aqui. Mientras tanto este
- * modulo **registra** la decision y no la hace cumplir: lo que cada permiso
- * gobierna esta en `efecto`, y hoy ninguna de esas cuatro funciones existe en
- * el backend.
+ * Esa segunda era la de verdad incomoda: si se puede revocar, un candidato que
+ * lo apague no puede ser evaluado, y evaluar es el producto entero. Se decidio
+ * el 28/10 (D-17, contradiccion §6.10 de la matriz): **si es revocable, y
+ * revocarlo significa no poder entregar**. El modulo de entregas lo exige antes
+ * de aceptar nada, y el candidato recibe un 403 que dice como volver atras.
+ *
+ * Los otros tres se **registran y no se hacen cumplir**, y el campo `vigilado`
+ * lo dice en la respuesta en vez de callarlo: las funciones que gobiernan
+ * —proctoring, banco de talento, Mentor IA— no existen todavia en el backend.
  */
 export enum TipoDeConsentimiento {
   Biometria = 'biometria',
@@ -68,11 +70,12 @@ export interface PermisoDelCatalogo {
   /** Que pasaria al revocarlo. Hoy es documentacion, no comportamiento. */
   readonly efecto: string;
   /**
-   * Si algo del backend lo hace cumplir hoy. Los cuatro estan en `false`
-   * porque las funciones que gobiernan —proctoring, banco de talento, Mentor
-   * IA— no existen todavia, y la cuarta espera la decision de §6.9. Va en la
+   * Si algo del backend lo hace cumplir hoy. Solo `calificacion_ia` lo esta;
+   * los otros tres estan en `false` porque las funciones que gobiernan
+   * —proctoring, banco de talento, Mentor IA— no existen todavia. Va en la
    * respuesta a proposito: una pantalla que promete control sobre algo que
-   * nadie vigila es peor que no prometerlo.
+   * nadie vigila es peor que no prometerlo, y quien construya una de esas tres
+   * funciones tiene que llamar a `autoriza()` y mover este campo.
    */
   readonly vigilado: boolean;
 }
@@ -101,8 +104,11 @@ export const CATALOGO: readonly PermisoDelCatalogo[] = [
     sePideEnElRegistro: true,
     porOmision: true,
     efecto:
-      'Sin decidir: revocarlo dejaria al candidato sin evaluacion posible. Ver contradiccion §6.9.',
-    vigilado: false,
+      'Dejas de poder entregar retos: sin este permiso tu entregable no se envia a evaluar. ' +
+      'Las entregas que ya hiciste no se deshacen.',
+    // El unico que el backend hace cumplir hoy: `entregas` lo exige antes de
+    // aceptar nada. Decidido el 28/10 (D-17), cerrando la contradiccion §6.10.
+    vigilado: true,
   },
   {
     tipo: TipoDeConsentimiento.PerfilPublico,

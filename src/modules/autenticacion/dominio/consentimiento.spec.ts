@@ -59,12 +59,23 @@ describe('catalogo de consentimientos', () => {
     }
   });
 
-  it('ninguno esta vigilado todavia, y lo dice', () => {
-    // Las cuatro funciones que gobiernan no existen. Declararlo es la
+  it('solo la calificacion por IA se hace cumplir, y el resto lo declara', () => {
+    // Decidido el 28/10 (D-17): entregas lo exige antes de aceptar nada. Los
+    // otros tres siguen sin vigilar porque las funciones que gobiernan
+    // —proctoring, banco de talento, Mentor IA— no existen. Declararlo es la
     // diferencia entre un registro honesto y una pantalla que miente.
-    for (const permiso of CATALOGO) {
-      expect(permiso.vigilado).toBe(false);
-    }
+    const vigilados = CATALOGO.filter((p) => p.vigilado).map((p) => p.tipo);
+
+    expect(vigilados).toEqual([TipoDeConsentimiento.CalificacionIA]);
+  });
+
+  it('el permiso que se hace cumplir dice lo que cuesta revocarlo', () => {
+    const permiso = permisoDelCatalogo(TipoDeConsentimiento.CalificacionIA);
+
+    // Quien lo apaga tiene que saber antes que deja de poder entregar, y que
+    // lo ya entregado no se deshace.
+    expect(permiso.efecto).toMatch(/dejas de poder entregar/i);
+    expect(permiso.efecto).toMatch(/no se deshacen/i);
   });
 
   it('la version del aviso tiene forma de fecha', () => {
