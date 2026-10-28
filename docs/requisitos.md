@@ -44,6 +44,8 @@ respaldo.
 | RF-VAC-4 | El reclutador invita candidatos; sin invitación no hay acceso ni entrega | `vacante-candidato`, `candidatoTieneAcceso` | implementado |
 | RF-VAC-5 | La vacante fija cuántos intentos se permiten (1 a 10) | `intentosPermitidos` | implementado |
 | RF-VAC-6 | La contratación de un candidato se registra con **quién** la registró y **cuándo** | `vacante-candidato · contratadoEn`, pantalla A08 | implementado; **no notifica** a los finalistas (§6.3 de la matriz) |
+| RF-VAC-7 | La vacante guarda un **cierre estimado**, informativo: llegada la fecha el backend no cierra nada | `Vacante · cierreEstimado`, pantalla A02 | implementado; se aceptan fechas pasadas a propósito |
+| RF-VAC-8 | La vacante guarda cuántos **finalistas se piensa evaluar**, como plan y no como tope | `Vacante · finalistasAEvaluar`, pantalla A04 | implementado; se congelará cuando exista el cobro (§6.1) |
 
 ### RF-EJE — Banco de ejercicios y rúbrica (paquete 2.3)
 
@@ -88,6 +90,7 @@ respaldo.
 | RF-REP-6 | El ranking dice en qué criterio destacó cada candidato | `consolidar · habilidadDestacadaDe`, pantalla A06 | implementado |
 | RF-REP-7 | La empresa ve sus cifras en una sola llamada: vacantes por estado, finalistas en evaluación, contratados y retos del banco | `reportes.service · panelDeLaEmpresa`, pantalla A02 | implementado |
 | RF-REP-8 | El candidato ve su puesto y el total de participantes, solo con la vacante cerrada | `evaluacion.service · miPuestoEn`, pantalla B22 | implementado (D-8) |
+| RF-REP-9 | El panel trae el **avance de cada vacante abierta** —invitados, personas que entregaron, personas evaluadas y porcentaje— en la misma llamada | `dominio/progreso · progresoDe`, pantalla A02 | implementado; el denominador son los invitados, no el plan (D-12) |
 
 ### RF-NOT — Avisos a los candidatos (decisión del 27/10/2026, D-10)
 

@@ -63,7 +63,7 @@ es la última: **dónde se mira para saber si es verdad**.
 | Evaluar más rápido y más barato que leer CVs | Rendimiento y capacidad | **79 pet/s** sostenidas con **p95 83 ms**; punto de caída conocido en 50 it/s; pasado el tope se rechaza con 503 en vez de colapsar | `rendimiento.md`, ADR 0011 | 🟡 el rechazo con 503 **está sin re-medir** |
 | Que el candidato reciba algo por su trabajo, y no solo silencio | Transparencia / usabilidad | Lee el **enunciado y la rúbrica** antes de entregar, y al cerrarse el proceso ve **su puesto y el total** | `GET /vacantes/{id}/ejercicios`, `GET /evaluaciones/vacante/{id}/mi-puesto` (D-8) | ✅ |
 | Que una empresa pueda operar sola sin pedirnos nada | Disponibilidad | La caída del proveedor de IA **retrasa notas, no rechaza entregas**: la cola evalúa al volver | D-2, ADR 0007, health check | ✅ |
-| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **521 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
+| Que el equipo pueda seguir cambiando el producto sin romperlo | Mantenibilidad | **544 pruebas**, cobertura 89,6 % de líneas, cinco verificaciones en cada PR, fronteras entre módulos verificadas por ESLint | CI, `requisitos.md` RNF-CAL | 🟡 falta el **E2E de flujo completo** |
 | Cumplir la Ley 1581 con los datos de los candidatos | Confidencialidad / cumplimiento | Correo, nombre y nombre de archivo **cifrados en reposo** (AES-256-GCM), contraseñas con argon2id, secretos fuera de Git con Gitleaks en cada push | ADR 0006, CI | 🟡 faltan **consentimientos** y «descargar/eliminar mis datos» (B12, B24) |
 
 Las tres filas en amarillo son las que conviene llevar preparadas, porque son
@@ -120,11 +120,16 @@ el equipo aprobó (`matriz-pantallas.md` §8):
   diez pantallas sin esperar nada del backend.
 - ✅ Ratificada la lista de catorce sectores (D-6), que estaba en el código sin
   que ningún documento la respaldara.
+- ✅ **El plan y el avance de cada vacante** (D-12, D-13): «cierre estimado» y
+  «finalistas a evaluar» como campos, y el «avance» de cada tarjeta de A02 en la
+  misma llamada del panel —invitados, cuántas personas entregaron, cuántas tienen
+  evaluación y el porcentaje—. Las dos decisiones que hubo que tomar quedaron
+  escritas: el denominador son los invitados y no el plan, porque el plan se
+  puede cambiar a mitad del proceso y la barra retrocedería; y el estimado **no
+  cierra nada**, porque cerrar le escribe a personas reales.
 
 **Lo siguiente que sí es backend, por orden de lo que desbloquea:**
 
-- «Avance» y «cierre estimado» de A02, y «finalistas a evaluar» de A04: son
-  campos nuevos en `Vacante`, sin lógica.
 - Los consentimientos de B12 y «descargar / eliminar mis datos» de B24. **No son
   adorno**: son obligaciones de la Ley 1581 que el producto ya promete en
   pantalla, y hoy no tienen ruta.

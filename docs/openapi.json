@@ -1936,6 +1936,18 @@
             "maximum": 10,
             "default": 1,
             "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
+          },
+          "cierreEstimado": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-12-15T23:59:59.000Z",
+            "description": "Cuando se espera cerrar el proceso. Es informativo: llegada la fecha el backend no cierra nada, porque cerrar avisa por correo a personas y no puede dispararlo un reloj. Se aceptan fechas pasadas."
+          },
+          "finalistasAEvaluar": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Cuantos finalistas se piensa evaluar. Es un plan, no un tope: no impide invitar ni evaluar a mas."
           }
         },
         "required": [
@@ -1965,6 +1977,19 @@
             "maximum": 10,
             "default": 1,
             "description": "Intentos por candidato y ejercicio. Solo se cambia mientras la vacante es un borrador."
+          },
+          "cierreEstimado": {
+            "type": "object",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Null borra el estimado. Se aceptan fechas pasadas: ver la entidad."
+          },
+          "finalistasAEvaluar": {
+            "type": "object",
+            "minimum": 1,
+            "maximum": 1000,
+            "nullable": true,
+            "description": "Se puede cambiar con la vacante ya publicada, al contrario que intentosPermitidos: subirlo o bajarlo no le quita oportunidades a ningun candidato. Null borra el plan."
           }
         }
       },
@@ -2372,11 +2397,80 @@
           "cerradas"
         ]
       },
+      "ProgresoDeVacanteRespuesta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titulo": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "publicadaEn": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "cierreEstimado": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "description": "Estimado del reclutador. No cierra la vacante y puede estar en el pasado."
+          },
+          "finalistasAEvaluar": {
+            "type": "number",
+            "nullable": true,
+            "description": "Lo planeado al publicar. Los evaluados pueden superarlo: es un plan, no un tope."
+          },
+          "invitados": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Candidatos invitados. Denominador del avance."
+          },
+          "conEntrega": {
+            "type": "number",
+            "minimum": 0,
+            "description": "PERSONAS con al menos una entrega, no entregas."
+          },
+          "evaluados": {
+            "type": "number",
+            "minimum": 0,
+            "description": "PERSONAS con evaluacion. Numerador del avance."
+          },
+          "avance": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Porcentaje de invitados ya evaluados. Null si no hay nadie invitado."
+          }
+        },
+        "required": [
+          "id",
+          "titulo",
+          "publicadaEn",
+          "cierreEstimado",
+          "finalistasAEvaluar",
+          "invitados",
+          "conEntrega",
+          "evaluados",
+          "avance"
+        ]
+      },
       "PanelDeEmpresaRespuesta": {
         "type": "object",
         "properties": {
           "vacantes": {
             "$ref": "#/components/schemas/VacantesDelPanelRespuesta"
+          },
+          "abiertas": {
+            "description": "Solo las publicadas, ordenadas por cierre estimado y las sin estimado al final. Los borradores y las cerradas solo salen en los contadores: un borrador no tiene avance.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProgresoDeVacanteRespuesta"
+            }
           },
           "finalistasEnEvaluacion": {
             "type": "number",
@@ -2407,6 +2501,7 @@
         },
         "required": [
           "vacantes",
+          "abiertas",
           "finalistasEnEvaluacion",
           "entregasPorEvaluar",
           "entregasEvaluadas",
