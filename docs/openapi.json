@@ -1551,6 +1551,48 @@
         ]
       }
     },
+    "/reportes/afinidad": {
+      "get": {
+        "description": "Compara lo que cada vacante EXIGE --los criterios de las rubricas de sus ejercicios, con sus pesos-- contra lo que el candidato ha DEMOSTRADO en las pruebas que ya resolvio. No compara un CV con una descripcion de puesto. Cada fila trae el desglose por criterio, para que el numero se pueda discutir en vez de creer. `porcentaje` es null --no cero-- cuando no hay ninguna evidencia sobre lo que esa vacante pide: no es \"no encajas\", es \"no se sabe\". `cobertura` dice sobre cuanto peso de la rubrica hay evidencia, y es lo que impide que un 100 % con una sola prueba engane. Devuelve el catalogo COMPLETO: la afinidad ordena, nunca esconde (ADR-0016).",
+        "operationId": "ReportesController_catalogoConAfinidad",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El catalogo abierto con el % de afinidad de quien pregunta (pantalla B13)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/mi-perfil-de-habilidades": {
+      "get": {
+        "description": "Su nivel medio en cada criterio sobre el que alguna vez se le califico, de mayor a menor, con cuantas calificaciones lo sostienen. El nivel es puntaje/escala, asi que un 4 sobre 5 y un 8 sobre 10 son el mismo nivel. Solo para si mismo: lo que una empresa ve de un candidato es su desglose en SU vacante, no lo que demostro en las de la competencia.",
+        "operationId": "ReportesController_miPerfilDeHabilidades",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El perfil de habilidades del propio candidato (pantalla B13)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
     "/reportes/vacantes/{idVacante}": {
       "get": {
         "description": "Ranking de candidatos de mayor a menor nota, con sus cifras consolidadas y el promedio por criterio. El ranking lleva una fila por candidato, con la nota de su mejor intento.",

@@ -100,6 +100,10 @@ respaldo.
 | RF-POS-2 | Postularse crea una solicitud que **no da acceso al reto**; lo da la invitación | `postular`, `aceptarPostulacion` | implementado (D-19) |
 | RF-POS-3 | Rechazar **exige un motivo** que el candidato lee, y queda quién decidió y cuándo | `rechazarPostulacion`, `ck_postulacion_rechazo_con_motivo` | implementado (D-19) |
 | RF-POS-4 | Una decisión sobre una postulación **no se reescribe** | `dominio/estado-postulacion · puedeDecidirse` | implementado (D-19) |
+| RF-POS-5 | El candidato ve el **% de afinidad** de cada vacante abierta, con su desglose por criterio | `reportes · catalogoConAfinidad`, `dominio/afinidad` | implementado (D-20) |
+| RF-POS-6 | La afinidad es `null` **y no cero** cuando no hay evidencia, y viaja con la **cobertura** de la rúbrica | `calcularAfinidad` | implementado (D-20) |
+| RF-POS-7 | La afinidad **ordena pero no filtra**: el catálogo se devuelve completo | `catalogoConAfinidad`, prueba de integración | implementado (D-20) |
+| RF-POS-8 | El candidato ve su **perfil de habilidades**, y ninguna empresa lo ve | `miPerfilDeHabilidades` | implementado (D-20) |
 | RF-CON-1 | El titular ve las **tres finalidades del Taller 2** con el texto que acepta, decididas o no | `dominio/consentimiento · CATALOGO` | implementado (D-18) |
 | RF-CON-8 | Una finalidad **retirada** se lee en el historial pero no se puede volver a decidir | `seOfrece`, 400 en el controlador | implementado (D-18) |
 | RF-CON-2 | Concede y revoca cada permiso de forma independiente y en cualquier momento | `PUT /autenticacion/consentimientos` | implementado |
