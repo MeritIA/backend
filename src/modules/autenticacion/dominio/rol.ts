@@ -46,6 +46,13 @@ export const PERMISOS = {
   'ejercicios:leer': [Rol.Reclutador, Rol.Administrador],
   'ejercicios:editar': [Rol.Reclutador, Rol.Administrador],
 
+  // El vocabulario de habilidades. Lo LEE cualquiera --un reclutador necesita
+  // ver que nombres existen antes de escribir su rubrica-- y lo ESCRIBE solo
+  // plataforma: si cada empresa tuviera el suyo, el perfil del candidato
+  // dejaria de ser transversal, que es lo que lo hace valer.
+  'habilidades:leer': [Rol.Candidato, Rol.Reclutador, Rol.Administrador],
+  'habilidades:administrar': [Rol.Administrador],
+
   'entregas:crear': [Rol.Candidato],
   'entregas:leerPropias': [Rol.Candidato],
   'entregas:leerDeLaVacante': [Rol.Reclutador, Rol.Administrador],
