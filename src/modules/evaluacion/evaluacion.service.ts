@@ -4,7 +4,8 @@ import { Repository } from 'typeorm';
 import { Evaluacion } from './entities/evaluacion.entity.js';
 import { Rol } from '../autenticacion/index.js';
 import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
-import { normalizarHabilidad, type NivelDeHabilidad } from './dominio/habilidad.js';
+import { HabilidadesService } from '../ejercicios/index.js';
+import type { NivelDeHabilidad } from './dominio/habilidad.js';
 
 /**
  * Servicio de aplicacion del modulo de evaluacion.
@@ -27,6 +28,8 @@ export class EvaluacionService {
   constructor(
     @InjectRepository(Evaluacion) private readonly evaluaciones: Repository<Evaluacion>,
     private readonly vacantes: VacantesService,
+    // El vocabulario de habilidades, para que el perfil agrupe sinonimos.
+    private readonly habilidades: HabilidadesService,
   ) {}
 
   /** La evaluacion de una entrega, con su desglose por criterio. */
@@ -209,9 +212,14 @@ export class EvaluacionService {
       .groupBy('c.criterio')
       .getRawMany<{ criterio: string; nivel: string; veces: string }>();
 
+    // El vocabulario traduce los sinonimos: "Legibilidad" y "Claridad del
+    // codigo" acaban en la MISMA habilidad. Sin esto, el perfil tendria dos
+    // entradas a medias donde deberia tener una entera.
+    const traducir = await this.habilidades.traductorPara(filas.map((f) => f.criterio));
+
     const perfil = new Map<string, NivelDeHabilidad>();
     for (const fila of filas) {
-      const clave = normalizarHabilidad(fila.criterio);
+      const clave = traducir(fila.criterio);
       const nivel = Number(fila.nivel);
       const veces = Number(fila.veces);
       // Dos nombres distintos pueden normalizar a la misma clave ("Correccion

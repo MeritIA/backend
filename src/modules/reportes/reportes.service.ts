@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -14,12 +20,13 @@ import { progresoDe, type ProgresoDeVacante } from './dominio/progreso.js';
 import { calcularAfinidad, exigenciasDe, type Afinidad } from './dominio/afinidad.js';
 import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
 import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
-import { EjerciciosService } from '../ejercicios/index.js';
+import { EjerciciosService, HabilidadesService } from '../ejercicios/index.js';
 import { EntregasService, EstadoEntrega } from '../entregas/index.js';
 import { EvaluacionService } from '../evaluacion/index.js';
 import {
   EstadoVacante,
   VacantesService,
+  type CalculadorDeAfinidad,
   type OfertaDelCatalogo,
   type Solicitante,
 } from '../vacantes/index.js';
@@ -54,7 +61,7 @@ import {
  * quedarse vieja.
  */
 @Injectable()
-export class ReportesService {
+export class ReportesService implements OnModuleInit, CalculadorDeAfinidad {
   private readonly logger = new Logger('Reportes');
 
   constructor(
@@ -64,6 +71,7 @@ export class ReportesService {
     private readonly entregas: EntregasService,
     private readonly vacantes: VacantesService,
     private readonly ejerciciosDelBanco: EjerciciosService,
+    private readonly habilidades: HabilidadesService,
     private readonly autenticacion: AutenticacionService,
   ) {}
 
@@ -85,6 +93,39 @@ export class ReportesService {
    * cambiar en la peticion para ver el panel de otra empresa: la clase de
    * ataque que el encuadre llama IDOR no tiene superficie aqui.
    */
+  /**
+   * Se registra en `vacantes` como quien sabe calcular la afinidad.
+   *
+   * La invitacion automatica decide al postularse, y eso pasa en `vacantes`,
+   * que no puede pedirle nada a `reportes` sin crear un ciclo. Asi que la
+   * llamada va al reves: aqui nos ofrecemos. Mismo momento en el que
+   * `notificaciones` se suscribe al bus.
+   */
+  onModuleInit(): void {
+    this.vacantes.registrarCalculadorDeAfinidad(this);
+  }
+
+  /**
+   * El % de afinidad de un candidato con UNA vacante.
+   *
+   * Lo consume la invitacion automatica, de forma sincrona dentro de la
+   * peticion del candidato. Devuelve `null` si no hay evidencia sobre lo que
+   * esa vacante pide, y quien lo llama trata ese `null` como "que lo vea una
+   * persona", nunca como un rechazo.
+   */
+  async porcentajeDe(idCandidato: string, idVacante: string): Promise<number | null> {
+    const rubricas = await this.vacantes.rubricasDeVacantesPublicadas([idVacante]);
+    const deLaVacante = rubricas.get(idVacante) ?? [];
+    if (deLaVacante.length === 0) return null;
+
+    const [perfil, traducir] = await Promise.all([
+      this.evaluacion.perfilDeHabilidades(idCandidato),
+      this.habilidades.traductorPara(deLaVacante.flat().map((c) => c.nombre)),
+    ]);
+
+    return calcularAfinidad(exigenciasDe(deLaVacante, traducir), perfil, traducir).porcentaje;
+  }
+
   /**
    * El catalogo abierto con el % de afinidad de quien pregunta (B13).
    *
@@ -123,9 +164,21 @@ export class ReportesService {
       this.vacantes.rubricasDeVacantesPublicadas(ofertas.map((o) => o.id)),
     ]);
 
+    // UN SOLO traductor para todas las ofertas, y el mismo que uso el perfil.
+    // Si el perfil tradujera y la comparacion no, un criterio contaria para una
+    // habilidad al agrupar y para otra al comparar: el numero saldria mal sin
+    // que nada fallara, que es el peor tipo de fallo.
+    const traducir = await this.habilidades.traductorPara(
+      [...rubricas.values()].flat(2).map((c) => c.nombre),
+    );
+
     const conAfinidad = ofertas.map((oferta) => ({
       ...oferta,
-      afinidad: calcularAfinidad(exigenciasDe(rubricas.get(oferta.id) ?? []), perfil),
+      afinidad: calcularAfinidad(
+        exigenciasDe(rubricas.get(oferta.id) ?? [], traducir),
+        perfil,
+        traducir,
+      ),
     }));
 
     this.registrar('catalogo_con_afinidad_consultado', solicitante, {

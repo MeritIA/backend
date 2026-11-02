@@ -1,4 +1,17 @@
-import { normalizarHabilidad, type NivelDeHabilidad } from '../../evaluacion/index.js';
+import { normalizarNombreDeHabilidad } from '../../ejercicios/index.js';
+import type { NivelDeHabilidad } from '../../evaluacion/index.js';
+
+/**
+ * Como se traduce un nombre de criterio a la clave de su habilidad.
+ *
+ * Se recibe en vez de importarse para que este fichero siga siendo PURO: el
+ * vocabulario vive en una base de datos y el calculo no debe saberlo. Quien
+ * llama pasa `HabilidadesService.traductorPara(...)`.
+ *
+ * Por omision, solo normaliza. Es el comportamiento de antes del vocabulario, y
+ * es lo que hace que las pruebas del calculo no necesiten un catalogo.
+ */
+export type TraductorDeHabilidad = (nombre: string) => string;
 
 /**
  * El % de afinidad entre un candidato y una vacante (B13, A04).
@@ -83,6 +96,7 @@ const SIN_RUBRICA: Afinidad = { porcentaje: null, cobertura: 0, criterios: [] };
  */
 export function exigenciasDe(
   rubricas: ReadonlyArray<readonly CriterioExigido[]>,
+  traducir: TraductorDeHabilidad = normalizarNombreDeHabilidad,
 ): CriterioExigido[] {
   const conCriterios = rubricas.filter((r) => r.length > 0);
   if (conCriterios.length === 0) return [];
@@ -92,7 +106,7 @@ export function exigenciasDe(
 
   for (const rubrica of conCriterios) {
     for (const criterio of rubrica) {
-      const clave = normalizarHabilidad(criterio.nombre);
+      const clave = traducir(criterio.nombre);
       const previo = porHabilidad.get(clave);
       const peso = criterio.peso * porEjercicio;
       porHabilidad.set(clave, {
@@ -111,6 +125,7 @@ export function exigenciasDe(
 export function calcularAfinidad(
   exigencias: readonly CriterioExigido[],
   perfil: ReadonlyMap<string, NivelDeHabilidad>,
+  traducir: TraductorDeHabilidad = normalizarNombreDeHabilidad,
 ): Afinidad {
   if (exigencias.length === 0) return SIN_RUBRICA;
 
@@ -118,7 +133,7 @@ export function calcularAfinidad(
   if (pesoTotal <= 0) return SIN_RUBRICA;
 
   const criterios: CriterioDeAfinidad[] = exigencias.map((exigencia) => {
-    const demostrado = perfil.get(normalizarHabilidad(exigencia.nombre));
+    const demostrado = perfil.get(traducir(exigencia.nombre));
     return {
       nombre: exigencia.nombre,
       peso: redondear(exigencia.peso),
