@@ -96,6 +96,10 @@ respaldo.
 
 | ID | Requisito | Dónde | Estado |
 |---|---|---|---|
+| RF-POS-1 | Un candidato ve las vacantes **publicadas de empresas activas** sin que nadie lo invite | `vacantes.service · catalogoAbierto` | implementado (D-19); sin orden por afinidad |
+| RF-POS-2 | Postularse crea una solicitud que **no da acceso al reto**; lo da la invitación | `postular`, `aceptarPostulacion` | implementado (D-19) |
+| RF-POS-3 | Rechazar **exige un motivo** que el candidato lee, y queda quién decidió y cuándo | `rechazarPostulacion`, `ck_postulacion_rechazo_con_motivo` | implementado (D-19) |
+| RF-POS-4 | Una decisión sobre una postulación **no se reescribe** | `dominio/estado-postulacion · puedeDecidirse` | implementado (D-19) |
 | RF-CON-1 | El titular ve las **tres finalidades del Taller 2** con el texto que acepta, decididas o no | `dominio/consentimiento · CATALOGO` | implementado (D-18) |
 | RF-CON-8 | Una finalidad **retirada** se lee en el historial pero no se puede volver a decidir | `seOfrece`, 400 en el controlador | implementado (D-18) |
 | RF-CON-2 | Concede y revoca cada permiso de forma independiente y en cualquier momento | `PUT /autenticacion/consentimientos` | implementado |

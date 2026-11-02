@@ -511,6 +511,27 @@
         ]
       }
     },
+    "/vacantes/abiertas": {
+      "get": {
+        "description": "Las publicadas de empresas activas, con el nombre y el sector de quien publica. Cada fila dice si quien pregunta ya se postulo y si ya esta invitado, para que la pantalla sepa que ofrecer. NO ordena por afinidad: eso necesita un perfil de habilidades que el backend no tiene (ADR-0015).",
+        "operationId": "VacantesController_catalogoAbierto",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Catalogo de vacantes abiertas",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
     "/vacantes/{id}": {
       "get": {
         "operationId": "VacantesController_obtener",
@@ -781,6 +802,176 @@
         "summary": "Cierra la vacante",
         "tags": [
           "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/postular": {
+      "post": {
+        "description": "Crea una solicitud EN REVISION. No da acceso al reto: lo que da acceso es la invitacion, y esa la crea el reclutador al aceptar. Si ya estaba invitado se responde 400 diciendo que puede empezar sin postularse.",
+        "operationId": "VacantesController_postular",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o no esta publicada. Se responde lo mismo en ambos casos: decir \"esta en borrador\" confirmaria que existe."
+          },
+          "409": {
+            "description": "Ya se habia postulado a esta vacante."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Un candidato se postula a una vacante publicada",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/postulaciones": {
+      "get": {
+        "description": "Identificadores y estado, SIN nombre ni correo: es coherente con el ranking ciego, y deja al reclutador decidiendo sin saber quien es cada quien. Esa tension con A04 esta nombrada en el ADR-0015 y en la matriz §6.2.",
+        "operationId": "VacantesController_postulacionesDe",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe o no es de su empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Los postulantes de una vacante",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/postulaciones/{idCandidato}/aceptar": {
+      "post": {
+        "description": "Las dos cosas en una transaccion: sin ella el candidato podria ver \"aceptada\" y seguir sin poder entregar. Una postulacion ya decidida devuelve 400: una decision sobre una persona no se reescribe.",
+        "operationId": "VacantesController_aceptarPostulacion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, no es de su empresa, o esa persona no se postulo."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Acepta a un postulante y lo invita",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/vacantes/{id}/postulaciones/{idCandidato}/rechazar": {
+      "post": {
+        "description": "El motivo es obligatorio y minimo 20 caracteres: es lo unico que el candidato recibe cuando no avanza, y es el cimiento del \"feedback de por que no avanzo\" que pide el diagrama del equipo.",
+        "operationId": "VacantesController_rechazarPostulacion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idCandidato",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RechazarPostulacionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, no es de su empresa, o esa persona no se postulo."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Rechaza a un postulante, con el motivo que va a leer",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
+    "/postulaciones/mias": {
+      "get": {
+        "description": "Cada una con su vacante y su estado. Si fue rechazada trae el motivo, que es lo que el candidato tiene derecho a leer. No hace falta filtrar por nada: solo devuelve las suyas, salga de donde salga el identificador.",
+        "operationId": "PostulacionesController_mias",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Las postulaciones del propio candidato",
+        "tags": [
+          "postulaciones"
         ]
       }
     },
@@ -2223,6 +2414,21 @@
         },
         "required": [
           "idCandidato"
+        ]
+      },
+      "RechazarPostulacionDto": {
+        "type": "object",
+        "properties": {
+          "motivo": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 500,
+            "description": "Por que no avanza. Se le muestra al candidato tal cual, asi que se escribe para que lo lea el.",
+            "example": "Buscamos experiencia especifica en conciliacion de pagos y tu perfil apunta a datos."
+          }
+        },
+        "required": [
+          "motivo"
         ]
       },
       "CriterioDto": {

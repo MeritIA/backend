@@ -50,7 +50,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **NIT y sector ya existen** (y el NIT se verifica por su dígito). Sigue faltando que la pantalla sea un **auto-registro**: el endpoint solo deja crear la empresa a un administrador de plataforma. La validación contra Cámara de Comercio es una integración externa ⛔. |
 | A02 | Panel de vacantes | ◐ `GET /reportes/panel`, `GET /vacantes`, `GET /ejercicios` | **Los cuatro contadores, el «avance» y el «cierre estimado» ya salen en una sola llamada**: `abiertas[]` trae una fila por vacante publicada con invitados, cuántas personas entregaron, cuántas tienen evaluación y el porcentaje, ordenadas por lo que vence antes. El concepto de **contratado** existe. El banco de talento ⛔. |
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
-| A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **«Finalistas a evaluar» ya existe**, como plan y no como tope: no impide invitar ni evaluar a más gente. Sigue faltando **todo el cobro** ⛔ —pasarela, referencia, estado, reintento— y con él la «remuneración por reto», que es dinero y no un dato suelto. Ver contradicción §6.1. |
+| A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **«Finalistas a evaluar» ya existe**, como plan y no como tope: no impide invitar ni evaluar a más gente. Sigue faltando **todo el cobro** ⛔ —pasarela, referencia, estado, reintento— y con él la «remuneración por reto», que es dinero y no un dato suelto. Ver contradicción §6.1. Y la **preselección por perfil de habilidades** que esta pantalla promete sigue sin existir: hoy el catálogo es abierto y decide el reclutador (§6.2, D-19). |
 | A05 | Pago rechazado | ✗ ⛔ | Ruta de excepción completa del cobro. Lo único que ya se sostiene es que la vacante quede **en borrador**, que es el estado que la pantalla describe. |
 | A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
@@ -64,7 +64,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 |---|---|---|---|
 | B11 | Crear cuenta | ◐ `POST /autenticacion/registro` | El registro público ya crea **solo candidatos**, como pide el flujo. Faltan los campos **documento**, **ciudad** y **cuenta para recibir pagos** — el documento es dato sensible y exigiría cifrado en reposo, igual que el correo. |
 | B12 | Consentimientos | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | **El registro existe y es revocable**: cada decisión guarda qué, cuándo, a qué versión del aviso y desde dónde, y revocar añade una fila en vez de borrar la anterior. **El de calificación por IA ya se hace cumplir**: revocarlo bloquea la entrega con un 403 que dice cómo volver atrás (D-17). Los otros tres siguen declarados como `vigilado: false` porque las funciones que gobiernan (proctoring, banco de talento, Mentor IA) no existen ⛔. Ver §6.10. |
-| B13 | Perfil y reto gratuito | ◐ `GET /evaluaciones/mias` | Las evaluaciones propias con desglose ya están. Faltan: **perfil de habilidades** transversal (hoy los criterios viven dentro de cada ejercicio), **reto gratuito** sin vacante, y el **% de afinidad** ⛔. Ver contradicción §6.2. |
+| B13 | Perfil y reto gratuito | ◐ `GET /evaluaciones/mias`, `GET /vacantes/abiertas`, `GET /postulaciones/mias` | Las evaluaciones propias con desglose ya están, y **descubrir vacantes y postularse también** (D-19): el catálogo abierto existe y la solicitud queda registrada con su desenlace. Faltan: **perfil de habilidades** transversal (hoy los criterios viven dentro de cada ejercicio), **reto gratuito** sin vacante, y el **% de afinidad** ⛔, que necesita ese perfil. Ver §6.2. |
 | B14 | Invitación a reto pagado | ◐ `GET /vacantes/{id}`, `GET /vacantes/{id}/ejercicios` | El enunciado y la rúbrica con sus pesos **ya se leen** (§6.5, arreglado al escribir esta matriz). Faltan: la invitación como objeto con **vencimiento de 72 h**, la remuneración y la elección de derechos ⛔. |
 | B15 | Verificación técnica | ✗ ⛔ | Proctoring: cámara, micrófono, conexión. |
 | B16 | Modalidad alterna sin cámara | ✗ ⛔ | Verificación manual equivalente y solicitud de ajuste razonable. |
@@ -103,13 +103,38 @@ activa hasta que el cobro sea aprobado»**. Son dos contratos distintos para la
 misma acción. Si el cobro entra, `POST /vacantes/{id}/publicar` deja de ser el
 botón que publica y pasa a ser un paso intermedio.
 
-### 6.2 Invitación contra descubrimiento
+### 6.2 Invitación contra descubrimiento — **decidida a medias**
 
-En el backend, un candidato **ve únicamente las vacantes a las que fue
+En el backend, un candidato **veía únicamente las vacantes a las que fue
 invitado**. En B13 descubre vacantes por **% de afinidad**, y A04 promete que
 «MeritIA preselecciona por perfil de habilidades e invita solo a los
 finalistas». Eso es un motor de preselección que no existe, y cambia quién
 invita a quién: hoy invita el reclutador, uno por uno.
+
+**Decidido el 02/11 (D-19): se abre el catálogo y se puede postular; el motor
+de afinidad no se inventa.** `GET /vacantes/abiertas` enseña las publicadas de
+empresas activas y `POST /vacantes/{id}/postular` crea una solicitud que **no
+da acceso al reto**: lo da la invitación, que el reclutador crea al aceptar.
+Sin orden por afinidad, porque el % de encaje necesita un perfil de habilidades
+que no existe —lo dice la propia fila de B13— y construirlo son tres cosas: un
+vocabulario de habilidades, un perfil alimentado por las evaluaciones, y un
+algoritmo que decide quién ve qué oferta. Eso último es exactamente el sesgo que
+la auditoría del paso 11 vigila: no se añade de paso. Ver
+[ADR-0015](adr/0015-postulacion-sin-motor-de-afinidad.md).
+
+**Lo que queda abierto, y es de producto, no de backend.** El reclutador decide
+sobre una lista de **identificadores**: sin nombre, sin correo, sin CV, igual
+que el ranking. Es coherente con el producto y a la vez incómodo, porque **si no
+ve nada de la persona, aceptar o rechazar es arbitrario**. Las tres salidas:
+que vea el perfil (vuelve el cribado por CV), aceptar a todos con un cupo (el
+reto es el único filtro, que es la tesis del producto), o el motor de A04. Se
+implementó la decisión del reclutador porque **no cierra ninguna puerta**:
+cambiar la política es cambiar quién llama a `aceptar`, sin tocar el modelo de
+datos. El ADR-0015 recomienda la segunda, pero cambia lo que A04 promete.
+
+**Lo que sí se ganó:** rechazar **exige un motivo** de 20 caracteres mínimo, y
+el candidato lo lee en `GET /postulaciones/mias`. Es el cimiento del «feedback
+de por qué un candidato no avanzó» que pide el diagrama.
 
 ### 6.3 Cerrar la vacante contra revelar la identidad — **decidida**
 
