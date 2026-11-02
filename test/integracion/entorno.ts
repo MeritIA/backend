@@ -209,6 +209,8 @@ export async function vaciarTablas(): Promise<void> {
       "ejercicios"."ejercicio_versiones",
       "ejercicios"."ejercicios",
       "vacantes"."postulaciones",
+      "ejercicios"."alias_de_habilidad",
+      "ejercicios"."habilidades",
       "vacantes"."vacante_candidatos",
       "vacantes"."vacante_ejercicios",
       "vacantes"."vacantes",
