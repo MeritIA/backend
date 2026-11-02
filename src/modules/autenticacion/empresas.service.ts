@@ -7,11 +7,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Empresa } from './entities/empresa.entity.js';
 import { Usuario } from './entities/usuario.entity.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
 import { esNitValido } from './dominio/nit.js';
+import type { SectorEmpresa } from './dominio/sector.js';
 import type { UsuarioAutenticado } from './guardias/autenticacion.guard.js';
 import type { CrearEmpresaDto, CrearUsuarioDeEmpresaDto } from './dto/index.js';
 
@@ -149,6 +150,36 @@ export class EmpresasService {
       }),
     );
   }
+
+  /**
+   * Nombre y sector de varias empresas, en lote.
+   *
+   * Lo pide el catalogo de vacantes abiertas: una oferta sin el nombre de quien
+   * la publica no se puede decidir. Se expone aqui, y no se deja que `vacantes`
+   * importe la entidad `Empresa`, porque la empresa es parte de la identidad y
+   * ese dato lo sirve su dueño. Es la misma forma que `identidadesDe`.
+   *
+   * NO DEVUELVE EL NIT, y es a proposito: el catalogo lo ve cualquier candidato
+   * autenticado, y el NIT no hace falta para decidir si te postulas.
+   */
+  async resumenesDe(ids: readonly string[]): Promise<Map<string, ResumenDeEmpresa>> {
+    if (ids.length === 0) return new Map();
+    const unicos = [...new Set(ids)];
+    const empresas = await this.empresas.find({
+      where: { id: In(unicos) },
+      select: { id: true, nombre: true, sector: true, activa: true },
+    });
+    return new Map(
+      empresas.map((e) => [e.id, { nombre: e.nombre, sector: e.sector, activa: e.activa }]),
+    );
+  }
+}
+
+/** Lo que de una empresa se puede mostrar en un catalogo publico. */
+export interface ResumenDeEmpresa {
+  readonly nombre: string;
+  readonly sector: SectorEmpresa;
+  readonly activa: boolean;
 }
 
 function esViolacionDeUnicidad(e: unknown): boolean {

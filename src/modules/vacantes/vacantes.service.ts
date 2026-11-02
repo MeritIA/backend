@@ -1,17 +1,25 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { Vacante } from './entities/vacante.entity.js';
 import { VacanteEjercicio } from './entities/vacante-ejercicio.entity.js';
 import { VacanteCandidato } from './entities/vacante-candidato.entity.js';
+import { Postulacion } from './entities/postulacion.entity.js';
 import {
   EstadoVacante,
   admiteCambioDeEjercicios,
   admiteEdicion,
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
+import { EstadoPostulacion, puedeDecidirse } from './dominio/estado-postulacion.js';
 import { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';
-import { Rol } from '../autenticacion/index.js';
+import { EmpresasService, Rol, type SectorEmpresa } from '../autenticacion/index.js';
 import { BusDeEventos } from '../../common/events/index.js';
 import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
@@ -48,7 +56,12 @@ export class VacantesService {
     private readonly asociaciones: Repository<VacanteEjercicio>,
     @InjectRepository(VacanteCandidato)
     private readonly asignaciones: Repository<VacanteCandidato>,
+    @InjectRepository(Postulacion)
+    private readonly postulaciones: Repository<Postulacion>,
     private readonly dataSource: DataSource,
+    // El catalogo necesita el nombre de quien publica. Se pide a su dueño en
+    // vez de importar la entidad Empresa: la empresa es parte de la identidad.
+    private readonly empresas: EmpresasService,
     private readonly ejerciciosDelBanco: EjerciciosService,
     private readonly bus: BusDeEventos,
   ) {}
@@ -594,6 +607,253 @@ export class VacantesService {
   /** Solo el reclutador dueno, o un administrador, modifican una vacante. */
 
   /**
+   * El catalogo de ofertas abiertas (pantalla «explorar»).
+   *
+   * Es la mitad de la contradiccion §6.2 que si se puede cerrar sin inventar
+   * nada: hasta ahora un candidato solo veia las vacantes a las que alguien lo
+   * invito, asi que no habia forma de encontrar trabajo en MeritIA. Lo que NO
+   * hace es ordenar por afinidad: eso necesita un perfil de habilidades que no
+   * existe. Ver ADR-0015.
+   *
+   * QUE SE MUESTRA Y QUE NO
+   *
+   * Solo vacantes **publicadas** de empresas **activas**. Un borrador todavia
+   * no esta listo para que nadie lo vea, una cerrada ya no admite a nadie, y
+   * una empresa inactiva no puede operar: ensenar sus ofertas seria mandar
+   * gente a un proceso que no va a avanzar.
+   *
+   * De la empresa van nombre y sector, que es lo que hace falta para decidir si
+   * te postulas. El NIT no.
+   */
+  async catalogoAbierto(solicitante: Solicitante): Promise<OfertaDelCatalogo[]> {
+    const publicadas = await this.vacantes.find({
+      where: { estado: EstadoVacante.Publicada },
+      relations: { ejercicios: true },
+      order: { publicadaEn: 'DESC' },
+    });
+    if (publicadas.length === 0) return [];
+
+    const empresas = await this.empresas.resumenesDe(publicadas.map((v) => v.idEmpresa));
+
+    // Lo que este candidato ya pidio o ya tiene. En dos consultas y no en una
+    // por fila: con veinte ofertas abiertas eso serian cuarenta viajes.
+    const [postuladas, invitadas] = await Promise.all([
+      this.postulaciones.find({
+        where: { idCandidato: solicitante.id },
+        select: { idVacante: true, estado: true },
+      }),
+      this.asignaciones.find({
+        where: { idCandidato: solicitante.id },
+        select: { idVacante: true },
+      }),
+    ]);
+    const miPostulacion = new Map(postuladas.map((p) => [p.idVacante, p.estado]));
+    const yaInvitado = new Set(invitadas.map((a) => a.idVacante));
+
+    return publicadas
+      .filter((v) => empresas.get(v.idEmpresa)?.activa === true)
+      .map((v) => {
+        const empresa = empresas.get(v.idEmpresa)!;
+        return {
+          id: v.id,
+          titulo: v.titulo,
+          descripcion: v.descripcion,
+          ubicacion: v.ubicacion,
+          empresa: empresa.nombre,
+          sector: empresa.sector,
+          ejercicios: v.ejercicios?.length ?? 0,
+          intentosPorEjercicio: v.intentosPermitidos,
+          publicadaEn: v.publicadaEn,
+          cierreEstimado: v.cierreEstimado,
+          // Para que la pantalla sepa si pintar «Postularme», «En revision» o
+          // «Ya participas». Sin esto tendria que adivinarlo o pedirlo aparte.
+          miPostulacion: miPostulacion.get(v.id) ?? null,
+          yaInvitado: yaInvitado.has(v.id),
+        };
+      });
+  }
+
+  /**
+   * Un candidato pide entrar a una vacante publicada.
+   *
+   * NO DA ACCESO A NADA. Crea una solicitud en revision; lo que da acceso es la
+   * invitacion, y esa la crea `aceptarPostulacion`.
+   *
+   * POR QUE 404 Y NO 400 SI LA VACANTE ES UN BORRADOR
+   *
+   * Mismo criterio que en el resto del modulo (ADR-0012): responder «esta en
+   * borrador» confirma que existe, y con eso se sondea que prepara una empresa
+   * probando identificadores. Un borrador no existe para quien no es su dueño.
+   */
+  async postular(idVacante: string, solicitante: Solicitante): Promise<Postulacion> {
+    if (solicitante.rol !== Rol.Candidato) {
+      throw new BadRequestException(
+        'Solo un candidato se postula. Un reclutador invita, que es el otro camino.',
+      );
+    }
+
+    const vacante = await this.vacantes.findOne({ where: { id: idVacante } });
+    if (!vacante || vacante.estado !== EstadoVacante.Publicada) {
+      this.registrar('postulacion_a_vacante_no_disponible', solicitante, { idVacante });
+      throw new NotFoundException('La vacante no existe.');
+    }
+
+    // Ya invitado: no se le hace pedir permiso para algo que ya tiene. Se le
+    // dice, en vez de dejarle una solicitud en revision que nadie resolvera.
+    const invitado = await this.asignaciones.exists({
+      where: { idVacante, idCandidato: solicitante.id },
+    });
+    if (invitado) {
+      throw new BadRequestException(
+        'Ya estas invitado a esta vacante: puedes empezar el reto sin postularte.',
+      );
+    }
+
+    try {
+      const postulacion = await this.postulaciones.save(
+        this.postulaciones.create({
+          idVacante,
+          idCandidato: solicitante.id,
+          estado: EstadoPostulacion.EnRevision,
+        }),
+      );
+      this.registrar('postulacion_creada', solicitante, { idVacante });
+      return postulacion;
+    } catch (error) {
+      // El unico de la base es el que decide, no una comprobacion previa: entre
+      // leer y escribir caben dos pulsaciones del mismo boton.
+      if (esViolacionDeUnicidad(error)) {
+        throw new ConflictException('Ya te postulaste a esta vacante.');
+      }
+      throw error;
+    }
+  }
+
+  /** Las postulaciones del propio candidato, con la oferta a la que son. */
+  async misPostulaciones(solicitante: Solicitante): Promise<Postulacion[]> {
+    return this.postulaciones.find({
+      where: { idCandidato: solicitante.id },
+      relations: { vacante: true },
+      order: { creadaEn: 'DESC' },
+    });
+  }
+
+  /**
+   * Los postulantes de una vacante, para el reclutador.
+   *
+   * SON IDENTIFICADORES, NO PERSONAS, Y ESO ES UNA DECISION INCOMODA
+   *
+   * No se devuelve nombre ni correo. Es coherente con el nucleo del producto
+   * --el ranking oculta la identidad hasta que la empresa la revela-- pero deja
+   * al reclutador decidiendo a ciegas, y eso contradice A04, que promete una
+   * preseleccion por perfil de habilidades. La contradiccion esta nombrada en
+   * el ADR-0015 y en la matriz §6.2: no se resuelve aqui a escondidas.
+   */
+  async postulacionesDe(idVacante: string, solicitante: Solicitante): Promise<Postulacion[]> {
+    const vacante = await this.obtenerCompleta(idVacante);
+    this.exigirPropiedad(vacante, solicitante);
+
+    return this.postulaciones.find({
+      where: { idVacante },
+      order: { creadaEn: 'ASC' },
+    });
+  }
+
+  /**
+   * Acepta a un postulante: lo invita, que es lo que le deja entregar.
+   *
+   * Las dos escrituras van en una transaccion. Si la invitacion fallara despues
+   * de marcar la postulacion como aceptada, el candidato veria «aceptada» y
+   * seguiria sin poder entregar: el peor de los dos fallos posibles.
+   */
+  async aceptarPostulacion(
+    idVacante: string,
+    idCandidato: string,
+    solicitante: Solicitante,
+  ): Promise<Postulacion> {
+    const vacante = await this.obtenerCompleta(idVacante);
+    this.exigirPropiedad(vacante, solicitante);
+
+    if (vacante.estado === EstadoVacante.Cerrada) {
+      throw new BadRequestException(
+        'La vacante esta cerrada: aceptar a alguien ahora le daria un reto que no se va a evaluar.',
+      );
+    }
+
+    const postulacion = await this.postulacionPendiente(idVacante, idCandidato);
+
+    return this.dataSource.transaction(async (manager) => {
+      const yaInvitado = await manager.getRepository(VacanteCandidato).exists({
+        where: { idVacante, idCandidato },
+      });
+      if (!yaInvitado) {
+        await manager
+          .getRepository(VacanteCandidato)
+          .save(manager.getRepository(VacanteCandidato).create({ idVacante, idCandidato }));
+      }
+
+      postulacion.estado = EstadoPostulacion.Aceptada;
+      postulacion.idUsuarioQueDecidio = solicitante.id;
+      postulacion.decididaEn = new Date();
+      const guardada = await manager.getRepository(Postulacion).save(postulacion);
+
+      this.registrar('postulacion_aceptada', solicitante, { idVacante, idCandidato });
+      return guardada;
+    });
+  }
+
+  /**
+   * Rechaza a un postulante, con el motivo que el candidato va a leer.
+   *
+   * El motivo es obligatorio y lo valida el DTO. Es el cimiento del
+   * «feedback de por que un candidato no avanzo» que pide el diagrama: sin un
+   * texto escrito por quien decidio, no hay nada que mostrarle.
+   */
+  async rechazarPostulacion(
+    idVacante: string,
+    idCandidato: string,
+    motivo: string,
+    solicitante: Solicitante,
+  ): Promise<Postulacion> {
+    const vacante = await this.obtenerCompleta(idVacante);
+    this.exigirPropiedad(vacante, solicitante);
+
+    const postulacion = await this.postulacionPendiente(idVacante, idCandidato);
+    postulacion.estado = EstadoPostulacion.Rechazada;
+    postulacion.motivoDelRechazo = motivo;
+    postulacion.idUsuarioQueDecidio = solicitante.id;
+    postulacion.decididaEn = new Date();
+
+    const guardada = await this.postulaciones.save(postulacion);
+    // El motivo NO va al registro de seguridad: es un texto libre sobre una
+    // persona y los registros se leen en sitios donde ese texto no hace falta.
+    this.registrar('postulacion_rechazada', solicitante, { idVacante, idCandidato });
+    return guardada;
+  }
+
+  /**
+   * La postulacion que todavia se puede decidir.
+   *
+   * Una ya decidida devuelve 400 y no 404: aqui el reclutador ya demostro que
+   * la vacante es suya, asi que decirle «esa ya la resolviste» no le revela
+   * nada que no supiera, y le explica por que el boton no hizo nada.
+   */
+  private async postulacionPendiente(idVacante: string, idCandidato: string): Promise<Postulacion> {
+    const postulacion = await this.postulaciones.findOne({
+      where: { idVacante, idCandidato },
+    });
+    if (!postulacion) {
+      throw new NotFoundException('Esa persona no se postulo a esta vacante.');
+    }
+    if (!puedeDecidirse(postulacion.estado)) {
+      throw new BadRequestException(
+        `Esta postulacion ya esta ${postulacion.estado}: una decision sobre una persona no se reescribe.`,
+      );
+    }
+    return postulacion;
+  }
+
+  /**
    * La empresa de quien pide, exigida.
    *
    * Un administrador de plataforma no tiene empresa: puede leerlo todo, pero no
@@ -697,4 +957,25 @@ export interface DatosParaNotificar {
   readonly titulo: string;
   readonly idEmpresa: string;
   readonly estado: EstadoVacante;
+}
+
+/** Una oferta tal como se ve en el catalogo abierto, sin datos de la empresa que no hagan falta. */
+export interface OfertaDelCatalogo {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  ubicacion: string | null;
+  empresa: string;
+  sector: SectorEmpresa;
+  ejercicios: number;
+  intentosPorEjercicio: number;
+  publicadaEn: Date | null;
+  cierreEstimado: Date | null;
+  /** Estado de la postulacion de quien pregunta, o null si no se postulo. */
+  miPostulacion: EstadoPostulacion | null;
+  yaInvitado: boolean;
+}
+
+function esViolacionDeUnicidad(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505';
 }

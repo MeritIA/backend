@@ -32,6 +32,16 @@ export const PERMISOS = {
   'vacantes:editar': [Rol.Reclutador, Rol.Administrador],
   'vacantes:eliminar': [Rol.Administrador],
 
+  // Postularse es un acto del candidato sobre una vacante publicada. Separado
+  // de 'vacantes:leer' porque leer el catalogo y pedir entrar no son lo mismo:
+  // manana puede haber quien mire sin poder postularse.
+  'postulaciones:crear': [Rol.Candidato],
+  'postulaciones:leerPropias': [Rol.Candidato],
+  'postulaciones:leerDeLaVacante': [Rol.Reclutador, Rol.Administrador],
+  // Decidir sobre una persona es permiso propio y no un efecto de poder verla,
+  // igual que revelar una identidad no viene con ver el reporte.
+  'postulaciones:decidir': [Rol.Reclutador, Rol.Administrador],
+
   'ejercicios:crear': [Rol.Reclutador, Rol.Administrador],
   'ejercicios:leer': [Rol.Reclutador, Rol.Administrador],
   'ejercicios:editar': [Rol.Reclutador, Rol.Administrador],

@@ -13,21 +13,24 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { VacantesService, type Solicitante } from './vacantes.service.js';
+import { VacantesService, type OfertaDelCatalogo, type Solicitante } from './vacantes.service.js';
 import {
   AsignarCandidatoDto,
   AsociarEjerciciosDto,
   CrearVacanteDto,
   EditarVacanteDto,
+  RechazarPostulacionDto,
 } from './dto/index.js';
 import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
 import type { ResumenVersion } from '../ejercicios/index.js';
 import type { Vacante } from './entities/vacante.entity.js';
+import type { Postulacion } from './entities/postulacion.entity.js';
 
 interface Peticion {
   usuario: UsuarioAutenticado;
@@ -66,6 +69,28 @@ export class VacantesController {
   })
   listar(@Req() p: Peticion): Promise<Vacante[]> {
     return this.vacantes.listar(solicitanteDe(p));
+  }
+
+  /**
+   * VA ANTES DE `@Get(':id')` Y NO ES ESTILO.
+   *
+   * Nest resuelve las rutas en el orden en que se declaran. Si `:id` fuera
+   * primero, `/vacantes/abiertas` entraria por ahi y el pipe de UUID lo
+   * rechazaria con un 400 que habla de un identificador invalido, cuando lo que
+   * pasa es que la ruta no se esta usando. Mover este metodo hacia abajo rompe
+   * el catalogo sin tocarlo.
+   */
+  @Get('abiertas')
+  @RequierePermiso('postulaciones:crear')
+  @ApiOperation({
+    summary: 'Catalogo de vacantes abiertas',
+    description:
+      'Las publicadas de empresas activas, con el nombre y el sector de quien publica. ' +
+      'Cada fila dice si quien pregunta ya se postulo y si ya esta invitado, para que la pantalla sepa que ofrecer. ' +
+      'NO ordena por afinidad: eso necesita un perfil de habilidades que el backend no tiene (ADR-0015).',
+  })
+  catalogoAbierto(@Req() p: Peticion): Promise<OfertaDelCatalogo[]> {
+    return this.vacantes.catalogoAbierto(solicitanteDe(p));
   }
 
   @Get(':id')
@@ -196,5 +221,85 @@ export class VacantesController {
     @Req() p: Peticion,
   ): Promise<Vacante> {
     return this.vacantes.cerrar(id, solicitanteDe(p));
+  }
+
+  // --- Postulaciones -------------------------------------------------------
+
+  @Post(':id/postular')
+  @RequierePermiso('postulaciones:crear')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Un candidato se postula a una vacante publicada',
+    description:
+      'Crea una solicitud EN REVISION. No da acceso al reto: lo que da acceso es la invitacion, ' +
+      'y esa la crea el reclutador al aceptar. Si ya estaba invitado se responde 400 diciendo que puede empezar sin postularse.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'La vacante no existe, o no esta publicada. Se responde lo mismo en ambos casos: decir "esta en borrador" confirmaria que existe.',
+  })
+  @ApiConflictResponse({ description: 'Ya se habia postulado a esta vacante.' })
+  postular(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() p: Peticion,
+  ): Promise<Postulacion> {
+    return this.vacantes.postular(id, solicitanteDe(p));
+  }
+
+  @Get(':id/postulaciones')
+  @RequierePermiso('postulaciones:leerDeLaVacante')
+  @ApiOperation({
+    summary: 'Los postulantes de una vacante',
+    description:
+      'Identificadores y estado, SIN nombre ni correo: es coherente con el ranking ciego, y deja al reclutador ' +
+      'decidiendo sin saber quien es cada quien. Esa tension con A04 esta nombrada en el ADR-0015 y en la matriz §6.2.',
+  })
+  @ApiNotFoundResponse({ description: 'La vacante no existe o no es de su empresa.' })
+  postulacionesDe(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() p: Peticion,
+  ): Promise<Postulacion[]> {
+    return this.vacantes.postulacionesDe(id, solicitanteDe(p));
+  }
+
+  @Post(':id/postulaciones/:idCandidato/aceptar')
+  @RequierePermiso('postulaciones:decidir')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Acepta a un postulante y lo invita',
+    description:
+      'Las dos cosas en una transaccion: sin ella el candidato podria ver "aceptada" y seguir sin poder entregar. ' +
+      'Una postulacion ya decidida devuelve 400: una decision sobre una persona no se reescribe.',
+  })
+  @ApiNotFoundResponse({
+    description: 'La vacante no existe, no es de su empresa, o esa persona no se postulo.',
+  })
+  aceptarPostulacion(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('idCandidato', new ParseUUIDPipe({ version: '4' })) idCandidato: string,
+    @Req() p: Peticion,
+  ): Promise<Postulacion> {
+    return this.vacantes.aceptarPostulacion(id, idCandidato, solicitanteDe(p));
+  }
+
+  @Post(':id/postulaciones/:idCandidato/rechazar')
+  @RequierePermiso('postulaciones:decidir')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Rechaza a un postulante, con el motivo que va a leer',
+    description:
+      'El motivo es obligatorio y minimo 20 caracteres: es lo unico que el candidato recibe cuando no avanza, ' +
+      'y es el cimiento del "feedback de por que no avanzo" que pide el diagrama del equipo.',
+  })
+  @ApiNotFoundResponse({
+    description: 'La vacante no existe, no es de su empresa, o esa persona no se postulo.',
+  })
+  rechazarPostulacion(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('idCandidato', new ParseUUIDPipe({ version: '4' })) idCandidato: string,
+    @Body() datos: RechazarPostulacionDto,
+    @Req() p: Peticion,
+  ): Promise<Postulacion> {
+    return this.vacantes.rechazarPostulacion(id, idCandidato, datos.motivo, solicitanteDe(p));
   }
 }
