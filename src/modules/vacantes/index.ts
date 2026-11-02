@@ -6,6 +6,7 @@ export {
   type Solicitante,
   type DatosParaNotificar,
   type VacanteAbierta,
+  type OfertaDelCatalogo,
 } from './vacantes.service.js';
 export { EstadoVacante } from './dominio/estado-vacante.js';
 export { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';

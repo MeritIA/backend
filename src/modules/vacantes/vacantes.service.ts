@@ -592,6 +592,59 @@ export class VacantesService {
     return versiones.filter((v): v is ResumenVersion => v !== null);
   }
 
+  /**
+   * Las rubricas de varias vacantes PUBLICADAS, en lote.
+   *
+   * La usa el calculo de afinidad del catalogo abierto. No pasa por
+   * `exigirAcceso` a proposito, y la razon no es comodidad: el candidato del
+   * catalogo **no esta invitado**, asi que `exigirAcceso` le responderia 404 y
+   * no habria afinidad que calcular para nadie.
+   *
+   * POR QUE ES SEGURO NO EXIGIR INVITACION AQUI
+   *
+   * Solo lee vacantes en estado **publicada**, que son las que ya salen en el
+   * catalogo para todo el mundo. Y devuelve unicamente **nombre y peso** de
+   * cada criterio: ni el enunciado, ni la descripcion del criterio, que es lo
+   * que B14 ensena a quien ya esta dentro. Que los pesos sean publicos es la
+   * promesa del producto --la rubrica es la misma para todos los finalistas--
+   * no una fuga.
+   */
+  async rubricasDeVacantesPublicadas(
+    ids: readonly string[],
+  ): Promise<Map<string, { nombre: string; peso: number }[][]>> {
+    if (ids.length === 0) return new Map();
+
+    const vacantes = await this.vacantes.find({
+      where: { id: In([...ids]), estado: EstadoVacante.Publicada },
+      relations: { ejercicios: true },
+    });
+
+    // Una sola lectura por ejercicio aunque lo usen varias vacantes: en una
+    // empresa que reutiliza su banco, eso es la diferencia entre 4 consultas y
+    // 40.
+    const idsDeEjercicios = [
+      ...new Set(vacantes.flatMap((v) => v.ejercicios.map((e) => e.idEjercicio))),
+    ];
+    const versiones = new Map(
+      await Promise.all(
+        idsDeEjercicios.map(
+          async (idEjercicio) =>
+            [idEjercicio, await this.ejerciciosDelBanco.versionVigenteDe(idEjercicio)] as const,
+        ),
+      ),
+    );
+
+    return new Map(
+      vacantes.map((vacante) => [
+        vacante.id,
+        vacante.ejercicios
+          .map((enlace) => versiones.get(enlace.idEjercicio))
+          .filter((v): v is ResumenVersion => v != null)
+          .map((version) => version.criterios.map((c) => ({ nombre: c.nombre, peso: c.peso }))),
+      ]),
+    );
+  }
+
   // --- Interno ---
 
   private async obtenerCompleta(id: string): Promise<Vacante> {

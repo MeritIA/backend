@@ -11,12 +11,18 @@ import {
 import { aCsv, type Columna } from './dominio/csv.js';
 import { aliasDeCandidato } from './dominio/alias.js';
 import { progresoDe, type ProgresoDeVacante } from './dominio/progreso.js';
+import { calcularAfinidad, exigenciasDe, type Afinidad } from './dominio/afinidad.js';
 import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
 import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
 import { EjerciciosService } from '../ejercicios/index.js';
 import { EntregasService, EstadoEntrega } from '../entregas/index.js';
 import { EvaluacionService } from '../evaluacion/index.js';
-import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
+import {
+  EstadoVacante,
+  VacantesService,
+  type OfertaDelCatalogo,
+  type Solicitante,
+} from '../vacantes/index.js';
 
 /**
  * Servicio de aplicacion del modulo de reportes (paquete 5.1).
@@ -79,6 +85,83 @@ export class ReportesService {
    * cambiar en la peticion para ver el panel de otra empresa: la clase de
    * ataque que el encuadre llama IDOR no tiene superficie aqui.
    */
+  /**
+   * El catalogo abierto con el % de afinidad de quien pregunta (B13).
+   *
+   * POR QUE VIVE EN REPORTES Y NO EN VACANTES
+   *
+   * No es gusto: es la unica opcion. La afinidad necesita datos de `evaluacion`
+   * y `evaluacion` ya depende de `vacantes`, asi que calcularla dentro del
+   * catalogo crearia un ciclo entre modulos. Reportes es el sitio que compone
+   * entre modulos sin ser dueno de nada (ADR-0010), y el catalogo se le pide a
+   * `vacantes` en vez de reescribirlo aqui: una sola definicion de "oferta
+   * abierta".
+   *
+   * UNA SOLA LLAMADA, COMO EL PANEL
+   *
+   * El perfil del candidato se lee UNA VEZ y se compara contra todas las
+   * ofertas. Pedir la afinidad oferta por oferta serian veinte consultas para
+   * pintar una lista.
+   *
+   * LA AFINIDAD ORDENA, NUNCA ESCONDE
+   *
+   * Devuelve el catalogo COMPLETO, incluidas las ofertas con afinidad `null`.
+   * Esto es la decision mas importante de todo el calculo y esta en el
+   * ADR-0016: un algoritmo que decide que ofertas ve una persona es exactamente
+   * el sesgo que la auditoria de equidad existe para vigilar. Un numero que
+   * informa y se puede discutir no lo es. Hay una prueba que lo fija.
+   *
+   * Y quien no tiene evidencia sale al principio, no al final: es quien mas
+   * necesita encontrar su primera prueba.
+   */
+  async catalogoConAfinidad(solicitante: Solicitante): Promise<OfertaConAfinidad[]> {
+    const ofertas = await this.vacantes.catalogoAbierto(solicitante);
+    if (ofertas.length === 0) return [];
+
+    const [perfil, rubricas] = await Promise.all([
+      this.evaluacion.perfilDeHabilidades(solicitante.id),
+      this.vacantes.rubricasDeVacantesPublicadas(ofertas.map((o) => o.id)),
+    ]);
+
+    const conAfinidad = ofertas.map((oferta) => ({
+      ...oferta,
+      afinidad: calcularAfinidad(exigenciasDe(rubricas.get(oferta.id) ?? []), perfil),
+    }));
+
+    this.registrar('catalogo_con_afinidad_consultado', solicitante, {
+      ofertas: conAfinidad.length,
+      habilidadesEnElPerfil: perfil.size,
+    });
+
+    // Mayor afinidad primero. Las desconocidas van arriba y no abajo: quien no
+    // tiene ninguna prueba hecha es quien mas necesita ver ofertas, y hundirlo
+    // al final seria castigarle por no haber empezado.
+    return conAfinidad.sort((a, b) => {
+      const sinA = a.afinidad.porcentaje === null;
+      const sinB = b.afinidad.porcentaje === null;
+      if (sinA !== sinB) return sinA ? -1 : 1;
+      return (b.afinidad.porcentaje ?? 0) - (a.afinidad.porcentaje ?? 0);
+    });
+  }
+
+  /**
+   * El perfil de habilidades del propio candidato (B13).
+   *
+   * Solo para si mismo. Ninguna empresa lo ve: lo que una empresa ve de un
+   * candidato es su desglose en SU vacante, no lo que demostro en las de la
+   * competencia.
+   */
+  async miPerfilDeHabilidades(solicitante: Solicitante): Promise<HabilidadDelPerfil[]> {
+    const perfil = await this.evaluacion.perfilDeHabilidades(solicitante.id);
+    return [...perfil.values()]
+      .map((h) => ({
+        nombre: h.nombre,
+        nivel: Math.round(h.nivel * 1000) / 10,
+        veces: h.veces,
+      }))
+      .sort((a, b) => b.nivel - a.nivel);
+  }
+
   async panelDeLaEmpresa(solicitante: Solicitante): Promise<PanelDeEmpresa> {
     if (solicitante.idEmpresa === null) {
       // Un administrador de plataforma no tiene empresa. Devolver un panel
@@ -444,4 +527,17 @@ export interface PanelDeEmpresa {
   /** Ejercicios activos del banco. Los retirados no se cuentan. */
   retosEnElBanco: number;
   generadoEn: Date;
+}
+
+/** Una oferta del catalogo, con el % de afinidad de quien pregunta. */
+export interface OfertaConAfinidad extends OfertaDelCatalogo {
+  readonly afinidad: Afinidad;
+}
+
+/** Una habilidad del perfil del candidato, con el nivel en porcentaje. */
+export interface HabilidadDelPerfil {
+  readonly nombre: string;
+  /** 0 a 100. */
+  readonly nivel: number;
+  readonly veces: number;
 }
