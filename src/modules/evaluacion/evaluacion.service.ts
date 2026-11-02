@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Evaluacion } from './entities/evaluacion.entity.js';
 import { Rol } from '../autenticacion/index.js';
 import { EstadoVacante, VacantesService, type Solicitante } from '../vacantes/index.js';
+import { normalizarHabilidad, type NivelDeHabilidad } from './dominio/habilidad.js';
 
 /**
  * Servicio de aplicacion del modulo de evaluacion.
@@ -162,6 +163,75 @@ export class EvaluacionService {
    * —la vacante la pone un evento de dominio o un endpoint que ya comprobo la
    * propiedad— y lo que devuelve no identifica a nadie por si solo.
    */
+  /**
+   * El perfil de habilidades de un candidato: su nivel en cada criterio sobre
+   * el que alguna vez se le califico.
+   *
+   * ES EL DATO QUE FALTABA PARA EL % DE AFINIDAD
+   *
+   * B13 lo promete y la matriz lo tenia marcado como inexistente: "hoy los
+   * criterios viven dentro de cada ejercicio". Viven, si, pero las
+   * CALIFICACIONES no: `calificaciones_criterio` guarda una fila por criterio
+   * con su puntaje y su escala. Agrupando por nombre de criterio sale un perfil
+   * transversal sin inventar ninguna taxonomia.
+   *
+   * SE AGREGA EN LA BASE Y NO EN MEMORIA
+   *
+   * Un candidato con veinte evaluaciones de cinco criterios son cien filas para
+   * calcular cinco medias. Traerlas para promediarlas en Node seria pedirle a
+   * PostgreSQL justo lo que no sabe hacer peor.
+   *
+   * EL NIVEL ES puntaje/escala, NO el puntaje
+   *
+   * Un 4 sobre 5 y un 8 sobre 10 son el mismo nivel. Comparar puntajes de
+   * escalas distintas es el error que haria que un ejercicio con escala 10
+   * pesara el doble sin que nadie lo decidiera.
+   *
+   * SIN FILTRO POR EMPRESA, Y A PROPOSITO
+   *
+   * El perfil es de la persona y atraviesa las empresas para las que hizo
+   * pruebas: es justo lo que lo hace transversal. No se expone a ninguna
+   * empresa --solo al propio candidato, y agregado-- asi que no filtra nada de
+   * un proceso ajeno: un nivel medio no dice en que vacante se obtuvo.
+   */
+  async perfilDeHabilidades(idCandidato: string): Promise<Map<string, NivelDeHabilidad>> {
+    const filas = await this.evaluaciones
+      .createQueryBuilder('e')
+      .innerJoin('e.criterios', 'c')
+      .select('c.criterio', 'criterio')
+      // El nivel medio, ya normalizado por la escala de cada criterio.
+      .addSelect('avg(c.puntaje / c.escala_maxima)', 'nivel')
+      .addSelect('count(*)', 'veces')
+      .where('e.id_candidato = :idCandidato', { idCandidato })
+      // Una escala cero reventaria la division. No deberia existir --la rubrica
+      // la valida-- pero el agregado no es el sitio donde descubrirlo.
+      .andWhere('c.escala_maxima > 0')
+      .groupBy('c.criterio')
+      .getRawMany<{ criterio: string; nivel: string; veces: string }>();
+
+    const perfil = new Map<string, NivelDeHabilidad>();
+    for (const fila of filas) {
+      const clave = normalizarHabilidad(fila.criterio);
+      const nivel = Number(fila.nivel);
+      const veces = Number(fila.veces);
+      // Dos nombres distintos pueden normalizar a la misma clave ("Correccion
+      // funcional" y "corrección funcional"): se funden ponderando por veces,
+      // que es lo que habria salido si se hubieran escrito igual.
+      const previo = perfil.get(clave);
+      if (previo) {
+        const total = previo.veces + veces;
+        perfil.set(clave, {
+          nombre: previo.nombre,
+          nivel: (previo.nivel * previo.veces + nivel * veces) / total,
+          veces: total,
+        });
+      } else {
+        perfil.set(clave, { nombre: fila.criterio, nivel, veces });
+      }
+    }
+    return perfil;
+  }
+
   async candidatosConEvaluacionEn(idVacante: string): Promise<string[]> {
     const filas = await this.evaluaciones
       .createQueryBuilder('e')
