@@ -9,4 +9,5 @@ export {
   type OfertaDelCatalogo,
 } from './vacantes.service.js';
 export { EstadoVacante } from './dominio/estado-vacante.js';
+export { type CalculadorDeAfinidad } from './dominio/calculador-de-afinidad.js';
 export { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';

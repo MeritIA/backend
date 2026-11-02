@@ -90,6 +90,39 @@ export class Postulacion {
   @Column({ type: 'timestamptz', name: 'decidida_en', nullable: true })
   decididaEn!: Date | null;
 
+  /**
+   * Si la decidio la maquina y no una persona.
+   *
+   * Se guarda APARTE de `idUsuarioQueDecidio` y no dejandolo a null: una
+   * politica de invitacion automatica la enciende alguien, y esa persona
+   * responde por lo que la maquina acepte. Asi no se pierde el responsable.
+   */
+  @Column({ type: 'boolean', name: 'decision_automatica', default: false })
+  decisionAutomatica!: boolean;
+
+  /**
+   * El % de afinidad con el que se decidio, o `null` si no habia evidencia o si
+   * decidio una persona.
+   *
+   * Es la unica forma de auditar por que la maquina dijo si. Hace falta
+   * guardarlo porque el vocabulario de habilidades se puede editar: si manana
+   * se unen dos nombres, todas las afinidades cambian --se calculan en vivo, sin
+   * copia-- y el numero de esta decision ya no se podria reconstruir. Mismo
+   * criterio que `id_version` en una evaluacion.
+   */
+  @Column({
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    name: 'afinidad_al_decidir',
+    nullable: true,
+    transformer: {
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : Number(v)),
+    },
+  })
+  afinidadAlDecidir!: number | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'creada_en' })
   creadaEn!: Date;
 }
