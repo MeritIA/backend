@@ -64,6 +64,14 @@ export class Evaluacion {
   })
   notaFinal!: number;
 
+  /**
+   * La moderacion confirmo una descalificacion: la evaluacion sale del ranking
+   * y de las lecturas de la empresa, pero se conserva para el candidato y la
+   * auditoria. Solo la mueve el modulo de moderacion.
+   */
+  @Column({ type: 'boolean', default: false })
+  descalificada!: boolean;
+
   @Column({ type: 'varchar', length: 40 })
   proveedor!: string;
 

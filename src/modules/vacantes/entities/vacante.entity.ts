@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { EstadoVacante } from '../dominio/estado-vacante.js';
+import { Modalidad } from '../dominio/modalidad.js';
 // `import type` y relaciones declaradas por nombre: las entidades hijas si
 // importan Vacante como valor (lo necesitan para su @ManyToOne), asi que si
 // esta la importara a ellas habria un ciclo, y en ESM eso falla al arrancar con
@@ -29,6 +30,14 @@ export class Vacante {
 
   @Column({ type: 'varchar', length: 120, nullable: true })
   ubicacion!: string | null;
+
+  /** Remoto, hibrido o presencial. Nula en las vacantes anteriores a que existiera. */
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  modalidad!: Modalidad | null;
+
+  /** Etiquetas libres que el reclutador pone para que el candidato filtre. */
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  tecnologias!: string[];
 
   /**
    * Intentos que cada candidato tiene por ejercicio. Por omision 1: dar mas

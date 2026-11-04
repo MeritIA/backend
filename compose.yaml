@@ -22,6 +22,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       S3_ENDPOINT: http://almacenamiento:8333
+      # Lo que el navegador alcanza: los enlaces de descarga van firmados con esta.
+      S3_PUBLIC_ENDPOINT: http://localhost:${S3_PORT:-19000}
       # El servicio de IA corre en su propio proyecto de compose, con su propia
       # red: desde aqui no se alcanza por "localhost", que seria este mismo
       # contenedor. En local se llega por el host; en produccion, por el nombre

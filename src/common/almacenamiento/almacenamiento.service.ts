@@ -13,9 +13,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'node:crypto';
 import {
+  ArchivoInvalidoError,
   PREFIJO_EVIDENCIAS,
   claveDeEntrega,
+  claveDeAdjunto,
   claveDeEvidencia,
+  claveDeVerificacion,
   claveEsValida,
   validarTamano,
 } from './politica-de-nombres.js';
@@ -32,6 +35,9 @@ export interface ReferenciaDeObjeto {
 
 export class ObjetoNoEncontradoError extends Error {}
 export class ClaveInvalidaError extends Error {}
+
+/** Una foto de verificacion no necesita mas: la camara web da cientos de KiB. */
+const TAMANO_MAXIMO_VERIFICACION = 2 * 1024 * 1024;
 
 /** Vida de un enlace de descarga. Corta a proposito: un enlace filtrado caduca pronto. */
 const SEGUNDOS_ENLACE = 5 * 60;
@@ -59,22 +65,29 @@ const SEGUNDOS_ENLACE = 5 * 60;
 export class AlmacenamientoService implements OnModuleInit {
   private readonly logger = new Logger('Almacenamiento');
   private readonly s3: S3Client;
+  /** Cliente que solo firma: apunta a la direccion que ve el navegador. */
+  private readonly s3Firmante: S3Client;
   readonly bucket: string;
 
   constructor(private readonly salud: SaludService) {
     this.bucket = process.env.S3_BUCKET ?? 'meritia-entregas';
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT,
-      region: process.env.S3_REGION ?? 'us-east-1',
-      // Los servidores compatibles que se usan en desarrollo sirven los
-      // buckets por ruta (host/bucket/clave) y no por subdominio; S3 real
-      // acepta ambos, asi que esto vale en los dos sitios.
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY ?? '',
-        secretAccessKey: process.env.S3_SECRET_KEY ?? '',
-      },
-    });
+    const credenciales = {
+      accessKeyId: process.env.S3_ACCESS_KEY ?? '',
+      secretAccessKey: process.env.S3_SECRET_KEY ?? '',
+    };
+    const crear = (endpoint: string | undefined) =>
+      new S3Client({
+        endpoint,
+        region: process.env.S3_REGION ?? 'us-east-1',
+        // Los servidores compatibles que se usan en desarrollo sirven los
+        // buckets por ruta (host/bucket/clave) y no por subdominio; S3 real
+        // acepta ambos, asi que esto vale en los dos sitios.
+        forcePathStyle: true,
+        credentials: credenciales,
+      });
+    this.s3 = crear(process.env.S3_ENDPOINT);
+    // Firmar es un calculo local: no hace falta que este cliente alcance el servidor.
+    this.s3Firmante = crear(process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT);
   }
 
   async onModuleInit(): Promise<void> {
@@ -154,6 +167,37 @@ export class AlmacenamientoService implements OnModuleInit {
     return this.subir(clave, nombreOriginal, contenido, tipoContenido);
   }
 
+  /** Un archivo que acompana un enunciado (dataset, esqueleto). */
+  async subirAdjunto(
+    idEjercicio: string,
+    nombreOriginal: string,
+    contenido: Buffer,
+    tipoContenido: string,
+  ): Promise<ReferenciaDeObjeto> {
+    validarTamano(contenido.length);
+    return this.subir(
+      claveDeAdjunto(idEjercicio, nombreOriginal),
+      nombreOriginal,
+      contenido,
+      tipoContenido,
+    );
+  }
+
+  /** La foto de verificacion biometrica: dato sensible, bucket privado y enlace corto. */
+  async subirVerificacion(
+    idVacante: string,
+    idEntrega: string,
+    contenido: Buffer,
+    tipoContenido: 'image/jpeg' | 'image/png',
+  ): Promise<ReferenciaDeObjeto> {
+    if (contenido.length === 0 || contenido.length > TAMANO_MAXIMO_VERIFICACION) {
+      throw new ArchivoInvalidoError('demasiado_grande', 'La foto esta vacia o supera 2 MiB.');
+    }
+    const extension = tipoContenido === 'image/png' ? '.png' : '.jpg';
+    const clave = claveDeVerificacion(idVacante, idEntrega, extension);
+    return this.subir(clave, `verificacion${extension}`, contenido, tipoContenido);
+  }
+
   async subirEvidencia(idEvaluacion: string, contenido: Buffer): Promise<ReferenciaDeObjeto> {
     const clave = claveDeEvidencia(idEvaluacion);
     return this.subir(clave, 'evidencia.json', contenido, 'application/json');
@@ -225,7 +269,7 @@ export class AlmacenamientoService implements OnModuleInit {
     this.exigirClaveValida(referencia.clave);
     await this.existe(referencia.clave);
     return getSignedUrl(
-      this.s3,
+      this.s3Firmante,
       new GetObjectCommand({ Bucket: this.bucket, Key: referencia.clave }),
       { expiresIn: SEGUNDOS_ENLACE },
     );

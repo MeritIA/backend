@@ -9,9 +9,19 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { EjerciciosService, type Solicitante } from './ejercicios.service.js';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { EjerciciosService, type ResumenVersion, type Solicitante } from './ejercicios.service.js';
 import { CrearEjercicioDto, NuevaVersionDto } from './dto/index.js';
 import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
 import type { Ejercicio } from './entities/ejercicio.entity.js';
@@ -84,6 +94,35 @@ export class EjerciciosController {
     @Req() p: Peticion,
   ): Promise<Ejercicio> {
     return this.ejercicios.nuevaVersion(id, datos, solicitanteDe(p));
+  }
+
+  @Post(':id/adjuntos')
+  @RequierePermiso('ejercicios:editar')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('archivo', { limits: { fileSize: 25 * 1024 * 1024, files: 1, fields: 2 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['archivo'],
+      properties: { archivo: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({
+    summary: 'Adjunta un archivo al enunciado (dataset, esqueleto)',
+    description:
+      'Cuelga de la version vigente. Hasta cinco por version, 25 MiB cada uno; extensiones de una entrega mas `.csv`. ' +
+      'El candidato invitado lo descarga con un enlace firmado de cinco minutos.',
+  })
+  @ApiNotFoundResponse({ description: 'El ejercicio no existe o no es de su empresa.' })
+  adjuntar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @UploadedFile() archivo: { originalname: string; buffer: Buffer; mimetype: string } | undefined,
+    @Req() p: Peticion,
+  ): Promise<ResumenVersion> {
+    return this.ejercicios.adjuntar(id, archivo, solicitanteDe(p));
   }
 
   @Delete(':id')

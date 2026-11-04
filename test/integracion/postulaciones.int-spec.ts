@@ -251,6 +251,121 @@ describe('integracion: postulaciones', () => {
     });
   });
 
+  describe('retirar la postulacion', () => {
+    it('la que sigue en revision se retira, y se puede volver a pedir', async () => {
+      const id = await vacantePublicada();
+      await api(app).post(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(201);
+      await api(app).delete(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(204);
+
+      const { body } = await api(app)
+        .get('/api/v1/postulaciones/mias')
+        .set(auth(candidato))
+        .expect(200);
+      expect(body).toHaveLength(0);
+      await api(app).post(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(201);
+    });
+
+    it('una ya decidida no se retira: la decision no se borra', async () => {
+      const id = await vacantePublicada();
+      await api(app).post(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(201);
+      await api(app)
+        .post(`/api/v1/vacantes/${id}/postulaciones/${candidato.id}/rechazar`)
+        .set(auth(reclutador))
+        .send({ motivo: MOTIVO })
+        .expect(200);
+      await api(app).delete(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(400);
+    });
+
+    it('quien no se postulo recibe 404, y no toca la de otra persona', async () => {
+      const id = await vacantePublicada();
+      await api(app).post(`/api/v1/vacantes/${id}/postular`).set(auth(candidato)).expect(201);
+      await api(app).delete(`/api/v1/vacantes/${id}/postular`).set(auth(otroCandidato)).expect(404);
+      const filas = await consultar(`select 1 from vacantes.postulaciones where id_vacante = $1`, [
+        id,
+      ]);
+      expect(filas).toHaveLength(1);
+    });
+  });
+
+  describe('invitar por correo', () => {
+    const invitar = (id: string, quien: Sesion, cuerpo: object) =>
+      api(app).post(`/api/v1/vacantes/${id}/candidatos`).set(auth(quien)).send(cuerpo);
+
+    it('resuelve el correo a un candidato y lo invita', async () => {
+      const id = await vacantePublicada();
+      await invitar(id, reclutador, { correo: candidato.correo.toUpperCase() }).expect(200);
+      const filas = await consultar(
+        `select 1 from vacantes.vacante_candidatos where id_vacante = $1 and id_candidato = $2`,
+        [id, candidato.id],
+      );
+      expect(filas).toHaveLength(1);
+    });
+
+    it('un correo sin candidato, o de un reclutador, da el mismo 404', async () => {
+      const id = await vacantePublicada();
+      await invitar(id, reclutador, { correo: 'nadie@no-existe.test' }).expect(404);
+      await invitar(id, reclutador, { correo: otroReclutador.correo }).expect(404);
+    });
+
+    it('quien no es dueño de la vacante no sondea correos', async () => {
+      const id = await vacantePublicada();
+      await invitar(id, otroReclutador, { correo: candidato.correo }).expect(404);
+    });
+
+    it('exige uno de los dos, no ninguno ni ambos', async () => {
+      const id = await vacantePublicada();
+      await invitar(id, reclutador, {}).expect(400);
+      await invitar(id, reclutador, { idCandidato: candidato.id, correo: candidato.correo }).expect(
+        400,
+      );
+    });
+  });
+
+  describe('modalidad y tecnologias', () => {
+    it('el reclutador las define y el catalogo las ofrece', async () => {
+      const { body: creada } = await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({
+          titulo: 'Ingeniera de datos',
+          descripcion: 'Construiras pipelines de datos con un equipo pequeno.',
+          modalidad: 'hibrido',
+          tecnologias: ['  Python ', 'SQL'],
+        })
+        .expect(201);
+      expect(creada).toMatchObject({ modalidad: 'hibrido', tecnologias: ['Python', 'SQL'] });
+
+      const idEjercicio = await crearEjercicioEnElBanco(app, reclutador, 'Ejercicio de datos');
+      await api(app)
+        .put(`/api/v1/vacantes/${creada.id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [idEjercicio] })
+        .expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${creada.id}/publicar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await api(app)
+        .get('/api/v1/vacantes/abiertas')
+        .set(auth(candidato))
+        .expect(200);
+      expect(body[0]).toMatchObject({ modalidad: 'hibrido', tecnologias: ['Python', 'SQL'] });
+    });
+
+    it('rechaza una modalidad inventada', async () => {
+      await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({
+          titulo: 'Ingeniera de datos',
+          descripcion: 'Construiras pipelines de datos con un equipo pequeno.',
+          modalidad: 'en la luna',
+        })
+        .expect(400);
+    });
+  });
+
   describe('mis postulaciones', () => {
     it('devuelve solo las propias, salga de donde salga el identificador', async () => {
       const mia = await vacantePublicada();

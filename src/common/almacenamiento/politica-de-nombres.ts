@@ -29,6 +29,8 @@ import path from 'node:path';
 
 export const PREFIJO_ENTREGAS = 'entregas';
 export const PREFIJO_EVIDENCIAS = 'evidencias';
+export const PREFIJO_VERIFICACIONES = 'verificaciones';
+export const PREFIJO_ADJUNTOS = 'adjuntos';
 
 /**
  * Extensiones admitidas en una entrega.
@@ -116,6 +118,24 @@ export function claveDeEntrega(
   return `${PREFIJO_ENTREGAS}/${idVacante}/${idEntrega}/${randomUUID()}${extension}`;
 }
 
+/** Clave de un archivo que acompana un enunciado. Misma lista blanca de extensiones. */
+export function claveDeAdjunto(idEjercicio: string, nombreOriginal: string): string {
+  // Un dataset suele ser .csv, que una ENTREGA no admite: la evaluacion no lo lee.
+  const extension = nombreOriginal.toLowerCase().endsWith('.csv')
+    ? '.csv'
+    : extensionValidada(nombreOriginal);
+  return `${PREFIJO_ADJUNTOS}/${idEjercicio}/${randomUUID()}${extension}`;
+}
+
+/** Clave de la foto de verificacion de una entrega. Solo imagenes: jpg o png. */
+export function claveDeVerificacion(
+  idVacante: string,
+  idEntrega: string,
+  extension: '.jpg' | '.png',
+): string {
+  return `${PREFIJO_VERIFICACIONES}/${idVacante}/${idEntrega}/${randomUUID()}${extension}`;
+}
+
 /** Clave de una evidencia generada durante la evaluacion. */
 export function claveDeEvidencia(idEvaluacion: string, extension = '.json'): string {
   return `${PREFIJO_EVIDENCIAS}/${idEvaluacion}/${randomUUID()}${extension}`;
@@ -138,5 +158,10 @@ export function claveEsValida(clave: string): boolean {
     const codigo = c.codePointAt(0) ?? 0;
     if (codigo <= 0x20 || codigo === 0x7f) return false;
   }
-  return clave.startsWith(`${PREFIJO_ENTREGAS}/`) || clave.startsWith(`${PREFIJO_EVIDENCIAS}/`);
+  return (
+    clave.startsWith(`${PREFIJO_ENTREGAS}/`) ||
+    clave.startsWith(`${PREFIJO_EVIDENCIAS}/`) ||
+    clave.startsWith(`${PREFIJO_VERIFICACIONES}/`) ||
+    clave.startsWith(`${PREFIJO_ADJUNTOS}/`)
+  );
 }

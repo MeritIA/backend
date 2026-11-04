@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { Ejercicio } from './ejercicio.entity.js';
 import type { CriterioRubrica } from './criterio-rubrica.entity.js';
+import type { Adjunto } from './adjunto.entity.js';
 
 /**
  * Una version concreta del enunciado y su rubrica.
@@ -46,11 +47,18 @@ export class EjercicioVersion {
   enunciado!: string;
 
   /** Nota que explica que cambio respecto de la version anterior. */
+  /** Minutos que tiene el candidato desde que inicia. Nulo: sin limite. */
+  @Column({ type: 'int', name: 'duracion_minutos', nullable: true })
+  duracionMinutos!: number | null;
+
   @Column({ type: 'varchar', length: 300, nullable: true, name: 'motivo_del_cambio' })
   motivoDelCambio!: string | null;
 
   @OneToMany('CriterioRubrica', 'version', { cascade: true })
   criterios!: CriterioRubrica[];
+
+  @OneToMany('Adjunto', 'version')
+  adjuntos!: Adjunto[];
 
   /** Quien la creo. */
   @Column({ type: 'uuid', name: 'id_autor' })

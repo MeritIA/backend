@@ -456,6 +456,130 @@ describe('integracion: reportes consolidados', () => {
     });
   });
 
+  describe('el banco de talento solo lista a quien autorizo su perfil', () => {
+    const consentir = (quien: Sesion, concedido: boolean) =>
+      api(app)
+        .put('/api/v1/autenticacion/consentimientos')
+        .set(auth(quien))
+        .send({ decisiones: [{ tipo: 'perfil_publico', concedido }], origen: 'perfil' })
+        .expect(200);
+
+    it('nadie aparece por omision; quien consiente aparece con alias y mejor nota; revocar lo saca', async () => {
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 55,
+        creadaEn: '2026-10-01T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-02T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 72,
+        creadaEn: '2026-10-01T11:00:00Z',
+      });
+      const banco = () =>
+        api(app).get('/api/v1/reportes/banco-de-talento').set(auth(reclutador)).expect(200);
+
+      expect((await banco()).body).toHaveLength(0);
+
+      await consentir(ana, true);
+      const { body } = await banco();
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ idCandidato: ana.id, mejorNota: 88, evaluaciones: 2 });
+      expect(body[0].alias).toMatch(/^Candidato ••••/);
+      expect(JSON.stringify(body)).not.toContain('Ana Maria');
+
+      await consentir(ana, false);
+      expect((await banco()).body).toHaveLength(0);
+    });
+
+    it('un candidato no lo consulta', async () => {
+      await api(app).get('/api/v1/reportes/banco-de-talento').set(auth(ana)).expect(403);
+    });
+  });
+
+  describe('informe de auditoria (A09)', () => {
+    it('resume integridad, distribucion y rastro, y declara que el sesgo no es medible', async () => {
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 55,
+        creadaEn: '2026-10-01T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 88,
+        creadaEn: '2026-10-01T11:00:00Z',
+        riesgo: 'alto',
+      });
+      await consultar(
+        `update evaluacion.evaluaciones set descalificada = true where nota_final = 88 and id_vacante = $1`,
+        [idVacante],
+      );
+      await api(app)
+        .post(`/api/v1/reportes/vacantes/${idVacante}/candidatos/${ana.id}/revelar`)
+        .set(auth(reclutador))
+        .expect(200);
+
+      const { body } = await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/auditoria`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(body.integridad).toMatchObject({ evaluaciones: 2, descalificadas: 1, riesgoAlto: 1 });
+      // La descalificada no cuenta en la distribucion: sale del ranking.
+      expect(body.distribucion).toMatchObject({ candidatosEvaluados: 1, notaMaxima: 55 });
+      expect(body.distribucion.histograma[5].candidatos).toBe(1);
+      expect(body.trazabilidad.identidadesReveladas).toBe(1);
+      expect(body.sesgo.medible).toBe(false);
+      expect(body.sesgo.motivo).toMatch(/demograficos/);
+    });
+
+    it('otra empresa y un candidato no la ven', async () => {
+      await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/auditoria`)
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(404);
+      await api(app)
+        .get(`/api/v1/reportes/vacantes/${idVacante}/auditoria`)
+        .set(auth(ana))
+        .expect(403);
+    });
+  });
+
+  describe('uso de cada ejercicio del banco (A10)', () => {
+    it('cuenta vacantes, evaluaciones y nota promedio, solo de la propia empresa', async () => {
+      await sembrarEvaluacion({
+        idCandidato: ana.id,
+        notaFinal: 60,
+        creadaEn: '2026-10-01T10:00:00Z',
+      });
+      await sembrarEvaluacion({
+        idCandidato: luis.id,
+        notaFinal: 80,
+        creadaEn: '2026-10-01T11:00:00Z',
+      });
+
+      const { body } = await api(app)
+        .get('/api/v1/reportes/ejercicios')
+        .set(auth(reclutador))
+        .expect(200);
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ vacantes: 1, evaluaciones: 2, notaPromedio: 70 });
+
+      const { body: ajeno } = await api(app)
+        .get('/api/v1/reportes/ejercicios')
+        .set(auth(reclutadorDeOtraEmpresa))
+        .expect(200);
+      expect(ajeno).toHaveLength(0);
+    });
+
+    it('un candidato no lo consulta', async () => {
+      await api(app).get('/api/v1/reportes/ejercicios').set(auth(ana)).expect(403);
+    });
+  });
+
   describe('exportacion basica del reporte', () => {
     it('descarga un CSV con cabecera y una fila por candidato', async () => {
       await sembrarEvaluacion({

@@ -12,12 +12,12 @@ se toca algo que afecta al rendimiento, y antes de cada entrega del piloto.
 
 ## Las cuatro piezas
 
-| Pieza | Qué hace |
-|---|---|
-| `doble-servicio-ia.mjs` | Suplanta al servicio de IA con latencia simulada. La sección 11 lo pide: un *soak* contra Gemini cuesta dinero y choca con su *rate limit* |
-| `preparar-datos.mjs` | Crea la base `meritia_carga`, migra, y siembra reclutador, ejercicio, vacante publicada y candidatos invitados con sus tokens |
-| `muestrear-recursos.mjs` | CPU, memoria y conexiones a la base, que k6 no ve |
-| `baseline/stress/spike/soak/evaluaciones.js` | Los escenarios |
+| Pieza                                        | Qué hace                                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `doble-servicio-ia.mjs`                      | Suplanta al servicio de IA con latencia simulada. La sección 11 lo pide: un _soak_ contra Gemini cuesta dinero y choca con su _rate limit_ |
+| `preparar-datos.mjs`                         | Crea la base `meritia_carga`, migra, y siembra reclutador, ejercicio, vacante publicada y candidatos invitados con sus tokens              |
+| `muestrear-recursos.mjs`                     | CPU, memoria y conexiones a la base, que k6 no ve                                                                                          |
+| `baseline/stress/spike/soak/evaluaciones.js` | Los escenarios                                                                                                                             |
 
 ## Procedimiento
 
@@ -43,7 +43,7 @@ THROTTLE_EVALUACION_LIMIT=1000000
 **Los límites de peticiones se suben a propósito, y hay que saber por qué.** El
 límite real es de 100 por minuto y por IP. k6 corre desde un solo contenedor,
 así que con el límite puesto lo que se mediría es el limitador y no la
-aplicación: a los seis segundos todo serían 429. El *rate limiting* tiene sus
+aplicación: a los seis segundos todo serían 429. El _rate limiting_ tiene sus
 propias pruebas de integración, donde sí se comprueba que funciona.
 
 `.env.carga` está en `.gitignore`.
@@ -72,20 +72,24 @@ docker run --rm -v "$PWD/test/carga:/carga" -w /carga \
   grafana/k6 run baseline.js
 ```
 
-Variables: `CARGA_RPS`, `CARGA_DURACION`, `CARGA_PCT_ENTREGAS`.
+Variables: `CARGA_RPS`, `CARGA_DURACION`, `CARGA_PCT_ENTREGAS` y, para `mentor`, `CARGA_PCT_PREGUNTAS`.
+
+Para medir el mentor hay que sembrar con `preparar-datos.mjs` (deja 3 evaluaciones por candidato) y para ver si afecta al resto, correr `mentor` y `baseline` a la vez.
 
 ## Los escenarios
 
-| Escenario | Forma | Qué responde |
-|---|---|---|
-| `baseline` | ritmo constante | Cómo se comporta en carga normal |
-| `stress` | escalones hasta 400/s | **Dónde está el límite** |
-| `spike` | de 5 a 250/s en diez segundos | Si aguanta el pico y, sobre todo, si **recupera** |
-| `soak` | sostenido, por omisión 10 min | **Deriva**: memoria, conexiones, latencia con el tiempo |
-| `evaluaciones` | todas las iteraciones entregan | El camino caro: archivo, almacenamiento, transacción y cola |
+| Escenario          | Forma                          | Qué responde                                                |
+| ------------------ | ------------------------------ | ----------------------------------------------------------- |
+| `baseline`         | ritmo constante                | Cómo se comporta en carga normal                            |
+| `stress`           | escalones hasta 400/s          | **Dónde está el límite**                                    |
+| `spike`            | de 5 a 250/s en diez segundos  | Si aguanta el pico y, sobre todo, si **recupera**           |
+| `soak`             | sostenido, por omisión 10 min  | **Deriva**: memoria, conexiones, latencia con el tiempo     |
+| `evaluaciones`     | todas las iteraciones entregan | El camino caro: archivo, almacenamiento, transacción y cola |
+| `mentor`           | resumen + pregunta a la IA     | Si el mentor aguanta, y si **deja** aguantar al resto       |
+| `registro-empresa` | altas de empresa (argon2id)    | Cuánto cuesta cada alta pública y si una rafa deja sin CPU  |
 
 `stress` va **sin umbrales** a propósito: busca el punto de rotura, así que un
-umbral que falle no informaría de nada. El dato es *dónde* se rompe.
+umbral que falle no informaría de nada. El dato es _dónde_ se rompe.
 
 ## Dos límites de este montaje, para leer las cifras con honestidad
 

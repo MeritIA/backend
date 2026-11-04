@@ -57,7 +57,29 @@ export interface RespuestaDeEvaluacion {
   readonly seguridad: SeguridadRecibida;
 }
 
+/** Lo que se le manda al mentor. Coincide con `docs/contrato.md` del servicio. */
+export interface PeticionDeMentor {
+  readonly contexto: {
+    readonly totalEvaluaciones: number;
+    readonly promedio: number;
+    readonly perfil: readonly { nombre: string; porcentaje: number; veces: number }[];
+    readonly recientes: readonly {
+      reto: string;
+      nota: number;
+      flojo?: { criterio: string; porcentaje: number; evidencia: string };
+    }[];
+  };
+  readonly historial: readonly { rol: 'candidato' | 'mentor'; texto: string }[];
+  readonly pregunta: string;
+}
+
+export interface RespuestaDeMentor {
+  readonly respuesta: string;
+  readonly sugerencias: readonly string[];
+}
+
 const TIEMPO_POR_OMISION_MS = 120_000;
+const TIEMPO_DEL_MENTOR_MS = 45_000;
 
 @Injectable()
 export class ClienteServicioIa implements OnModuleInit {
@@ -149,6 +171,46 @@ export class ClienteServicioIa implements OnModuleInit {
 
     const cuerpo: unknown = await respuesta.json().catch(() => null);
     return this.validar(cuerpo, peticion);
+  }
+
+  /**
+   * Pregunta al mentor. Interactivo: no pasa por la cola, y si el servicio no
+   * esta se avisa de inmediato en vez de dejar al candidato esperando.
+   */
+  async preguntarAlMentor(peticion: PeticionDeMentor): Promise<RespuestaDeMentor> {
+    if (!this.url || !this.clave) {
+      throw new ServicioDeIaNoDisponibleError('El servicio de IA no esta configurado.');
+    }
+    let respuesta: Response;
+    try {
+      respuesta = await fetch(`${this.url}/api/v1/mentor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.clave}` },
+        body: JSON.stringify(peticion),
+        signal: AbortSignal.timeout(Math.min(this.tiempoMaximoMs, TIEMPO_DEL_MENTOR_MS)),
+      });
+    } catch {
+      throw new ServicioDeIaNoDisponibleError('No se pudo contactar al servicio de IA.');
+    }
+    if (!respuesta.ok) throw await this.traducirError(respuesta);
+
+    // No se confia en la respuesta: se comprueba la forma y se acota.
+    const c = (await respuesta.json().catch(() => null)) as {
+      respuesta?: unknown;
+      sugerencias?: unknown;
+    } | null;
+    if (typeof c?.respuesta !== 'string' || c.respuesta.trim() === '') {
+      throw new EvaluacionNoReintentableError('Respuesta invalida del mentor.');
+    }
+    return {
+      respuesta: c.respuesta.trim().slice(0, 1500),
+      sugerencias: Array.isArray(c.sugerencias)
+        ? c.sugerencias
+            .filter((x): x is string => typeof x === 'string')
+            .slice(0, 3)
+            .map((x) => x.slice(0, 80))
+        : [],
+    };
   }
 
   /**

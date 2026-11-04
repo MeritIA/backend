@@ -17,6 +17,7 @@ import { EntregasModule } from './modules/entregas/index.js';
 import { EvaluacionModule } from './modules/evaluacion/index.js';
 import { ReportesModule } from './modules/reportes/index.js';
 import { NotificacionesModule } from './modules/notificaciones/index.js';
+import { ModeracionModule } from './modules/moderacion/index.js';
 
 /**
  * Raiz del monolito modular.
@@ -53,6 +54,7 @@ import { NotificacionesModule } from './modules/notificaciones/index.js';
     ReportesModule,
     // Ultimo a proposito: solo escucha y no lo importa nadie.
     NotificacionesModule,
+    ModeracionModule,
   ],
   controllers: [AppController, SaludController],
   providers: [AppService],

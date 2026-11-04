@@ -117,7 +117,12 @@ async function pedir(ruta, opciones = {}) {
 async function registrar(correo, nombre) {
   return pedir('/api/v1/autenticacion/registro', {
     method: 'POST',
-    body: JSON.stringify({ correo, contrasena: CONTRASENA, nombreCompleto: nombre, cliente: 'apk' }),
+    body: JSON.stringify({
+      correo,
+      contrasena: CONTRASENA,
+      nombreCompleto: nombre,
+      cliente: 'apk',
+    }),
   });
 }
 
@@ -295,6 +300,27 @@ async function main() {
     candidatos.push({ id: sesion.idUsuario, token: sesion.tokenDeAcceso });
     if ((i + 1) % 20 === 0) console.log(`  ${i + 1}/${CANDIDATOS} candidatos listos`);
   }
+
+  // --- Evaluaciones previas, para que el mentor tenga con que trabajar.
+  // Sin ellas responde sin llamar a la IA y el escenario del mentor no mediria
+  // nada. Llevan vacante y ejercicio propios: no ensucian el reporte de la vacante.
+  await sql(
+    BD,
+    `with nuevas as (
+       insert into evaluacion.evaluaciones (id_entrega, id_vacante, id_candidato, id_empresa, id_ejercicio,
+         id_version, nota_final, proveedor, modelo, archivos, riesgo_inyeccion, creada_en)
+       select gen_random_uuid(), gen_random_uuid(), c, gen_random_uuid(), gen_random_uuid(),
+         gen_random_uuid(), 40 + (n * 17) % 55, 'doble-de-carga', 'doble-1', 1, 'ninguno', now() - (n || ' days')::interval
+       from unnest($1::uuid[]) c, generate_series(1, 3) n
+       returning id, nota_final
+     )
+     insert into evaluacion.calificaciones_criterio (id_evaluacion, orden, criterio, puntaje, escala_maxima, peso, evidencia)
+     select id, k, case k when 1 then 'Correccion funcional' else 'Claridad del codigo' end,
+            round((nota_final / 100.0 * 5)::numeric, 1), 5, 50,
+            'Evidencia de carga: ' || repeat('texto ', 40)
+     from nuevas, generate_series(1, 2) k`,
+    [candidatos.map((c) => c.id)],
+  );
 
   const datos = {
     generadoEn: new Date().toISOString(),

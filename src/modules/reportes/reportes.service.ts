@@ -12,7 +12,12 @@ import { aCsv, type Columna } from './dominio/csv.js';
 import { aliasDeCandidato } from './dominio/alias.js';
 import { progresoDe, type ProgresoDeVacante } from './dominio/progreso.js';
 import { RevelacionDeIdentidad } from './entities/revelacion-de-identidad.entity.js';
-import { AutenticacionService, type Identidad } from '../autenticacion/index.js';
+import {
+  AutenticacionService,
+  ConsentimientosService,
+  TipoDeConsentimiento,
+  type Identidad,
+} from '../autenticacion/index.js';
 import { EjerciciosService } from '../ejercicios/index.js';
 import { EntregasService, EstadoEntrega } from '../entregas/index.js';
 import { EvaluacionService } from '../evaluacion/index.js';
@@ -59,7 +64,114 @@ export class ReportesService {
     private readonly vacantes: VacantesService,
     private readonly ejerciciosDelBanco: EjerciciosService,
     private readonly autenticacion: AutenticacionService,
+    private readonly consentimientos: ConsentimientosService,
   ) {}
+
+  /**
+   * Uso de cada ejercicio del banco de la empresa (pantalla A10): en cuantas
+   * vacantes se usa, cuantas evaluaciones tiene y su nota promedio.
+   */
+  async usoDeEjercicios(solicitante: Solicitante): Promise<UsoDeEjercicio[]> {
+    if (solicitante.idEmpresa === null) {
+      throw new BadRequestException(
+        'Esta lectura resume el banco de una empresa, y un administrador de plataforma no pertenece a ninguna.',
+      );
+    }
+    const [uso, estadisticas] = await Promise.all([
+      this.vacantes.usoDeEjercicios(solicitante.idEmpresa),
+      this.evaluacion.estadisticasPorEjercicio(solicitante.idEmpresa),
+    ]);
+    const ids = new Set([...Object.keys(uso), ...Object.keys(estadisticas)]);
+    return [...ids].map((idEjercicio) => ({
+      idEjercicio,
+      vacantes: uso[idEjercicio] ?? 0,
+      evaluaciones: estadisticas[idEjercicio]?.evaluaciones ?? 0,
+      notaPromedio: estadisticas[idEjercicio]?.notaPromedio ?? null,
+    }));
+  }
+
+  /**
+   * «Descargar mis datos" (Ley 1581): todo lo que MeritIA guarda de la persona
+   * que pregunta, en una sola respuesta.
+   *
+   * Vive aqui porque reune datos de varios modulos y reportes es el unico que
+   * puede componerlos. No recibe identificador: la persona sale del token.
+   * Incluye los METADATOS de las entregas (nombre, tamano, huella), no el
+   * archivo: ese ya lo tiene la persona y se baja con su enlace.
+   */
+  async misDatos(solicitante: Solicitante): Promise<DatosPersonales> {
+    const [perfil, consentimientos, entregas, evaluaciones, postulaciones] = await Promise.all([
+      this.autenticacion.perfilDe(solicitante.id),
+      this.consentimientos.historial(solicitante.id),
+      this.entregas.mias(solicitante),
+      this.evaluacion.mias(solicitante),
+      this.vacantes.misPostulaciones(solicitante),
+    ]);
+    this.registrar('datos_personales_exportados', solicitante, {});
+    return {
+      generadoEn: new Date(),
+      perfil,
+      consentimientos: consentimientos.map((c) => ({
+        tipo: c.tipo,
+        concedido: c.concedido,
+        versionDelAviso: c.versionDelAviso,
+        origen: c.origen,
+        registradoEn: c.registradoEn,
+      })),
+      entregas: entregas.map((e) => ({
+        id: e.id,
+        idVacante: e.idVacante,
+        idEjercicio: e.idEjercicio,
+        numeroIntento: e.numeroIntento,
+        estado: e.estado,
+        archivoNombre: e.archivoNombre,
+        archivoBytes: e.archivoBytes,
+        creadaEn: e.creadaEn,
+      })),
+      evaluaciones: evaluaciones.map((e) => ({
+        idEntrega: e.idEntrega,
+        notaFinal: e.notaFinal,
+        creadaEn: e.creadaEn,
+        criterios: e.criterios.map((c) => ({
+          criterio: c.criterio,
+          puntaje: c.puntaje,
+          escalaMaxima: c.escalaMaxima,
+          evidencia: c.evidencia,
+        })),
+      })),
+      postulaciones: postulaciones.map((p) => ({
+        idVacante: p.idVacante,
+        estado: p.estado,
+        motivoDelRechazo: p.motivoDelRechazo,
+        creadaEn: p.creadaEn,
+      })),
+    };
+  }
+
+  /**
+   * El banco de talento: personas que AUTORIZARON mostrar su perfil, con su
+   * mejor nota en cualquier vacante.
+   *
+   * Es la unica lectura que cruza empresas, y por eso es la unica que exige un
+   * consentimiento explicito: sin el permiso `perfil_publico` nadie aparece. Va
+   * con alias, igual que el ranking; el reclutador que quiera a alguien lo invita
+   * a su vacante por el identificador y la identidad sigue el camino de siempre.
+   */
+  async bancoDeTalento(solicitante: Solicitante): Promise<FilaDeTalento[]> {
+    const autorizan = await this.consentimientos.idsQueAutorizan(
+      TipoDeConsentimiento.PerfilPublico,
+    );
+    const resumen = await this.evaluacion.resumenPorCandidato(autorizan);
+    this.registrar('banco_de_talento_consultado', solicitante, { personas: resumen.length });
+    return resumen
+      .map((r) => ({
+        idCandidato: r.idCandidato,
+        alias: aliasDeCandidato('banco-de-talento', r.idCandidato),
+        mejorNota: r.mejorNota,
+        evaluaciones: r.evaluaciones,
+      }))
+      .sort((a, b) => b.mejorNota - a.mejorNota);
+  }
 
   /**
    * El panel de la empresa: las cuatro cifras de la pantalla A02.
@@ -191,6 +303,70 @@ export class ReportesService {
       // Del intento mas reciente al mas viejo: es como se lee un historial.
       intentos: [...suyas].sort((a, b) => b.creadaEn.getTime() - a.creadaEn.getTime()),
       generadoEn: new Date(),
+    };
+  }
+
+  /**
+   * Informe de auditoria de una vacante (pantalla A09).
+   *
+   * Reune lo que se puede AFIRMAR con los datos que la plataforma tiene:
+   * integridad de las evaluaciones, distribucion de las notas y el rastro de
+   * quien reveló que identidad y a quien se contrato.
+   *
+   * LO QUE NO AFIRMA, Y LO DICE: la auditoria de SESGO (tasas por grupo) exige un
+   * dato demografico que no se recoge. El informe no inventa una cifra: dice que
+   * no es medible y por que. Eso es mas util en una auditoria que un numero
+   * que parece una medicion y no lo es.
+   */
+  async auditoriaDeVacante(
+    idVacante: string,
+    solicitante: Solicitante,
+  ): Promise<AuditoriaDeVacante> {
+    const [reporte, integridad, revelaciones, vacante] = await Promise.all([
+      this.deVacante(idVacante, solicitante),
+      this.evaluacion.integridadDeVacante(idVacante),
+      this.revelacionesDe(idVacante, solicitante),
+      this.vacantes.obtenerPara(idVacante, solicitante),
+    ]);
+    const notas = reporte.ranking.map((f) => f.notaFinal);
+    const histograma = Array.from({ length: 10 }, (_, i) => ({
+      desde: i * 10,
+      hasta: i === 9 ? 100 : i * 10 + 9,
+      candidatos: 0,
+    }));
+    for (const n of notas) histograma[Math.min(9, Math.floor(n / 10))].candidatos += 1;
+    this.registrar('auditoria_de_vacante_consultada', solicitante, { idVacante });
+    return {
+      vacante: reporte.vacante,
+      generadoEn: new Date(),
+      integridad: {
+        ...integridad,
+        entregasFallidas: reporte.resumen.entregasFallidas,
+        entregasEnProceso: reporte.resumen.entregasEnProceso,
+      },
+      distribucion: {
+        candidatosEvaluados: reporte.resumen.candidatosEvaluados,
+        notaPromedio: reporte.resumen.notaPromedio,
+        notaMediana: reporte.resumen.notaMediana,
+        notaMinima: reporte.resumen.notaMinima,
+        notaMaxima: reporte.resumen.notaMaxima,
+        histograma,
+      },
+      trazabilidad: {
+        identidadesReveladas: revelaciones.length,
+        revelaciones: revelaciones.map((r) => ({
+          alias: r.alias,
+          idUsuario: r.idUsuario,
+          reveladaEn: r.reveladaEn,
+        })),
+        contratados: (vacante.candidatos ?? []).filter((c) => c.contratadoEn !== null).length,
+      },
+      sesgo: {
+        medible: false,
+        motivo:
+          'La plataforma no recoge datos demograficos, asi que no se calculan tasas por grupo. ' +
+          'Una cifra de sesgo sin ese dato seria inventada. Medirlo exige decidir que dato recoger y con que consentimiento.',
+      },
     };
   }
 
@@ -444,4 +620,86 @@ export interface PanelDeEmpresa {
   /** Ejercicios activos del banco. Los retirados no se cuentan. */
   retosEnElBanco: number;
   generadoEn: Date;
+}
+
+export interface FilaDeTalento {
+  idCandidato: string;
+  alias: string;
+  mejorNota: number;
+  evaluaciones: number;
+}
+
+export interface DatosPersonales {
+  generadoEn: Date;
+  perfil: {
+    id: string;
+    nombreCompleto: string;
+    correo: string;
+    rol: string;
+    idEmpresa: string | null;
+    creadoEn: Date;
+  };
+  consentimientos: {
+    tipo: string;
+    concedido: boolean;
+    versionDelAviso: string;
+    origen: string;
+    registradoEn: Date;
+  }[];
+  entregas: {
+    id: string;
+    idVacante: string;
+    idEjercicio: string;
+    numeroIntento: number;
+    estado: string;
+    archivoNombre: string;
+    archivoBytes: number;
+    creadaEn: Date;
+  }[];
+  evaluaciones: {
+    idEntrega: string;
+    notaFinal: number;
+    creadaEn: Date;
+    criterios: { criterio: string; puntaje: number; escalaMaxima: number; evidencia: string }[];
+  }[];
+  postulaciones: {
+    idVacante: string;
+    estado: string;
+    motivoDelRechazo: string | null;
+    creadaEn: Date;
+  }[];
+}
+
+export interface UsoDeEjercicio {
+  idEjercicio: string;
+  vacantes: number;
+  evaluaciones: number;
+  notaPromedio: number | null;
+}
+
+export interface AuditoriaDeVacante {
+  vacante: CabeceraDeVacante;
+  generadoEn: Date;
+  integridad: {
+    evaluaciones: number;
+    descalificadas: number;
+    riesgoAlto: number;
+    riesgoMedio: number;
+    entregasFallidas: number;
+    entregasEnProceso: number;
+  };
+  distribucion: {
+    candidatosEvaluados: number;
+    notaPromedio: number | null;
+    notaMediana: number | null;
+    notaMinima: number | null;
+    notaMaxima: number | null;
+    histograma: { desde: number; hasta: number; candidatos: number }[];
+  };
+  trazabilidad: {
+    identidadesReveladas: number;
+    revelaciones: { alias: string; idUsuario: string; reveladaEn: Date }[];
+    contratados: number;
+  };
+  sesgo: { medible: false; motivo: string };
 }

@@ -3,9 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Usuario } from './entities/usuario.entity.js';
 import { Rol } from './dominio/rol.js';
+import { randomUUID } from 'node:crypto';
+import { BusDeEventos } from '../../common/events/index.js';
+import { CUENTA_ELIMINADA, type EventoCuentaEliminada } from './dominio/eventos.js';
 import { PasetoService, TokenRechazadoError } from './servicios/paseto.service.js';
 import { ContrasenasService } from './servicios/contrasenas.service.js';
-import type { LoginDto, RegistroDto } from './dto/index.js';
+import { EmpresasService } from './empresas.service.js';
+import type { LoginDto, RegistrarEmpresaDto, RegistroDto } from './dto/index.js';
 import type { SesionCompleta } from './entrega-de-sesion.js';
 
 /** Lo que otro modulo puede saber de un usuario: como se llama y su correo. */
@@ -28,7 +32,26 @@ export class AutenticacionService {
     @InjectRepository(Usuario) private readonly usuarios: Repository<Usuario>,
     private readonly paseto: PasetoService,
     private readonly contrasenas: ContrasenasService,
+    private readonly bus: BusDeEventos,
+    private readonly empresas: EmpresasService,
   ) {}
+
+  /**
+   * El identificador del CANDIDATO con ese correo, o null.
+   *
+   * Existe para que una empresa invite escribiendo un correo en vez de pegar un
+   * UUID. Solo devuelve candidatos: un reclutador o un administrador no se
+   * invitan a un reto, y distinguirlos de «no existe» filtraria quien trabaja
+   * en que empresa. Quien llama debe responder igual en ambos casos.
+   */
+  async idDeCandidatoPorCorreo(correo: string): Promise<string | null> {
+    const correoHash = this.contrasenas.hashDeCorreo(correo);
+    const usuario = await this.usuarios.findOne({
+      where: { correoHash, rol: Rol.Candidato },
+      select: { id: true },
+    });
+    return usuario?.id ?? null;
+  }
 
   async registrar(datos: RegistroDto): Promise<SesionCompleta> {
     const correoHash = this.contrasenas.hashDeCorreo(datos.correo);
@@ -66,6 +89,11 @@ export class AutenticacionService {
 
     this.registrarEvento('usuario_registrado', { idUsuario: usuario.id, rol: usuario.rol });
     return this.construirSesion(usuario);
+  }
+
+  /** A01: crea la empresa con su primer administrador y abre su sesion. */
+  async registrarEmpresa(datos: RegistrarEmpresaDto): Promise<SesionCompleta> {
+    return this.construirSesion(await this.empresas.autorregistrar(datos));
   }
 
   async iniciarSesion(datos: LoginDto): Promise<SesionCompleta> {
@@ -162,6 +190,89 @@ export class AutenticacionService {
   }
 
   /** Invalida todos los tokens del usuario emitidos hasta ahora. */
+  /** Lo que la cuenta guarda de la persona. Es la parte de «descargar mis datos» que vive aqui. */
+  async perfilDe(idUsuario: string): Promise<{
+    id: string;
+    nombreCompleto: string;
+    correo: string;
+    rol: Rol;
+    idEmpresa: string | null;
+    creadoEn: Date;
+  }> {
+    const u = await this.usuarios.findOneOrFail({ where: { id: idUsuario } });
+    return {
+      id: u.id,
+      nombreCompleto: u.nombreCompleto,
+      correo: u.correo,
+      rol: u.rol,
+      idEmpresa: u.idEmpresa,
+      creadoEn: u.creadoEn,
+    };
+  }
+
+  /**
+   * Alta de un moderador: personal de la plataforma, sin empresa. Solo la llama
+   * el endpoint de gestion de moderacion, que ya exige ser administrador.
+   */
+  async crearModerador(datos: {
+    correo: string;
+    contrasena: string;
+    nombreCompleto: string;
+  }): Promise<{ id: string; correo: string; nombreCompleto: string }> {
+    const correoHash = this.contrasenas.hashDeCorreo(datos.correo);
+    if (await this.usuarios.exists({ where: { correoHash } })) {
+      throw new ConflictException('Ya existe una cuenta con ese correo.');
+    }
+    const usuario = await this.usuarios.save(
+      this.usuarios.create({
+        correo: datos.correo,
+        correoHash,
+        contrasenaHash: await this.contrasenas.cifrar(datos.contrasena),
+        nombreCompleto: datos.nombreCompleto,
+        rol: Rol.Moderador,
+        idEmpresa: null,
+        activo: true,
+      }),
+    );
+    this.registrarEvento('moderador_creado', { idUsuario: usuario.id });
+    return { id: usuario.id, correo: datos.correo, nombreCompleto: datos.nombreCompleto };
+  }
+
+  /**
+   * Elimina la cuenta: la ANONIMIZA y la cierra, y avisa para que los demas
+   * modulos borren lo suyo.
+   *
+   * No se borra la fila: las entregas y evaluaciones ya hechas apuntan a ella, y
+   * son parte del expediente de la empresa (el ranking, la auditoria). Lo que se
+   * va es lo que identifica a la persona: nombre, correo, contrasena y la
+   * posibilidad de entrar. Pide la contrasena: es una accion que no se deshace.
+   */
+  async eliminarCuenta(idUsuario: string, contrasena: string): Promise<void> {
+    const usuario = await this.usuarios.findOneOrFail({ where: { id: idUsuario } });
+    if (!(await this.contrasenas.coincide(contrasena, usuario.contrasenaHash))) {
+      throw new UnauthorizedException('La contrasena no es correcta.');
+    }
+    const correoAnonimo = `eliminada-${usuario.id}@cuenta-eliminada.invalid`;
+    await this.usuarios.update(
+      { id: usuario.id },
+      {
+        correo: correoAnonimo,
+        correoHash: this.contrasenas.hashDeCorreo(correoAnonimo),
+        nombreCompleto: 'Cuenta eliminada',
+        // Nadie conoce esta contrasena: la cuenta no vuelve a abrirse.
+        contrasenaHash: await this.contrasenas.cifrar(randomUUID() + randomUUID()),
+        activo: false,
+        tokensValidosDesde: new Date(),
+      },
+    );
+    this.registrarEvento('cuenta_eliminada', { idUsuario });
+    this.bus.publicar<EventoCuentaEliminada>({
+      name: CUENTA_ELIMINADA,
+      occurredAt: new Date(),
+      payload: { idUsuario },
+    });
+  }
+
   async cerrarTodasLasSesiones(idUsuario: string): Promise<void> {
     await this.usuarios.update({ id: idUsuario }, { tokensValidosDesde: new Date() });
     this.registrarEvento('sesiones_cerradas', { idUsuario });

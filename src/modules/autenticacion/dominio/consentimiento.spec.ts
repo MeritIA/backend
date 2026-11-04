@@ -66,14 +66,18 @@ describe('catalogo de consentimientos', () => {
     expect(permisoDelCatalogo(TipoDeConsentimiento.PerfilPublico).porOmision).toBe(false);
   });
 
-  it('solo la calificacion por IA se hace cumplir, y el resto lo declara', () => {
-    // Decidido el 28/10 (D-17): entregas lo exige antes de aceptar nada. Los
-    // otros tres siguen sin vigilar porque las funciones que gobiernan
-    // —proctoring, banco de talento, Mentor IA— no existen. Declararlo es la
-    // diferencia entre un registro honesto y una pantalla que miente.
+  it('se hacen cumplir la calificacion por IA y el perfil publico; el resto lo declara', () => {
+    // La calificacion, desde el 28/10 (D-17): entregas la exige antes de aceptar
+    // nada. El perfil publico, porque el banco de talento solo lista a quien lo
+    // autorizo. La biometria sigue sin vigilar: el proctoring no existe, y
+    // declararlo es la diferencia entre un registro honesto y una pantalla que miente.
     const vigilados = CATALOGO.filter((p) => p.vigilado).map((p) => p.tipo);
 
-    expect(vigilados).toEqual([TipoDeConsentimiento.CalificacionIA]);
+    expect(vigilados).toEqual([
+      TipoDeConsentimiento.Biometria,
+      TipoDeConsentimiento.CalificacionIA,
+      TipoDeConsentimiento.PerfilPublico,
+    ]);
   });
 
   it('el permiso que se hace cumplir dice lo que cuesta revocarlo', () => {

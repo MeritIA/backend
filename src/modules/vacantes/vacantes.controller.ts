@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -143,6 +144,24 @@ export class VacantesController {
     return this.vacantes.editar(id, datos, solicitanteDe(p));
   }
 
+  @Get(':id/ejercicios/:idEjercicio/adjuntos/:idAdjunto')
+  @RequierePermiso('vacantes:leer')
+  @ApiOperation({
+    summary: 'Enlace temporal a un archivo adjunto del enunciado',
+    description: 'Firmado, caduca a los cinco minutos. Mismo acceso que leer el enunciado.',
+  })
+  @ApiNotFoundResponse({
+    description: 'La vacante, el ejercicio o el archivo no existen, o no tiene acceso.',
+  })
+  enlaceDeAdjunto(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('idEjercicio', new ParseUUIDPipe({ version: '4' })) idEjercicio: string,
+    @Param('idAdjunto', new ParseUUIDPipe({ version: '4' })) idAdjunto: string,
+    @Req() p: Peticion,
+  ): Promise<{ url: string; expiraEnSegundos: number }> {
+    return this.vacantes.enlaceDeAdjunto(id, idEjercicio, idAdjunto, solicitanteDe(p));
+  }
+
   @Put(':id/ejercicios')
   @RequierePermiso('vacantes:editar')
   @ApiOperation({
@@ -170,7 +189,7 @@ export class VacantesController {
     @Body() datos: AsignarCandidatoDto,
     @Req() p: Peticion,
   ): Promise<Vacante> {
-    return this.vacantes.asignarCandidato(id, datos.idCandidato, solicitanteDe(p));
+    return this.vacantes.invitar(id, datos, solicitanteDe(p));
   }
 
   @Post(':id/candidatos/:idCandidato/contratar')
@@ -244,6 +263,22 @@ export class VacantesController {
     @Req() p: Peticion,
   ): Promise<Postulacion> {
     return this.vacantes.postular(id, solicitanteDe(p));
+  }
+
+  @Delete(':id/postular')
+  @RequierePermiso('postulaciones:crear')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'El candidato retira su postulacion',
+    description:
+      'Solo mientras siga en revision. Una ya aceptada o rechazada devuelve 400: la decision de la empresa no se borra.',
+  })
+  @ApiNotFoundResponse({ description: 'No se habia postulado a esta vacante.' })
+  async retirarPostulacion(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() p: Peticion,
+  ): Promise<void> {
+    await this.vacantes.retirarPostulacion(id, solicitanteDe(p));
   }
 
   @Get(':id/postulaciones')

@@ -9,6 +9,8 @@ export enum Rol {
   Candidato = 'candidato',
   Reclutador = 'reclutador',
   Administrador = 'administrador',
+  /** Personal de la plataforma que revisa evaluaciones marcadas. No pertenece a ninguna empresa. */
+  Moderador = 'moderador',
 }
 
 export const ROLES = Object.values(Rol);
@@ -54,10 +56,17 @@ export const PERMISOS = {
   'evaluaciones:leerDeLaVacante': [Rol.Reclutador, Rol.Administrador],
   'evaluaciones:reintentar': [Rol.Administrador],
   'evaluaciones:verCola': [Rol.Administrador],
+  'mentor:usar': [Rol.Candidato],
 
   'reportes:verDeLaVacante': [Rol.Reclutador, Rol.Administrador],
   // Revelar la identidad de un candidato quita una proteccion de privacidad:
   // es un permiso propio y no un efecto de poder ver el reporte.
+  'datos:propios': [Rol.Candidato, Rol.Reclutador, Rol.Administrador],
+  'moderacion:revisar': [Rol.Moderador],
+  'moderacion:metricas': [Rol.Moderador, Rol.Administrador],
+  'moderacion:gestionar': [Rol.Administrador],
+  'moderacion:verPropios': [Rol.Candidato],
+  'reportes:verBancoDeTalento': [Rol.Reclutador, Rol.Administrador],
   'reportes:revelarIdentidad': [Rol.Reclutador, Rol.Administrador],
   'reportes:verAuditoria': [Rol.Reclutador, Rol.Administrador],
 

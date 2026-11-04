@@ -14,3 +14,4 @@ export {
   OrigenDelConsentimiento,
   VERSION_DEL_AVISO,
 } from './dominio/consentimiento.js';
+export { CUENTA_ELIMINADA, type EventoCuentaEliminada } from './dominio/eventos.js';

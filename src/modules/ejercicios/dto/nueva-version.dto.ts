@@ -4,9 +4,12 @@ import {
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -40,4 +43,17 @@ export class NuevaVersionDto {
   @IsString()
   @MaxLength(300)
   motivoDelCambio?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 600,
+    description:
+      'Minutos que tiene el candidato desde que inicia el ejercicio. Sin valor: sin limite. ' +
+      'El reloj es del servidor: pasado el plazo no se aceptan entregas.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'duracionMinutos debe ser un entero' })
+  @Min(1, { message: 'duracionMinutos debe ser al menos 1' })
+  @Max(600, { message: 'duracionMinutos no puede superar 600' })
+  duracionMinutos?: number;
 }

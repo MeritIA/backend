@@ -68,6 +68,11 @@ export class VariablesDeEntorno {
   @IsBoolean()
   DATABASE_SSL!: boolean;
 
+  /** Ver `migracionesAutomaticas()`. Omitida: encendida salvo en pruebas. */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  MIGRACIONES_AUTOMATICAS?: string;
+
   @IsString()
   @IsNotEmpty()
   REDIS_HOST!: string;
@@ -142,6 +147,16 @@ export class VariablesDeEntorno {
   @IsNotEmpty()
   S3_ENDPOINT!: string;
 
+  /**
+   * Direccion del almacenamiento tal como la ve el NAVEGADOR, solo para firmar
+   * enlaces de descarga. Dentro de compose el backend habla con
+   * `http://almacenamiento:8333`, que el navegador no resuelve. Sin valor se usa
+   * S3_ENDPOINT.
+   */
+  @IsOptional()
+  @IsString()
+  S3_PUBLIC_ENDPOINT?: string;
+
   @IsString()
   @IsNotEmpty()
   S3_BUCKET!: string;
@@ -204,6 +219,14 @@ export class VariablesDeEntorno {
   @Min(0)
   @Max(100_000)
   ADMISION_MAXIMO_EN_VUELO?: number;
+
+  /** Preguntas al mentor esperando al modelo a la vez. Omitida: 10. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  MENTOR_MAXIMO_EN_VUELO?: number;
 
   /**
    * Canal de alertas de seguridad (paquete 5.5). Sin SMTP_HOST ni

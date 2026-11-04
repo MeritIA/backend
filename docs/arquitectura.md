@@ -401,6 +401,13 @@ evidencias de evaluación viven en almacenamiento de objetos compatible con S3
 el esquema para que case con las entidades, y en producción eso puede borrar
 columnas y datos sin aviso.
 
+**Las migraciones corren solas al arrancar.** La aplicación aplica las pendientes
+antes de aceptar tráfico (`migrationsRun`), así que `docker compose up` y el
+despliegue no necesitan un paso aparte. `MIGRACIONES_AUTOMATICAS=false` lo apaga
+—conviene con varias réplicas, donde dos procesos migrando a la vez compiten—, y
+en pruebas viene apagado. `synchronize` sigue en `false`. Los comandos manuales
+siguen existiendo para revertir, listar o generar:
+
 ```bash
 npm run migration:run       aplica las pendientes
 npm run migration:revert    revierte la última
@@ -714,8 +721,7 @@ aplica.
 
 ```bash
 cp .env.example .env      # rellenar las dos contraseñas y ENCRYPTION_KEY
-docker compose up -d
-npm run migration:run
+docker compose up -d      # el backend migra solo al arrancar
 npm run doctor            # comprueba que todo responde
 ```
 

@@ -143,6 +143,30 @@ export class ConsentimientosService {
     return ultimas.get(tipo)?.concedido ?? permisoDelCatalogo(tipo).porOmision;
   }
 
+  /**
+   * Quienes AUTORIZAN hoy esta finalidad por una decision explicita.
+   *
+   * Solo cuenta a quien decidio: no a quien «vale el valor inicial». Es lo que
+   * hace falta para las finalidades que nacen apagadas (el perfil publico); para
+   * una que nace encendida, quien nunca decidio tambien autoriza y esta lista
+   * se quedaria corta, asi que se rechaza en vez de dar una respuesta enganosa.
+   */
+  async idsQueAutorizan(tipo: TipoDeConsentimiento): Promise<string[]> {
+    if (permisoDelCatalogo(tipo).porOmision) {
+      throw new Error(`"${tipo}" nace concedido: listar a quien decidio no basta`);
+    }
+    const filas = await this.consentimientos
+      .createQueryBuilder('c')
+      .select('c.idUsuario', 'idUsuario')
+      .addSelect('c.concedido', 'concedido')
+      .distinctOn(['c.idUsuario'])
+      .where('c.tipo = :tipo', { tipo })
+      .orderBy('c.idUsuario')
+      .addOrderBy('c.registradoEn', 'DESC')
+      .getRawMany<{ idUsuario: string; concedido: boolean }>();
+    return filas.filter((f) => f.concedido).map((f) => f.idUsuario);
+  }
+
   /** El historial completo, en orden. Lo que B24 llama "descargar mis datos". */
   async historial(idUsuario: string): Promise<Consentimiento[]> {
     return this.consentimientos.find({
