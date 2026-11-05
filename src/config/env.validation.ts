@@ -220,6 +220,18 @@ export class VariablesDeEntorno {
   @Max(100_000)
   ADMISION_MAXIMO_EN_VUELO?: number;
 
+  /**
+   * Saltos de proxy de confianza delante de la aplicacion (nginx, ingress...).
+   * Sin esto `req.ip` es la IP del proxy y el limitador por IP cuenta a todos
+   * los usuarios como uno solo. Omitida: no se confia en ningun proxy.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  TRUST_PROXY?: number;
+
   /** Preguntas al mentor esperando al modelo a la vez. Omitida: 10. */
   @IsOptional()
   @Type(() => Number)

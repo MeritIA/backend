@@ -64,6 +64,7 @@ describe('politica de CORS', () => {
       for (const o of [
         'http://localhost:4200',
         'http://localhost:8100',
+        'https://localhost',
         'capacitor://localhost',
         'ionic://localhost',
       ]) {

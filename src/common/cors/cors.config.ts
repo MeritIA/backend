@@ -31,7 +31,8 @@ import { Logger } from '@nestjs/common';
 const ORIGENES_DE_DESARROLLO = [
   'http://localhost:4200', // servidor de desarrollo de Angular
   'http://localhost:8100', // servidor de Ionic/Capacitor
-  'capacitor://localhost', // APK Android en desarrollo
+  'https://localhost', // WebView de Capacitor >= 6 en Android (androidScheme: 'https')
+  'capacitor://localhost', // APK Android con esquema propio / iOS
   'ionic://localhost', // iOS en desarrollo
 ] as const;
 
