@@ -40,6 +40,8 @@ services:
       #    comando: `compose up postgres` moria pidiendo una clave de IA que no
       #    tiene nada que ver. Es lo que tenia la CI en rojo.
       AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-}
+      MENTOR_SERVICE_URL: ${MENTOR_SERVICE_URL:-}
+      MENTOR_SERVICE_API_KEY: ${MENTOR_SERVICE_API_KEY:-}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
