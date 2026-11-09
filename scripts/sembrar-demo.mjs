@@ -52,6 +52,9 @@ const CANDIDATOS = [
 const VACANTES = [
   {
     titulo: 'Desarrollador backend junior',
+    ubicacion: null,
+    modalidad: 'remoto',
+    tecnologias: ['Node.js', 'TypeScript', 'PostgreSQL', 'Docker'],
     dias: 12,
     plan: 3,
     invitar: 4,
@@ -65,6 +68,9 @@ const VACANTES = [
   },
   {
     titulo: 'Analista de datos de obra',
+    ubicacion: 'Bogota',
+    modalidad: 'hibrido',
+    tecnologias: ['SQL', 'Python', 'Power BI', 'Excel'],
     dias: -5,
     plan: 2,
     invitar: 3,
@@ -78,6 +84,9 @@ const VACANTES = [
   },
   {
     titulo: 'Ingeniero de calidad',
+    ubicacion: 'Bucaramanga',
+    modalidad: 'presencial',
+    tecnologias: ['ISO 9001', 'AutoCAD', 'Ensayos de materiales'],
     dias: null,
     plan: null,
     invitar: 0,
@@ -200,6 +209,12 @@ async function main() {
       cuerpo: {
         titulo: plantilla.titulo,
         descripcion: plantilla.descripcion,
+        // `ubicacion` va solo si existe: una vacante remota no tiene ciudad, y
+        // mandar null haria fallar la validacion del DTO, que la acepta
+        // ausente pero no vacia.
+        ...(plantilla.ubicacion === null ? {} : { ubicacion: plantilla.ubicacion }),
+        modalidad: plantilla.modalidad,
+        tecnologias: plantilla.tecnologias,
         ...(plantilla.dias === null ? {} : { cierreEstimado: enDias(plantilla.dias) }),
         ...(plantilla.plan === null ? {} : { finalistasAEvaluar: plantilla.plan }),
       },
