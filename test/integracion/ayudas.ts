@@ -92,7 +92,7 @@ export async function registrarCandidato(
 export async function crearConRol(
   app: INestApplication<Server>,
   correo: string,
-  rol: 'reclutador' | 'administrador',
+  rol: 'reclutador' | 'administrador' | 'moderador',
   empresa: string | null = 'Empresa de pruebas',
 ): Promise<Sesion> {
   const sesion = await registrarCandidato(app, correo);

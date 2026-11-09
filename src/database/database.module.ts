@@ -1,6 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { opcionesDeConexion } from './data-source.js';
+import { migracionesAutomaticas, opcionesDeConexion } from './data-source.js';
 import { ComprobadorDeBaseDeDatos } from './comprobador-de-base-de-datos.js';
 
 /**
@@ -23,6 +24,13 @@ import { ComprobadorDeBaseDeDatos } from './comprobador-de-base-de-datos.js';
       // obligaria a que este archivo conociera las rutas internas de cada
       // modulo, justo lo que las fronteras prohiben.
       autoLoadEntities: true,
+      // Al arrancar, la aplicacion aplica las migraciones pendientes antes de
+      // aceptar trafico: un contenedor nuevo nunca habla con un esquema viejo.
+      // Se resuelven junto a este archivo y no por el directorio de trabajo,
+      // por la misma razon que las entidades. Solo se buscan los .js: la
+      // aplicacion corre siempre compilada; las pruebas migran por su cuenta.
+      migrationsRun: migracionesAutomaticas(),
+      migrations: [fileURLToPath(new URL('./migrations/*.js', import.meta.url))],
     }),
   ],
   providers: [ComprobadorDeBaseDeDatos],

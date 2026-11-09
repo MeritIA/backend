@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -20,7 +21,14 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AutenticacionService } from './autenticacion.service.js';
-import { LoginDto, RegistroDto, RenovarDto, SesionRespuesta } from './dto/index.js';
+import {
+  EliminarCuentaDto,
+  LoginDto,
+  RegistrarEmpresaDto,
+  RegistroDto,
+  RenovarDto,
+  SesionRespuesta,
+} from './dto/index.js';
 import { Publico, type UsuarioAutenticado } from './guardias/autenticacion.guard.js';
 import { LimiteLogin } from '../../common/rate-limit/index.js';
 import { COOKIE_RENOVACION, TipoCliente } from './dominio/tipo-cliente.js';
@@ -59,6 +67,28 @@ export class AutenticacionController {
     @Res({ passthrough: true }) respuesta: RespuestaConCookies,
   ): Promise<SesionRespuesta> {
     const sesion = await this.autenticacion.registrar(datos);
+    return entregarSesion(sesion, datos.cliente ?? TipoCliente.Web, respuesta);
+  }
+
+  @Publico()
+  @LimiteLogin()
+  @Post('registro-empresa')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Registra una empresa y su primer administrador',
+    description:
+      'Auto-registro de la pantalla A01. Crea la empresa y su administrador en un solo acto y abre la sesion. El NIT es obligatorio y se comprueba por su digito de verificacion; la validacion contra la Camara de Comercio no existe todavia.',
+  })
+  @ApiBody({ type: RegistrarEmpresaDto })
+  @ApiResponse({ status: 201, type: SesionRespuesta })
+  @ApiResponse({ status: 400, description: 'Cuerpo invalido o NIT que no cuadra.' })
+  @ApiResponse({ status: 409, description: 'El NIT, el nombre o el correo ya existen.' })
+  @ApiTooManyRequestsResponse({ description: 'Limite superado. Ver cabecera Retry-After.' })
+  async registrarEmpresa(
+    @Body() datos: RegistrarEmpresaDto,
+    @Res({ passthrough: true }) respuesta: RespuestaConCookies,
+  ): Promise<SesionRespuesta> {
+    const sesion = await this.autenticacion.registrarEmpresa(datos);
     return entregarSesion(sesion, datos.cliente ?? TipoCliente.Web, respuesta);
   }
 
@@ -119,6 +149,26 @@ export class AutenticacionController {
   @ApiUnauthorizedResponse({ description: 'Token de acceso invalido o vencido.' })
   yo(@Req() peticion: Peticion): UsuarioAutenticado {
     return peticion.usuario;
+  }
+
+  @Delete('cuenta')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('paseto')
+  @ApiCookieAuth('meritia_acceso')
+  @ApiOperation({
+    summary: 'Elimina mi cuenta (Ley 1581)',
+    description:
+      'Pide la contrasena. Anonimiza la cuenta, cierra todas las sesiones y borra las fotos de verificacion y las postulaciones. ' +
+      'Las entregas y evaluaciones ya hechas se conservan sin tu nombre, porque son parte del expediente de la empresa. No se deshace.',
+  })
+  @ApiUnauthorizedResponse({ description: 'La contrasena no es correcta.' })
+  async eliminarCuenta(
+    @Body() datos: EliminarCuentaDto,
+    @Req() peticion: Peticion,
+    @Res({ passthrough: true }) respuesta: RespuestaConCookies,
+  ): Promise<void> {
+    await this.autenticacion.eliminarCuenta(peticion.usuario.id, datos.contrasena);
+    limpiarCookies(respuesta);
   }
 
   @Post('cerrar-sesiones')

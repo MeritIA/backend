@@ -172,7 +172,10 @@ async function muestra() {
     bd.activas,
     bd.ociosas,
     bd.maximo,
-    ...CONTENEDORES.flatMap((c) => [docker[c]?.cpu ?? '', (docker[c]?.memoria ?? '').split(' / ')[0]]),
+    ...CONTENEDORES.flatMap((c) => [
+      docker[c]?.cpu ?? '',
+      (docker[c]?.memoria ?? '').split(' / ')[0],
+    ]),
   ];
   appendFileSync(ARCHIVO, `${fila.join(',')}\n`);
 

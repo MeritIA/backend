@@ -14,7 +14,12 @@ import { ContrasenasService } from './servicios/contrasenas.service.js';
 import { esNitValido } from './dominio/nit.js';
 import type { SectorEmpresa } from './dominio/sector.js';
 import type { UsuarioAutenticado } from './guardias/autenticacion.guard.js';
-import type { CrearEmpresaDto, CrearUsuarioDeEmpresaDto } from './dto/index.js';
+import { Rol } from './dominio/rol.js';
+import type {
+  CrearEmpresaDto,
+  CrearUsuarioDeEmpresaDto,
+  RegistrarEmpresaDto,
+} from './dto/index.js';
 
 /**
  * Empresas clientes y sus usuarios.
@@ -79,6 +84,71 @@ export class EmpresasService {
 
     this.registrar('empresa_creada', solicitante, { idEmpresa: empresa.id });
     return empresa;
+  }
+
+  /**
+   * Auto-registro (A01): la empresa y su primer administrador, o ninguno de los
+   * dos. Es publico, asi que no hay solicitante: el unico control es el NIT
+   * por su digito de verificacion y que ni el NIT, ni el nombre ni el correo
+   * esten ya tomados.
+   */
+  async autorregistrar(datos: RegistrarEmpresaDto): Promise<Usuario> {
+    if (!esNitValido(datos.nit)) {
+      throw new BadRequestException(
+        'El NIT no cuadra con su digito de verificacion. Revise el ultimo numero.',
+      );
+    }
+    const correoHash = this.contrasenas.hashDeCorreo(datos.correo);
+    if (await this.usuarios.exists({ where: { correoHash } })) {
+      throw new ConflictException('Ya existe una cuenta con ese correo.');
+    }
+    const contrasenaHash = await this.contrasenas.cifrar(datos.contrasena);
+
+    try {
+      const usuario = await this.empresas.manager.transaction(async (m) => {
+        const empresa = await m.save(
+          m.create(Empresa, {
+            nombre: datos.nombreEmpresa,
+            sector: datos.sector,
+            nit: datos.nit,
+            activa: true,
+          }),
+        );
+        return m.save(
+          m.create(Usuario, {
+            correo: datos.correo,
+            correoHash,
+            contrasenaHash,
+            nombreCompleto: datos.nombreCompleto,
+            rol: Rol.Administrador,
+            idEmpresa: empresa.id,
+            activo: true,
+          }),
+        );
+      });
+      this.logger.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'security',
+          eventType: 'empresa_autorregistrada',
+          userId: usuario.id,
+          metadata: { idEmpresa: usuario.idEmpresa },
+        }),
+      );
+      return usuario;
+    } catch (e) {
+      if (esViolacionDeUnicidad(e)) {
+        const c = (e as { constraint?: string }).constraint ?? '';
+        throw new ConflictException(
+          c.includes('nit')
+            ? 'Ya existe una empresa con ese NIT.'
+            : c.includes('nombre')
+              ? 'Ya existe una empresa con ese nombre.'
+              : 'Ya existe una cuenta con ese correo.',
+        );
+      }
+      throw e;
+    }
   }
 
   /** Un administrador de plataforma las ve todas; el de una empresa, la suya. */

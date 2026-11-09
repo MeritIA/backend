@@ -99,7 +99,7 @@ describe('integracion: consentimientos del titular', () => {
 
       // Prometer control sobre algo que nadie vigila es peor que no prometerlo,
       // asi que la respuesta lo dice permiso por permiso.
-      expect(vigilados).toEqual(['calificacion_ia']);
+      expect(vigilados).toEqual(['biometria', 'calificacion_ia', 'perfil_publico']);
       expect(body.versionDelAviso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 

@@ -57,13 +57,65 @@ export interface RespuestaDeEvaluacion {
   readonly seguridad: SeguridadRecibida;
 }
 
+/** Lo que se le manda al mentor. Coincide con `docs/contrato.md` del servicio. */
+export interface PeticionDeMentor {
+  readonly contexto: {
+    readonly totalEvaluaciones: number;
+    readonly promedio: number;
+    readonly perfil: readonly { nombre: string; porcentaje: number; veces: number }[];
+    readonly recientes: readonly {
+      reto: string;
+      nota: number;
+      flojo?: { criterio: string; porcentaje: number; evidencia: string };
+    }[];
+  };
+  readonly historial: readonly { rol: 'candidato' | 'mentor'; texto: string }[];
+  readonly pregunta: string;
+}
+
+/** De donde salio un consejo del mentor (recuperacion hibrida del rag-service). */
+export interface FuenteDelMentor {
+  readonly n: number;
+  readonly titulo: string;
+  readonly archivo: string;
+  readonly extracto: string;
+}
+
+export interface RespuestaDeMentor {
+  readonly respuesta: string;
+  readonly sugerencias: readonly string[];
+  /** Solo si el servicio del mentor es el rag-service; el ai-service no las envia. */
+  readonly fuentes?: readonly FuenteDelMentor[];
+}
+
 const TIEMPO_POR_OMISION_MS = 120_000;
+const TIEMPO_DEL_MENTOR_MS = 45_000;
+
+/** No se confia en la respuesta: solo pasan los campos esperados, acotados. */
+function acotarFuentes(bruto: unknown): FuenteDelMentor[] {
+  if (!Array.isArray(bruto)) return [];
+  return bruto
+    .slice(0, 6)
+    .filter(
+      (f): f is Record<string, unknown> => typeof f === 'object' && f !== null && !Array.isArray(f),
+    )
+    .map((f) => ({
+      n: typeof f.n === 'number' ? f.n : 0,
+      titulo: typeof f.titulo === 'string' ? f.titulo.slice(0, 200) : '',
+      archivo: typeof f.archivo === 'string' ? f.archivo.slice(0, 120) : '',
+      extracto: typeof f.extracto === 'string' ? f.extracto.slice(0, 320) : '',
+    }))
+    .filter((f) => f.titulo !== '');
+}
 
 @Injectable()
 export class ClienteServicioIa implements OnModuleInit {
   private readonly logger = new Logger('ServicioIA');
   private readonly url: string | undefined;
   private readonly clave: string | undefined;
+  /** Servicio del mentor. Si no se configura aparte, es el mismo de las evaluaciones. */
+  private readonly urlMentor: string | undefined;
+  private readonly claveMentor: string | undefined;
   private readonly tiempoMaximoMs: number;
 
   constructor(
@@ -72,6 +124,8 @@ export class ClienteServicioIa implements OnModuleInit {
   ) {
     this.url = config.get<string>('AI_SERVICE_URL')?.replace(/\/+$/, '');
     this.clave = config.get<string>('AI_SERVICE_API_KEY');
+    this.urlMentor = config.get<string>('MENTOR_SERVICE_URL')?.replace(/\/+$/, '') || this.url;
+    this.claveMentor = config.get<string>('MENTOR_SERVICE_API_KEY') || this.clave;
     this.tiempoMaximoMs =
       Number(config.get<number>('AI_REQUEST_TIMEOUT_MS')) || TIEMPO_POR_OMISION_MS;
   }
@@ -149,6 +203,51 @@ export class ClienteServicioIa implements OnModuleInit {
 
     const cuerpo: unknown = await respuesta.json().catch(() => null);
     return this.validar(cuerpo, peticion);
+  }
+
+  /**
+   * Pregunta al mentor. Interactivo: no pasa por la cola, y si el servicio no
+   * esta se avisa de inmediato en vez de dejar al candidato esperando.
+   */
+  async preguntarAlMentor(peticion: PeticionDeMentor): Promise<RespuestaDeMentor> {
+    if (!this.urlMentor || !this.claveMentor) {
+      throw new ServicioDeIaNoDisponibleError('El servicio de IA no esta configurado.');
+    }
+    let respuesta: Response;
+    try {
+      respuesta = await fetch(`${this.urlMentor}/api/v1/mentor`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.claveMentor}`,
+        },
+        body: JSON.stringify(peticion),
+        signal: AbortSignal.timeout(Math.min(this.tiempoMaximoMs, TIEMPO_DEL_MENTOR_MS)),
+      });
+    } catch {
+      throw new ServicioDeIaNoDisponibleError('No se pudo contactar al servicio de IA.');
+    }
+    if (!respuesta.ok) throw await this.traducirError(respuesta);
+
+    // No se confia en la respuesta: se comprueba la forma y se acota.
+    const c = (await respuesta.json().catch(() => null)) as {
+      respuesta?: unknown;
+      sugerencias?: unknown;
+      fuentes?: unknown;
+    } | null;
+    if (typeof c?.respuesta !== 'string' || c.respuesta.trim() === '') {
+      throw new EvaluacionNoReintentableError('Respuesta invalida del mentor.');
+    }
+    return {
+      respuesta: c.respuesta.trim().slice(0, 1500),
+      sugerencias: Array.isArray(c.sugerencias)
+        ? c.sugerencias
+            .filter((x): x is string => typeof x === 'string')
+            .slice(0, 3)
+            .map((x) => x.slice(0, 80))
+        : [],
+      fuentes: acotarFuentes(c.fuentes),
+    };
   }
 
   /**

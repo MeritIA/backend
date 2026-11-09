@@ -111,8 +111,10 @@ export const CATALOGO: readonly PermisoDelCatalogo[] = [
     // camara". Revocarlo no excluye de ninguna vacante: B16 ofrece la
     // modalidad alterna con verificacion manual.
     porOmision: true,
-    efecto: 'Los retos con camara pasan a la modalidad alterna con verificacion manual (B16).',
-    vigilado: false,
+    efecto:
+      'Dejas de poder verificar tus entregas con foto: pasan a la modalidad alterna, con verificacion manual de la empresa (B16).',
+    // Lo hace cumplir `entregas`: la verificacion con camara exige este permiso.
+    vigilado: true,
   },
   {
     tipo: TipoDeConsentimiento.CalificacionIA,
@@ -139,7 +141,8 @@ export const CATALOGO: readonly PermisoDelCatalogo[] = [
     // El unico que B12 marca "Opcional", y nace apagado en la pantalla.
     porOmision: false,
     efecto: 'El perfil deja de aparecer en el banco de talento.',
-    vigilado: false,
+    // Lo hace cumplir `reportes`: el banco de talento solo lista a quien lo autorizo.
+    vigilado: true,
   },
 ];
 

@@ -19,15 +19,20 @@ import {
 } from '@nestjs/swagger';
 import {
   ReportesService,
+  type AuditoriaDeVacante,
+  type DatosPersonales,
+  type FilaDeTalento,
   type HabilidadDelPerfil,
   type OfertaConAfinidad,
   type PanelDeEmpresa,
+  type UsoDeEjercicio,
 } from './reportes.service.js';
 import {
   IdentidadReveladaRespuesta,
   ReporteDeCandidatoRespuesta,
   ReporteDeVacanteRespuesta,
   PanelDeEmpresaRespuesta,
+  FilaDeTalentoRespuesta,
   RevelacionRegistradaRespuesta,
   aRespuestaDeCandidato,
   aRespuestaDeVacante,
@@ -64,6 +69,44 @@ export class ReportesController {
   constructor(private readonly reportes: ReportesService) {}
 
   // La ruta fija va antes que las de parametro.
+
+  @Get('ejercicios')
+  @RequierePermiso('reportes:verDeLaVacante')
+  @ApiOperation({
+    summary: 'Uso de cada ejercicio del banco de la empresa (pantalla A10)',
+    description:
+      'Por ejercicio: en cuantas vacantes publicadas o cerradas se usa, cuantas evaluaciones tiene y su nota promedio. ' +
+      'La empresa sale del token. Un ejercicio sin uso no aparece: la pantalla lo lee como cero.',
+  })
+  usoDeEjercicios(@Req() p: Peticion): Promise<UsoDeEjercicio[]> {
+    return this.reportes.usoDeEjercicios(solicitanteDe(p));
+  }
+
+  @Get('mis-datos')
+  @RequierePermiso('datos:propios')
+  @ApiOperation({
+    summary: 'Descargar mis datos (Ley 1581)',
+    description:
+      'Todo lo que MeritIA guarda de quien pregunta: perfil, historial de consentimientos, entregas (metadatos), evaluaciones y postulaciones. ' +
+      'La persona sale del token: no hay identificador que cambiar para ver los de otra.',
+  })
+  misDatos(@Req() p: Peticion): Promise<DatosPersonales> {
+    return this.reportes.misDatos(solicitanteDe(p));
+  }
+
+  @Get('banco-de-talento')
+  @RequierePermiso('reportes:verBancoDeTalento')
+  @ApiOperation({
+    summary: 'Personas que autorizaron mostrar su perfil',
+    description:
+      'Solo aparece quien activo el permiso `perfil_publico`; revocarlo lo saca de la lista. ' +
+      'Alias, mejor nota y numero de evaluaciones, ordenado por nota. Para invitarla a una vacante propia se usa ' +
+      '`idCandidato` en `POST /vacantes/{id}/candidatos`.',
+  })
+  @ApiOkResponse({ type: [FilaDeTalentoRespuesta] })
+  bancoDeTalento(@Req() p: Peticion): Promise<FilaDeTalento[]> {
+    return this.reportes.bancoDeTalento(solicitanteDe(p));
+  }
 
   @Get('panel')
   @RequierePermiso('reportes:verDeLaVacante')
@@ -170,6 +213,22 @@ export class ReportesController {
       correo: r.correo,
       reveladaEn: r.reveladaEn,
     };
+  }
+
+  @Get('vacantes/:idVacante/auditoria')
+  @RequierePermiso('reportes:verAuditoria')
+  @ApiOperation({
+    summary: 'Informe de auditoria de una vacante (pantalla A09)',
+    description:
+      'Integridad de las evaluaciones (descalificadas, riesgo, fallidas), distribucion de las notas y rastro de identidades reveladas y contratados. ' +
+      'La seccion de sesgo declara que NO es medible: la plataforma no recoge datos demograficos.',
+  })
+  @ApiNotFoundResponse({ description: 'La vacante no existe, o es de otra empresa.' })
+  auditoria(
+    @Param('idVacante', new ParseUUIDPipe({ version: '4' })) idVacante: string,
+    @Req() p: Peticion,
+  ): Promise<AuditoriaDeVacante> {
+    return this.reportes.auditoriaDeVacante(idVacante, solicitanteDe(p));
   }
 
   @Get('vacantes/:idVacante/revelaciones')

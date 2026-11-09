@@ -47,7 +47,7 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 
 | # | Pantalla | Endpoints que ya existen | Qué falta |
 |---|---|---|---|
-| A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **NIT y sector ya existen** (y el NIT se verifica por su dígito). Sigue faltando que la pantalla sea un **auto-registro**: el endpoint solo deja crear la empresa a un administrador de plataforma. La validación contra Cámara de Comercio es una integración externa ⛔. |
+| A01 | Verificar empresa | ◐ `POST /empresas`, `POST /empresas/{id}/usuarios` | **El auto-registro existe** (`POST /autenticacion/registro-empresa`, 03/11/2026): crea la empresa y a su primer administrador en una transacción y abre la sesión. El NIT es obligatorio y se verifica por su dígito; no se repite NIT, nombre ni correo. La validación contra Cámara de Comercio es una integración externa ⛔. |
 | A02 | Panel de vacantes | ◐ `GET /reportes/panel`, `GET /vacantes`, `GET /ejercicios` | **Los cuatro contadores, el «avance» y el «cierre estimado» ya salen en una sola llamada**: `abiertas[]` trae una fila por vacante publicada con invitados, cuántas personas entregaron, cuántas tienen evaluación y el porcentaje, ordenadas por lo que vence antes. El concepto de **contratado** existe. El banco de talento ⛔. |
 | A03 | Diseñar reto y rúbrica | ◐ `POST /ejercicios`, `POST /ejercicios/{id}/versiones` | La suma 100 de los pesos **ya se valida**. Faltan: catálogo de **plantillas base**, estado **«validada jurídicamente»**, borrador de ejercicio, y el acompañamiento de RRHH ⛔. |
 | A04 | Publicar y pago | ◐ `POST /vacantes`, `PUT /vacantes/{id}/ejercicios`, `POST /vacantes/{id}/publicar` | **«Finalistas a evaluar» ya existe**, como plan y no como tope: no impide invitar ni evaluar a más gente. Sigue faltando **todo el cobro** ⛔ —pasarela, referencia, estado, reintento— y con él la «remuneración por reto», que es dinero y no un dato suelto. Ver contradicción §6.1. La **preselección por perfil de habilidades** que promete **ya existe**: afinidad (D-20) e **invitación automática** con umbral y cupo (D-22), que solo acepta y nunca rechaza. Falta invitar a quien no se postuló, que es el banco de talento ⛔ (§6.2). |
@@ -55,8 +55,8 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 | A06 | Ranking de finalistas | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar`, `POST .../revelar` | El **alias**, el puntaje, el promedio, el CSV y la **habilidad destacada por fila** ya están, y revelar cubre «contactar seleccionados». Falta la columna **estado antifraude** ⛔. Ver §6.7 sobre el alias. |
 | A07 | Ver entrega | ◐ `GET /reportes/vacantes/{id}/candidatos/{idCandidato}`, `GET /entregas/{id}`, `GET /entregas/{id}/descarga` | El desglose por criterio **con evidencia** ya está. La pantalla muestra el **texto del entregable en línea**; el backend entrega un enlace firmado al archivo, sin extraer el texto. Faltan «seleccionar para entrevista» y el estado de **derechos** ⛔. |
 | A08 | Contratar y cerrar | ◐ `POST /vacantes/{id}/candidatos/{idCandidato}/contratar`, `POST .../cerrar`, `POST .../revelar`, `GET /notificaciones/vacantes/{id}` | **Marcar contratado ya existe**, con quién lo registró y cuándo, y **cerrar ya avisa por correo** a quienes participaron (§6.3, D-10): la pantalla puede mostrar el estado de cada aviso y reintentar lo que no salió. Falta el **mensaje directo al seleccionado**, que es decisión de la empresa y no un aviso automático ⛔. |
-| A09 | Informe de auditoría | ◐ `GET /reportes/vacantes/{id}`, `GET .../exportar` | La **auditoría de sesgo** exige un dato que hoy no se recoge (§6.8). Las métricas de integridad vienen de moderación ⛔. «Descargar informe» es PDF; hoy solo hay CSV. |
-| A10 | Banco de retos | ◐ `GET /ejercicios`, `GET /ejercicios/{id}`, `DELETE /ejercicios/{id}` | El banco **ya es reutilizable y versionado**. Faltan: estadísticas de uso por ejercicio, estado de validación, y toda la **suscripción** ⛔. |
+| A09 | Informe de auditoría | ◐ `GET /reportes/vacantes/{id}/auditoria` | **El informe existe**: integridad de las evaluaciones (descalificadas, riesgo, fallidas), distribución de notas, rastro de identidades reveladas y contratados, y descarga en JSON (o PDF por impresión del navegador). **La auditoría de sesgo por grupo no es medible** y el informe lo dice: exige un dato demográfico que no se recoge (§6.8). |
+| A10 | Banco de retos | ◐ `GET /ejercicios`, `GET /ejercicios/{id}`, `DELETE /ejercicios/{id}` | El banco **ya es reutilizable y versionado**, y `GET /reportes/ejercicios` da el **uso por ejercicio** (vacantes, evaluaciones, nota promedio). Faltan: estado de validación, y toda la **suscripción** ⛔. |
 
 ## 4. Flujo B · Candidato
 
@@ -64,30 +64,41 @@ reducida, y **11 de las 12 restantes describen producto que nadie encargó**.
 |---|---|---|---|
 | B11 | Crear cuenta | ◐ `POST /autenticacion/registro` | El registro público ya crea **solo candidatos**, como pide el flujo. Faltan los campos **documento**, **ciudad** y **cuenta para recibir pagos** — el documento es dato sensible y exigiría cifrado en reposo, igual que el correo. |
 | B12 | Consentimientos | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | **El registro existe y es revocable**: cada decisión guarda qué, cuándo, a qué versión del aviso y desde dónde, y revocar añade una fila en vez de borrar la anterior. **El de calificación por IA ya se hace cumplir**: revocarlo bloquea la entrega con un 403 que dice cómo volver atrás (D-17). Los otros tres siguen declarados como `vigilado: false` porque las funciones que gobiernan (proctoring, banco de talento, Mentor IA) no existen ⛔. Ver §6.10. |
-| B13 | Perfil y reto gratuito | ◐ `GET /evaluaciones/mias`, `GET /vacantes/abiertas`, `GET /postulaciones/mias`, `GET /reportes/afinidad`, `GET /reportes/mi-perfil-de-habilidades` | Las evaluaciones propias con desglose ya están, y **descubrir vacantes y postularse también** (D-19): el catálogo abierto existe y la solicitud queda registrada con su desenlace. **El perfil de habilidades y el % de afinidad ya están** (D-20): el perfil sale de las calificaciones por criterio y la afinidad compara lo que la vacante exige contra lo demostrado, con cobertura y desglose. El **vocabulario de habilidades** une además los sinónimos (D-21). Falta el **reto gratuito** sin vacante ⛔. Ver §6.2. |
+| B13 | Perfil y reto gratuito | ◐ `GET /evaluaciones/mias`, `GET /vacantes/abiertas`, `GET /postulaciones/mias`, `GET /reportes/afinidad`, `GET /reportes/mi-perfil-de-habilidades`, `GET /reportes/banco-de-talento` | Las evaluaciones propias con desglose ya están, y **descubrir vacantes y postularse también** (D-19): el catálogo abierto existe (con **modalidad y tecnologías** que define el reclutador) y la solicitud queda registrada con su desenlace; el candidato puede **retirarla** mientras siga en revisión (`DELETE /vacantes/{id}/postular`). El permiso de **perfil público** ya se hace cumplir: `GET /reportes/banco-de-talento` solo lista a quien lo autorizó. **El perfil de habilidades y el % de afinidad ya están** (D-20): el perfil sale de las calificaciones por criterio y la afinidad compara lo que la vacante exige contra lo demostrado, con cobertura y desglose. El **vocabulario de habilidades** une además los sinónimos (D-21). Falta el **reto gratuito** sin vacante ⛔. Ver §6.2. |
 | B14 | Invitación a reto pagado | ◐ `GET /vacantes/{id}`, `GET /vacantes/{id}/ejercicios` | El enunciado y la rúbrica con sus pesos **ya se leen** (§6.5, arreglado al escribir esta matriz). Faltan: la invitación como objeto con **vencimiento de 72 h**, la remuneración y la elección de derechos ⛔. |
-| B15 | Verificación técnica | ✗ ⛔ | Proctoring: cámara, micrófono, conexión. |
-| B16 | Modalidad alterna sin cámara | ✗ ⛔ | Verificación manual equivalente y solicitud de ajuste razonable. |
-| B17 | Reto pagado en curso | ◐ `GET /vacantes/{id}/ejercicios`, `POST /entregas` | La subida ya valida extensión (zip, pdf, md, txt, ipynb, sql, json…), tamaño (25 MiB) y ritmo. Faltan: **sesión cronometrada** del lado del servidor, **dataset adjunto** al enunciado, respuesta escrita en línea y grabación ⛔. Ver §6.4. |
+| B15 | Verificación técnica | ◐ `POST /entregas/{id}/verificacion`, `GET /entregas/{id}/verificacion` | **La verificación con foto de cámara existe** y la hace cumplir el permiso biométrico: la foto va al bucket privado, se sirve con enlace de cinco minutos y se borra a los 90 días. Falta el resto del proctoring ⛔: micrófono, prueba de conexión, sesión cronometrada. |
+| B16 | Modalidad alterna sin cámara | ◐ `POST /entregas/{id}/verificacion` con `alterna` | **La modalidad alterna existe**: sin foto, la entrega queda para verificación manual de la empresa, y revocar el permiso nunca excluye a nadie. Falta la solicitud de ajuste razonable ⛔. |
+| B17 | Reto pagado en curso | ◐ `GET /vacantes/{id}/ejercicios`, `POST /entregas` | La subida ya valida extensión (zip, pdf, md, txt, ipynb, sql, json…), tamaño (25 MiB) y ritmo. La **sesión cronometrada** ya existe, con el reloj del servidor (`duracionMinutos` en la versión del ejercicio, `POST /entregas/sesion`), y la **respuesta escrita en línea** se entrega como `.md`. El **dataset adjunto** al enunciado también existe (`POST /ejercicios/{id}/adjuntos`, descarga con enlace firmado). Falta la grabación ⛔. Ver §6.4. |
 | B18 | Entrega y cesión | ◐ `POST /entregas` | El acto de entregar existe. Faltan la **cesión de derechos con firma** y la liberación del pago ⛔. |
-| B19 | Reto en revisión | ◐ `GET /entregas/{id}` | El **historial de estados con momento y motivo** ya es el esqueleto de esa línea de tiempo. Faltan el caso de moderación, la explicación del candidato y la retención del pago ⛔. |
-| B20 | Caso restaurado | ✗ ⛔ | Resultado favorable de la revisión humana. |
-| B21 | Descalificado | ✗ ⛔ | Decisión confirmada y **derecho a disputa** ante un segundo moderador. |
-| B22 | Resultado y Mentor IA | ◐ `GET /evaluaciones/entrega/{idEntrega}`, `GET /evaluaciones/mias` | El puntaje, el desglose, **la versión de rúbrica con la que se calificó** y el **puesto** —con la vacante cerrada, `GET /evaluaciones/vacante/{id}/mi-puesto`— ya están. Faltan insignias, Mentor IA y tendencia del mercado ⛔. |
+| B19 | Reto en revisión | ◐ `GET /moderacion/mis-casos` | **El candidato ve el estado de su caso** («en revisión») y, decidido, lo que escribió el moderador. Falta la retención del pago ⛔. |
+| B20 | Caso restaurado | ◐ `GET /moderacion/mis-casos` | **Existe**: una decisión `restaurar` devuelve la evaluación al ranking y el candidato lo ve. Falta la liberación del pago ⛔. |
+| B21 | Descalificado | ◐ `GET /moderacion/mis-casos`, `POST /moderacion/casos/{id}/disputar` | **Existen la decisión confirmada con su justificación y el derecho a disputa**, una vez y ante otro moderador. Falta el efecto sobre el pago ⛔. |
+| B22 | Resultado y Mentor IA | ◐ `GET /evaluaciones/entrega/{idEntrega}`, `GET /evaluaciones/mias` | El puntaje, el desglose, **la versión de rúbrica con la que se calificó** y el **puesto** —con la vacante cerrada, `GET /evaluaciones/vacante/{id}/mi-puesto`— ya están. **Mentor IA ya existe** (03/11/2026): `GET /mentor/contexto` y `POST /mentor/preguntar`, con el servicio de IA recibiendo solo un resumen compacto (§6.13). Faltan insignias y tendencia del mercado ⛔. |
 | B23 | Pago no procesado | ✗ ⛔ | Dispersión al candidato y su ruta de excepción. |
-| B24 | Perfil público | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | El panel **«Privacidad de tus datos» ya tiene detrás** sus interruptores, con el historial que la ley exige. Perfil público, insignias y banco de talento ⛔. Siguen sin ruta **«Descargar mis datos» y «Eliminar cuenta»**, que tampoco son ⛔: son obligaciones de la Ley 1581. |
+| B24 | Perfil público | ◐ `GET /autenticacion/consentimientos`, `PUT /autenticacion/consentimientos` | El panel **«Privacidad de tus datos» ya tiene detrás** sus interruptores, con el historial que la ley exige. Perfil público, insignias y banco de talento ⛔. **«Descargar mis datos»** (`GET /reportes/mis-datos`) y **«Eliminar cuenta»** (`DELETE /autenticacion/cuenta`, anonimiza y borra fotos y postulaciones) ya existen: son obligaciones de la Ley 1581. |
 
 ## 5. Flujo C · Moderación
 
-Las tres pantallas están en ✗ ⛔ y comparten un impedimento de raíz: **el rol
-`Moderador` no existe**. `Rol` tiene tres valores —candidato, reclutador,
-administrador— y la matriz de permisos no contempla a nadie que revise casos.
+**Ya existe**, con el rol `Moderador` (personal de la plataforma, sin empresa; lo crea un
+administrador con `POST /moderacion/moderadores`).
 
-| # | Pantalla | Qué exigiría |
+| # | Pantalla | Qué hay |
 |---|---|---|
-| C25 | Bandeja de casos | Cola de casos, origen (antifraude o **muestreo QA aleatorio**), SLA de 24 h, y la regla de que el revisor nunca sea del equipo que diseñó la rúbrica. |
-| C26 | Revisión de caso | Evidencia de sesión, decisión binaria con **justificación obligatoria**, y el efecto de cada decisión sobre pago y ranking. Usa alias (`Candidato ••••55`), **coherente con lo implementado**. |
-| C27 | Métricas del modelo | Tasa de falsos positivos y negativos, cobertura del muestreo y **tasa de marcas por grupo**, incluida la modalidad sin cámara. |
+| C25 | Bandeja de casos | ✅ `GET /moderacion/casos`. Los casos nacen de una marca antifraude (riesgo de inyección `alto`) o de un muestreo aleatorio (`MODERACION_MUESTREO`, 5 % por omisión), vencen a las 24 h y van con alias. El revisor nunca es del equipo de la rúbrica porque los moderadores no pertenecen a ninguna empresa. |
+| C26 | Revisión de caso | ✅ `GET /moderacion/casos/{id}`, `POST /moderacion/casos/{id}/decidir`. Evidencia con banderas, decisión binaria (`confirmar` descalifica y saca la evaluación del ranking; `restaurar` la deja) y justificación obligatoria. Una disputa la decide otro moderador. Falta el efecto sobre el pago ⛔. |
+| C27 | Métricas del modelo | ◐ `GET /moderacion/metricas`: casos por origen y estado, falsos positivos de las marcas antifraude, cobertura del muestreo, tiempo de resolución y casos vencidos. **La tasa de marcas por grupo no existe**: exige datos demográficos que la plataforma no recoge (ver §6.8). |
+
+---
+
+## 5.1 Decisiones de alcance (02/11/2026)
+
+El equipo decidió **no construir** estos bloques por ahora. Quedan ⛔ a propósito, no por olvido:
+
+- **Pagos y cesión de derechos** (A04, A05, B18, B23): fuera de alcance **en el backend**. Publicar una vacante no cobra nada y nadie recibe remuneración real. Desde el 03/11 el front **emula** la remuneración al candidato (`/mis-pagos`): 40.000 a 100.000 por reto según la nota, saldo acumulado y retiro desde 200.000, todo en el navegador y rotulado como simulación (`pagos.servicio.ts` es el punto de cambio).
+- **Sesgo por grupo** (A09, C27): **no se recogen datos demográficos**. El informe de auditoría declara que el sesgo no es medible.
+- **Comparación biométrica y grabación** (B15): no se automatiza. La foto de verificación es evidencia para una persona; la grabación no existe.
+
+Cambiar cualquiera de las tres es una decisión de producto con consecuencias legales (dinero, datos sensibles de la Ley 1581), no un pendiente técnico.
 
 ---
 
@@ -334,6 +345,15 @@ El Modelo de Negocio añade el dato que lo cierra: el mentor arranca **«con dat
 **Cuando el mentor pase a usar «datos propios de contratación»**, como el propio Modelo de Negocio planea, vuelve a ser una finalidad: se añade al catálogo y **B12 tiene que preguntarla**.
 
 **Qué hay que cambiar en el diseño:** el panel de B24 tiene dos errores, no uno. Le sobra «Datos para el Mentor IA» y **le falta «Calificación por IA»**, que sí es una de las tres y cuya revocación el backend ya hace cumplir (D-17).
+
+### 6.13 El Mentor IA vuelve, con un límite de datos — **decidida (03/11)**
+
+El §6.12 retiró el permiso «Datos para el Mentor IA» porque no había nada que consentir. Hoy el mentor existe y **usa las evaluaciones del propio candidato**, a petición suya. Se resolvió así:
+
+- **Permiso.** Exige el de *calificación por IA* (D-17): el mentor no recibe nada que el servicio de IA no hubiera visto ya al calificar. Si el equipo quiere un permiso propio, el sitio es `MentorService.preguntar`. Es una decisión de producto abierta.
+- **Qué recibe la IA.** Un resumen de pocas líneas, calculado con código y no por el modelo: total y promedio, promedio por criterio y las tres evaluaciones más recientes con su criterio más flojo y una evidencia de 160 caracteres. Ni entregas, ni enunciados, ni nombre, ni correo, ni la empresa. `GET /mentor/contexto` devuelve ese resumen exacto y la pantalla lo muestra.
+- **Costo.** Instrucción fija al frente (cacheable), contexto en texto plano, últimos 6 turnos de 400 caracteres, salida con tope de 400 tokens. El servicio no guarda conversaciones; el front las guarda en la pestaña.
+- **Límite.** 10 preguntas por minuto y por usuario (el mismo del resto de la IA).
 
 ## 7. Lo que el backend ya tiene y ninguna pantalla usa
 

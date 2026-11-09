@@ -1,0 +1,43 @@
+# Proxy de MeritIA. Lo usa compose.produccion.yaml.
+#
+# Caddy pide y renueva el certificado de Let's Encrypt solo, sin configurarlo:
+# basta con que el dominio apunte a esta maquina y que los puertos 80 y 443
+# esten abiertos.
+
+{$DOMINIO} {
+	# La API, en el mismo origen que el frontend. Es lo que permite que la
+	# cookie de sesion --HttpOnly y SameSite=strict-- viaje: desde otro dominio
+	# el navegador no la enviaria nunca.
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# La documentacion del contrato, util para la sustentacion.
+	handle /docs* {
+		reverse_proxy backend:3000
+	}
+
+	# Todo lo demas es el frontend: una aplicacion de una sola pagina, asi que
+	# cualquier ruta que no sea un archivo cae en index.html y la resuelve el
+	# router de Angular. Sin esto, recargar en /panel da un 404.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	encode gzip zstd
+
+	# Cabeceras que el navegador respeta y no cuestan nada.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

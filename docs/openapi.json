@@ -139,6 +139,48 @@
         ]
       }
     },
+    "/autenticacion/registro-empresa": {
+      "post": {
+        "description": "Auto-registro de la pantalla A01. Crea la empresa y su administrador en un solo acto y abre la sesion. El NIT es obligatorio y se comprueba por su digito de verificacion; la validacion contra la Camara de Comercio no existe todavia.",
+        "operationId": "AutenticacionController_registrarEmpresa",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo invalido o NIT que no cuadra."
+          },
+          "409": {
+            "description": "El NIT, el nombre o el correo ya existen."
+          },
+          "429": {
+            "description": "Limite superado. Ver cabecera Retry-After."
+          }
+        },
+        "summary": "Registra una empresa y su primer administrador",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
     "/autenticacion/login": {
       "post": {
         "description": "Limitado a diez intentos por minuto. La respuesta de error no distingue entre correo inexistente y contrasena incorrecta, para no permitir averiguar que correos estan registrados.\n\nEn **web** el token va en cookie HttpOnly y no es legible desde JavaScript; en **apk** viene en el cuerpo.",
@@ -233,6 +275,40 @@
           }
         ],
         "summary": "Devuelve la identidad de la sesion actual",
+        "tags": [
+          "autenticacion"
+        ]
+      }
+    },
+    "/autenticacion/cuenta": {
+      "delete": {
+        "description": "Pide la contrasena. Anonimiza la cuenta, cierra todas las sesiones y borra las fotos de verificacion y las postulaciones. Las entregas y evaluaciones ya hechas se conservan sin tu nombre, porque son parte del expediente de la empresa. No se deshace.",
+        "operationId": "AutenticacionController_eliminarCuenta",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EliminarCuentaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "La contrasena no es correcta."
+          }
+        },
+        "security": [
+          {
+            "meritia_acceso": []
+          },
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Elimina mi cuenta (Ley 1581)",
         "tags": [
           "autenticacion"
         ]
@@ -667,6 +743,52 @@
         ]
       }
     },
+    "/vacantes/{id}/ejercicios/{idEjercicio}/adjuntos/{idAdjunto}": {
+      "get": {
+        "description": "Firmado, caduca a los cinco minutos. Mismo acceso que leer el enunciado.",
+        "operationId": "VacantesController_enlaceDeAdjunto",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idEjercicio",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idAdjunto",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante, el ejercicio o el archivo no existen, o no tiene acceso."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enlace temporal a un archivo adjunto del enunciado",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
     "/vacantes/{id}/candidatos": {
       "post": {
         "description": "Es lo que le da acceso a ver la vacante y a resolver sus ejercicios.",
@@ -873,6 +995,34 @@
           }
         ],
         "summary": "Un candidato se postula a una vacante publicada",
+        "tags": [
+          "vacantes"
+        ]
+      },
+      "delete": {
+        "description": "Solo mientras siga en revision. Una ya aceptada o rechazada devuelve 400: la decision de la empresa no se borra.",
+        "operationId": "VacantesController_retirarPostulacion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No se habia postulado a esta vacante."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El candidato retira su postulacion",
         "tags": [
           "vacantes"
         ]
@@ -1163,6 +1313,55 @@
         ]
       }
     },
+    "/ejercicios/{id}/adjuntos": {
+      "post": {
+        "description": "Cuelga de la version vigente. Hasta cinco por version, 25 MiB cada uno; extensiones de una entrega mas `.csv`. El candidato invitado lo descarga con un enlace firmado de cinco minutos.",
+        "operationId": "EjerciciosController_adjuntar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "archivo"
+                ],
+                "properties": {
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "El ejercicio no existe o no es de su empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Adjunta un archivo al enunciado (dataset, esqueleto)",
+        "tags": [
+          "ejercicios"
+        ]
+      }
+    },
     "/habilidades": {
       "get": {
         "description": "Lo lee cualquiera autenticado: un reclutador necesita ver que nombres ya existen antes de escribir los criterios de su rubrica, y escribirlos con el nombre del catalogo es lo que hace que la afinidad acierte.",
@@ -1386,6 +1585,75 @@
         ]
       }
     },
+    "/entregas/sesion": {
+      "get": {
+        "description": "Devuelve la duracion del ejercicio y, si ya inicio, cuando vence y cuantos segundos le quedan segun el reloj del servidor.",
+        "operationId": "EntregasController_estadoDeSesion",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "idEjercicio",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Estado de mi sesion cronometrada en un ejercicio",
+        "tags": [
+          "entregas"
+        ]
+      },
+      "post": {
+        "description": "Solo para ejercicios con limite de tiempo. Iniciar de nuevo devuelve la misma sesion: no da otra ventana.",
+        "operationId": "EntregasController_iniciarSesion",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SesionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Inicia la sesion cronometrada de un ejercicio",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
     "/entregas/mias": {
       "get": {
         "operationId": "EntregasController_mias",
@@ -1500,6 +1768,91 @@
           }
         ],
         "summary": "Enlace temporal para descargar el archivo",
+        "tags": [
+          "entregas"
+        ]
+      }
+    },
+    "/entregas/{id}/verificacion": {
+      "post": {
+        "description": "`camara` exige el permiso de verificacion biometrica y guarda la foto 90 dias; `alterna` no lleva foto y deja la entrega para verificacion manual de la empresa. Una por entrega.",
+        "operationId": "EntregasController_verificar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "modalidad"
+                ],
+                "properties": {
+                  "modalidad": {
+                    "type": "string",
+                    "enum": [
+                      "camara",
+                      "alterna"
+                    ]
+                  },
+                  "foto": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG o PNG, hasta 2 MiB. Solo con `camara`."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "La entrega ya tiene su verificacion."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Verifica la entrega propia: foto de camara o modalidad alterna",
+        "tags": [
+          "entregas"
+        ]
+      },
+      "get": {
+        "description": "Lo ve el candidato dueño y la empresa de la vacante. `modalidad` es null si aun no se verifico. El enlace a la foto caduca a los cinco minutos.",
+        "operationId": "EntregasController_verificacion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Estado de la verificacion de una entrega",
         "tags": [
           "entregas"
         ]
@@ -1730,6 +2083,150 @@
         ]
       }
     },
+    "/mentor/contexto": {
+      "get": {
+        "description": "El resumen exacto que se le entrega al mentor: totales, promedio por criterio y las tres evaluaciones mas recientes. Nada mas sale hacia la IA.",
+        "operationId": "MentorController_contexto",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextoDelMentorRespuesta"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Lo que el mentor sabe de ti",
+        "tags": [
+          "mentor"
+        ]
+      }
+    },
+    "/mentor/preguntar": {
+      "post": {
+        "operationId": "MentorController_preguntar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreguntaAlMentorDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDelMentor"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Revocaste el permiso de calificacion por IA."
+          },
+          "503": {
+            "description": "El servicio de IA no esta disponible."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Hace una pregunta al mentor sobre tus evaluaciones",
+        "tags": [
+          "mentor"
+        ]
+      }
+    },
+    "/reportes/ejercicios": {
+      "get": {
+        "description": "Por ejercicio: en cuantas vacantes publicadas o cerradas se usa, cuantas evaluaciones tiene y su nota promedio. La empresa sale del token. Un ejercicio sin uso no aparece: la pantalla lo lee como cero.",
+        "operationId": "ReportesController_usoDeEjercicios",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Uso de cada ejercicio del banco de la empresa (pantalla A10)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/mis-datos": {
+      "get": {
+        "description": "Todo lo que MeritIA guarda de quien pregunta: perfil, historial de consentimientos, entregas (metadatos), evaluaciones y postulaciones. La persona sale del token: no hay identificador que cambiar para ver los de otra.",
+        "operationId": "ReportesController_misDatos",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Descargar mis datos (Ley 1581)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/banco-de-talento": {
+      "get": {
+        "description": "Solo aparece quien activo el permiso `perfil_publico`; revocarlo lo saca de la lista. Alias, mejor nota y numero de evaluaciones, ordenado por nota. Para invitarla a una vacante propia se usa `idCandidato` en `POST /vacantes/{id}/candidatos`.",
+        "operationId": "ReportesController_bancoDeTalento",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FilaDeTalentoRespuesta"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Personas que autorizaron mostrar su perfil",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
     "/reportes/panel": {
       "get": {
         "description": "Vacantes por estado, finalistas en evaluacion, contratados y retos en el banco, en una sola llamada. La empresa sale del token y no de la URL: no hay identificador que cambiar para ver el panel de otra. Un administrador de plataforma no pertenece a ninguna empresa y recibe 400.",
@@ -1936,6 +2433,36 @@
         ]
       }
     },
+    "/reportes/vacantes/{idVacante}/auditoria": {
+      "get": {
+        "description": "Integridad de las evaluaciones (descalificadas, riesgo, fallidas), distribucion de las notas y rastro de identidades reveladas y contratados. La seccion de sesgo declara que NO es medible: la plataforma no recoge datos demograficos.",
+        "operationId": "ReportesController_auditoria",
+        "parameters": [
+          {
+            "name": "idVacante",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "La vacante no existe, o es de otra empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Informe de auditoria de una vacante (pantalla A09)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
     "/reportes/vacantes/{idVacante}/revelaciones": {
       "get": {
         "description": "El rastro que deja cada revelacion. Un registro de auditoria que nadie puede consultar no es una auditoria.",
@@ -2094,6 +2621,210 @@
           "notificaciones"
         ]
       }
+    },
+    "/moderacion/mis-casos": {
+      "get": {
+        "description": "Estado de cada caso y, una vez decidido, lo que escribio el moderador. `puedeDisputar` indica si queda la disputa ante otro moderador.",
+        "operationId": "ModeracionController_misCasos",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Mis evaluaciones en revision o ya revisadas (B19 a B21)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/casos/{id}/disputar": {
+      "post": {
+        "description": "Una sola vez por caso. La decide otro moderador, distinto del que confirmo.",
+        "operationId": "ModeracionController_disputar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputarCasoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "El caso no existe o no es suyo."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Disputa una descalificacion confirmada (B21)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/casos": {
+      "get": {
+        "description": "Por defecto los abiertos, ordenados por lo que vence antes. Con alias, sin identidad.",
+        "operationId": "ModeracionController_bandeja",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Bandeja de casos (C25)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/casos/{id}": {
+      "get": {
+        "description": "Evidencia de la evaluacion y sus banderas.",
+        "operationId": "ModeracionController_detalle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Revision de un caso (C26)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/casos/{id}/decidir": {
+      "post": {
+        "description": "`confirmar` descalifica la evaluacion; `restaurar` la deja. La justificacion es obligatoria y la lee el candidato.",
+        "operationId": "ModeracionController_decidir",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecidirCasoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Decide un caso (C26)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/metricas": {
+      "get": {
+        "description": "Casos por origen y estado, tasa de falsos positivos de las marcas antifraude, cobertura del muestreo, tiempo de resolucion y casos vencidos. No incluye tasas por grupo: no se recogen datos demograficos.",
+        "operationId": "ModeracionController_metricas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Metricas del modelo y de la moderacion (C27)",
+        "tags": [
+          "moderacion"
+        ]
+      }
+    },
+    "/moderacion/moderadores": {
+      "post": {
+        "description": "Personal de la plataforma, sin empresa. Solo un administrador.",
+        "operationId": "ModeracionController_crearModerador",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearModeradorDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Crea un moderador",
+        "tags": [
+          "moderacion"
+        ]
+      }
     }
   },
   "info": {
@@ -2207,7 +2938,8 @@
             "enum": [
               "candidato",
               "reclutador",
-              "administrador"
+              "administrador",
+              "moderador"
             ]
           },
           "idUsuario": {
@@ -2219,6 +2951,73 @@
           "expiraEn",
           "rol",
           "idUsuario"
+        ]
+      },
+      "RegistrarEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "nombreEmpresa": {
+            "type": "string",
+            "example": "Acme S.A.S.",
+            "minLength": 2,
+            "maxLength": 160
+          },
+          "sector": {
+            "type": "string",
+            "enum": [
+              "financiero",
+              "tecnologia",
+              "salud",
+              "educacion",
+              "industria",
+              "comercio",
+              "servicios",
+              "construccion",
+              "agro",
+              "transporte",
+              "energia",
+              "telecomunicaciones",
+              "gobierno",
+              "otro"
+            ],
+            "example": "financiero"
+          },
+          "nit": {
+            "type": "string",
+            "example": "890903938-8",
+            "description": "NIT con digito de verificacion. Unico."
+          },
+          "correo": {
+            "type": "string",
+            "example": "ana@acme.com",
+            "maxLength": 254
+          },
+          "contrasena": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          },
+          "nombreCompleto": {
+            "type": "string",
+            "example": "Ana Maria Torres",
+            "maxLength": 120
+          },
+          "cliente": {
+            "type": "string",
+            "enum": [
+              "web",
+              "apk"
+            ],
+            "default": "web"
+          }
+        },
+        "required": [
+          "nombreEmpresa",
+          "sector",
+          "nit",
+          "correo",
+          "contrasena",
+          "nombreCompleto"
         ]
       },
       "LoginDto": {
@@ -2264,6 +3063,18 @@
             "default": "web"
           }
         }
+      },
+      "EliminarCuentaDto": {
+        "type": "object",
+        "properties": {
+          "contrasena": {
+            "type": "string",
+            "description": "La contrasena actual: eliminar la cuenta no se deshace."
+          }
+        },
+        "required": [
+          "contrasena"
+        ]
       },
       "CrearEmpresaDto": {
         "type": "object",
@@ -2409,7 +3220,8 @@
             "enum": [
               "candidato",
               "reclutador",
-              "administrador"
+              "administrador",
+              "moderador"
             ]
           },
           "idEmpresa": {
@@ -2573,6 +3385,23 @@
             "example": "Bogota (hibrido)",
             "maxLength": 120
           },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "remoto",
+              "hibrido",
+              "presencial"
+            ],
+            "description": "Remoto, hibrido o presencial."
+          },
+          "tecnologias": {
+            "maxItems": 10,
+            "description": "Tecnologias de la vacante. En la edicion reemplaza la lista completa.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "intentosPermitidos": {
             "type": "number",
             "minimum": 1,
@@ -2613,6 +3442,24 @@
             "type": "object",
             "maxLength": 120,
             "nullable": true
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "remoto",
+              "hibrido",
+              "presencial"
+            ],
+            "nullable": true,
+            "description": "Remoto, hibrido o presencial."
+          },
+          "tecnologias": {
+            "maxItems": 10,
+            "description": "Tecnologias de la vacante. En la edicion reemplaza la lista completa.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "intentosPermitidos": {
             "type": "number",
@@ -2658,12 +3505,14 @@
           "idCandidato": {
             "type": "string",
             "format": "uuid",
-            "description": "Candidato al que se invita a esta vacante."
+            "description": "Candidato al que se invita."
+          },
+          "correo": {
+            "type": "string",
+            "format": "email",
+            "description": "Correo con el que el candidato se registro. Si no hay un candidato con ese correo se responde 404, sea porque no existe o porque es otro tipo de cuenta."
           }
-        },
-        "required": [
-          "idCandidato"
-        ]
+        }
       },
       "InvitacionAutomaticaDto": {
         "type": "object",
@@ -2761,6 +3610,12 @@
             "items": {
               "$ref": "#/components/schemas/CriterioDto"
             }
+          },
+          "duracionMinutos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 600,
+            "description": "Minutos que tiene el candidato desde que inicia el ejercicio. Sin valor: sin limite. El reloj es del servidor: pasado el plazo no se aceptan entregas."
           }
         },
         "required": [
@@ -2786,6 +3641,12 @@
             "type": "string",
             "example": "Se aclara el caso limite de la lista vacia, que confundia a los candidatos.",
             "maxLength": 300
+          },
+          "duracionMinutos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 600,
+            "description": "Minutos que tiene el candidato desde que inicia el ejercicio. Sin valor: sin limite. El reloj es del servidor: pasado el plazo no se aceptan entregas."
           }
         },
         "required": [
@@ -2837,6 +3698,23 @@
         },
         "required": [
           "termino"
+        ]
+      },
+      "SesionDto": {
+        "type": "object",
+        "properties": {
+          "idVacante": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idEjercicio": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "idVacante",
+          "idEjercicio"
         ]
       },
       "MetricasDeColaRespuesta": {
@@ -3105,6 +3983,208 @@
         "required": [
           "idEntrega",
           "estado"
+        ]
+      },
+      "CriterioDelPerfilRespuesta": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "porcentaje": {
+            "type": "number"
+          },
+          "veces": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "nombre",
+          "porcentaje",
+          "veces"
+        ]
+      },
+      "FlojoRespuesta": {
+        "type": "object",
+        "properties": {
+          "criterio": {
+            "type": "string"
+          },
+          "porcentaje": {
+            "type": "number"
+          },
+          "evidencia": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "criterio",
+          "porcentaje",
+          "evidencia"
+        ]
+      },
+      "RecienteRespuesta": {
+        "type": "object",
+        "properties": {
+          "reto": {
+            "type": "string"
+          },
+          "nota": {
+            "type": "number"
+          },
+          "flojo": {
+            "$ref": "#/components/schemas/FlojoRespuesta"
+          }
+        },
+        "required": [
+          "reto",
+          "nota"
+        ]
+      },
+      "ContextoDelMentorRespuesta": {
+        "type": "object",
+        "properties": {
+          "totalEvaluaciones": {
+            "type": "number"
+          },
+          "promedio": {
+            "type": "number"
+          },
+          "perfil": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterioDelPerfilRespuesta"
+            }
+          },
+          "recientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecienteRespuesta"
+            }
+          }
+        },
+        "required": [
+          "totalEvaluaciones",
+          "promedio",
+          "perfil",
+          "recientes"
+        ]
+      },
+      "TurnoDto": {
+        "type": "object",
+        "properties": {
+          "rol": {
+            "type": "string",
+            "enum": [
+              "candidato",
+              "mentor"
+            ]
+          },
+          "texto": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "rol",
+          "texto"
+        ]
+      },
+      "PreguntaAlMentorDto": {
+        "type": "object",
+        "properties": {
+          "pregunta": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "historial": {
+            "description": "La conversacion hasta ahora; se usan los ultimos 6 turnos.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TurnoDto"
+            }
+          }
+        },
+        "required": [
+          "pregunta",
+          "historial"
+        ]
+      },
+      "FuenteDelMentorRespuesta": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "number"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "archivo": {
+            "type": "string"
+          },
+          "extracto": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "titulo",
+          "archivo",
+          "extracto"
+        ]
+      },
+      "RespuestaDelMentor": {
+        "type": "object",
+        "properties": {
+          "respuesta": {
+            "type": "string"
+          },
+          "sugerencias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fuentes": {
+            "description": "Material de estudio en que se apoya la respuesta. Vacio si no hubo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FuenteDelMentorRespuesta"
+            }
+          }
+        },
+        "required": [
+          "respuesta",
+          "sugerencias",
+          "fuentes"
+        ]
+      },
+      "FilaDeTalentoRespuesta": {
+        "type": "object",
+        "properties": {
+          "idCandidato": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "alias": {
+            "type": "string",
+            "example": "Candidato ••••3f8a2c"
+          },
+          "mejorNota": {
+            "type": "number",
+            "example": 87.5,
+            "description": "La mejor nota final (0-100) en cualquier vacante."
+          },
+          "evaluaciones": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "idCandidato",
+          "alias",
+          "mejorNota",
+          "evaluaciones"
         ]
       },
       "VacantesDelPanelRespuesta": {
@@ -3757,6 +4837,67 @@
           "sinCanal",
           "fallidos",
           "yaAvisados"
+        ]
+      },
+      "DisputarCasoDto": {
+        "type": "object",
+        "properties": {
+          "explicacion": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "explicacion"
+        ]
+      },
+      "DecidirCasoDto": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirmar",
+              "restaurar"
+            ],
+            "description": "`confirmar` descalifica la evaluacion (sale del ranking). `restaurar` la deja, o la devuelve si estaba descalificada."
+          },
+          "justificacion": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1000,
+            "description": "Obligatoria: el candidato la lee cuando se confirma su descalificacion."
+          }
+        },
+        "required": [
+          "decision",
+          "justificacion"
+        ]
+      },
+      "CrearModeradorDto": {
+        "type": "object",
+        "properties": {
+          "correo": {
+            "type": "string",
+            "example": "moderadora@meritia.co",
+            "maxLength": 254
+          },
+          "contrasena": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          },
+          "nombreCompleto": {
+            "type": "string",
+            "example": "Marta Lucia Gomez",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "correo",
+          "contrasena",
+          "nombreCompleto"
         ]
       }
     }

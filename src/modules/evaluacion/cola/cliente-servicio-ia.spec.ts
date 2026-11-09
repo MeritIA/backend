@@ -191,3 +191,52 @@ describe('cliente del servicio de IA', () => {
     });
   });
 });
+
+describe('cliente del servicio de IA: mentor', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const PREGUNTA = {
+    contexto: { totalEvaluaciones: 1, promedio: 50, perfil: [], recientes: [] },
+    historial: [],
+    pregunta: 'como mejoro',
+  };
+
+  it('usa el servicio de evaluacion si no hay uno propio para el mentor', async () => {
+    const fetchFalso = fingirRespuesta({ respuesta: 'ok', sugerencias: [] });
+    await new ClienteServicioIa(config(), { registrar: vi.fn() } as never).preguntarAlMentor(
+      PREGUNTA,
+    );
+    const [url, opciones] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('http://servicio-ia:3000/api/v1/mentor');
+    expect((opciones.headers as Record<string, string>).Authorization).toBe(`Bearer ${CLAVE}`);
+  });
+
+  it('usa MENTOR_SERVICE_URL y su clave cuando se configuran, y acota las fuentes', async () => {
+    const fetchFalso = fingirRespuesta({
+      respuesta: 'ok [1]',
+      sugerencias: [],
+      fuentes: [
+        { n: 1, titulo: 'Guia', archivo: 'g.md', extracto: 'x'.repeat(900), puntaje: 0.03 },
+        { titulo: '' },
+        'basura',
+      ],
+    });
+    const c = new ClienteServicioIa(
+      config({ MENTOR_SERVICE_URL: 'http://rag:3200/', MENTOR_SERVICE_API_KEY: 'otra' }),
+      { registrar: vi.fn() } as never,
+    );
+    const r = await c.preguntarAlMentor(PREGUNTA);
+    const [url, opciones] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('http://rag:3200/api/v1/mentor');
+    expect((opciones.headers as Record<string, string>).Authorization).toBe('Bearer otra');
+    expect(r.fuentes).toHaveLength(1);
+    expect(r.fuentes?.[0]).toEqual({
+      n: 1,
+      titulo: 'Guia',
+      archivo: 'g.md',
+      extracto: 'x'.repeat(320),
+    });
+  });
+});

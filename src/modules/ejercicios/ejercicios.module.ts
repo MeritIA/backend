@@ -5,6 +5,7 @@ import { EjercicioVersion } from './entities/ejercicio-version.entity.js';
 import { CriterioRubrica } from './entities/criterio-rubrica.entity.js';
 import { Habilidad } from './entities/habilidad.entity.js';
 import { AliasDeHabilidad } from './entities/alias-de-habilidad.entity.js';
+import { Adjunto } from './entities/adjunto.entity.js';
 import { EjerciciosService } from './ejercicios.service.js';
 import { EjerciciosController } from './ejercicios.controller.js';
 import { HabilidadesService } from './habilidades.service.js';
@@ -18,6 +19,7 @@ import { AutenticacionModule } from '../autenticacion/index.js';
       Ejercicio,
       EjercicioVersion,
       CriterioRubrica,
+      Adjunto,
       Habilidad,
       AliasDeHabilidad,
     ]),

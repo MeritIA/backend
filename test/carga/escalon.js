@@ -54,7 +54,8 @@ export function handleSummary(datos) {
 
   return {
     [`resultados/escalon-${String(RPS).padStart(3, '0')}.json`]: JSON.stringify(resumen, null, 2),
-    stdout: `  ${RPS} pet/s objetivo -> ${Math.round(resumen.peticiones_por_segundo)} pet/s reales, ` +
+    stdout:
+      `  ${RPS} pet/s objetivo -> ${Math.round(resumen.peticiones_por_segundo)} pet/s reales, ` +
       `p95 ${Math.round(resumen.global_p95)} ms, descartadas ${resumen.iteraciones_descartadas}
 `,
   };

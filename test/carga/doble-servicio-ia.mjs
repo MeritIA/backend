@@ -27,6 +27,7 @@
  *   PUERTO_DOBLE_IA     puerto de escucha (13100)
  *   DOBLE_IA_LATENCIA_MS   latencia base (1500)
  *   DOBLE_IA_JITTER_MS     variacion aleatoria sumada a la base (500)
+ *   DOBLE_IA_LATENCIA_MENTOR_MS  latencia del mentor, que es interactivo y mas corto (800)
  *   DOBLE_IA_FALLOS_PCT    porcentaje de respuestas 503, para el escenario de
  *                          degradacion del proveedor (0)
  *   CLAVE_DE_ACCESO        la que exige en Authorization; si falta, no exige
@@ -36,6 +37,7 @@ import { createServer } from 'node:http';
 const PUERTO = Number(process.env.PUERTO_DOBLE_IA ?? 13100);
 const LATENCIA_MS = Number(process.env.DOBLE_IA_LATENCIA_MS ?? 1500);
 const JITTER_MS = Number(process.env.DOBLE_IA_JITTER_MS ?? 500);
+const LATENCIA_MENTOR_MS = Number(process.env.DOBLE_IA_LATENCIA_MENTOR_MS ?? 800);
 const FALLOS_PCT = Number(process.env.DOBLE_IA_FALLOS_PCT ?? 0);
 const CLAVE = process.env.CLAVE_DE_ACCESO ?? '';
 
@@ -98,7 +100,8 @@ const servidor = createServer((req, res) => {
     return responder(res, 200, { estado: 'vivo', atendidas, fallidas });
   }
 
-  if (req.method !== 'POST' || !req.url.startsWith('/api/v1/evaluaciones')) {
+  const esMentor = req.method === 'POST' && req.url.startsWith('/api/v1/mentor');
+  if (req.method !== 'POST' || !(esMentor || req.url.startsWith('/api/v1/evaluaciones'))) {
     return responder(res, 404, { mensaje: 'No existe' });
   }
 
@@ -117,7 +120,7 @@ const servidor = createServer((req, res) => {
   });
 
   req.on('end', async () => {
-    await dormir(LATENCIA_MS + Math.random() * JITTER_MS);
+    await dormir(esMentor ? LATENCIA_MENTOR_MS : LATENCIA_MS + Math.random() * JITTER_MS);
 
     if (FALLOS_PCT > 0 && Math.random() * 100 < FALLOS_PCT) {
       fallidas += 1;
@@ -128,6 +131,15 @@ const servidor = createServer((req, res) => {
     try {
       const peticion = JSON.parse(cuerpo);
       atendidas += 1;
+      if (esMentor) {
+        // Habla el contrato del mentor: respuesta corta y hasta tres sugerencias.
+        return responder(res, 200, {
+          respuesta: `Doble de carga: ${peticion.contexto?.totalEvaluaciones ?? 0} evaluaciones leidas.`,
+          sugerencias: ['Y la claridad?', 'Plan para esta semana'],
+          proveedor: 'doble-de-carga',
+          modelo: 'doble-1',
+        });
+      }
       responder(res, 200, calificar(peticion));
     } catch (e) {
       fallidas += 1;

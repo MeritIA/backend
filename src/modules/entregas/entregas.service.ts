@@ -11,6 +11,7 @@ import { DataSource, Repository } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { Entrega } from './entities/entrega.entity.js';
 import { HistorialEstadoEntrega } from './entities/historial-estado-entrega.entity.js';
+import { SesionesService } from './sesiones.service.js';
 import { EstadoEntrega, puedeTransicionar } from './dominio/estado-entrega.js';
 import { ENTREGA_COMPLETADA, type EventoEntregaCompletada } from './dominio/eventos.js';
 import { ConsentimientosService, Rol, TipoDeConsentimiento } from '../autenticacion/index.js';
@@ -80,6 +81,7 @@ export class EntregasService {
     private readonly vacantes: VacantesService,
     private readonly consentimientos: ConsentimientosService,
     private readonly almacen: AlmacenamientoService,
+    private readonly sesiones: SesionesService,
     private readonly bus: BusDeEventos,
   ) {}
 
@@ -134,6 +136,9 @@ export class EntregasService {
     if (!ejercicios.includes(idEjercicio)) {
       throw new BadRequestException('El ejercicio no pertenece a esta vacante.');
     }
+
+    // Despues de comprobar que el ejercicio es de la vacante: el reloj es del servidor.
+    await this.sesiones.exigirVigente(idVacante, idEjercicio, solicitante.id);
 
     let tipoContenido: string;
     try {

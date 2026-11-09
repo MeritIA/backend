@@ -9,7 +9,15 @@ import {
   Max,
   Min,
   IsISO8601,
+  IsEnum,
+  IsArray,
+  ArrayMaxSize,
 } from 'class-validator';
+import {
+  Modalidad,
+  MAXIMO_DE_TECNOLOGIAS,
+  LONGITUD_MAXIMA_DE_TECNOLOGIA,
+} from '../dominio/modalidad.js';
 
 /**
  * OJO A LO QUE NO ESTA AQUI: ni `estado`, ni `idReclutador`, ni `publicadaEn`.
@@ -42,6 +50,34 @@ export class CrearVacanteDto {
   @MaxLength(120)
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   ubicacion?: string;
+
+  @ApiPropertyOptional({ enum: Modalidad, description: 'Remoto, hibrido o presencial.' })
+  @IsOptional()
+  @IsEnum(Modalidad, { message: 'modalidad debe ser remoto, hibrido o presencial' })
+  modalidad?: Modalidad;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAXIMO_DE_TECNOLOGIAS,
+    description: 'Tecnologias de la vacante. En la edicion reemplaza la lista completa.',
+  })
+  @IsOptional()
+  @IsArray({ message: 'tecnologias debe ser una lista' })
+  @ArrayMaxSize(MAXIMO_DE_TECNOLOGIAS, {
+    message: `tecnologias admite hasta ${MAXIMO_DE_TECNOLOGIAS}`,
+  })
+  @IsString({ each: true, message: 'cada tecnologia debe ser texto' })
+  @MinLength(1, { each: true, message: 'una tecnologia no puede estar vacia' })
+  @MaxLength(LONGITUD_MAXIMA_DE_TECNOLOGIA, {
+    each: true,
+    message: `cada tecnologia admite hasta ${LONGITUD_MAXIMA_DE_TECNOLOGIA} caracteres`,
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value)
+      ? (value as unknown[]).map((t) => (typeof t === 'string' ? t.trim() : t))
+      : value,
+  )
+  tecnologias?: string[];
 
   @ApiPropertyOptional({
     minimum: 1,

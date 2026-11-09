@@ -735,4 +735,239 @@ describe('integracion: entregas', () => {
       await entregar(otroCandidato, idVacante, ejercicios[0]).expect(404);
     });
   });
+
+  describe('dataset adjunto al enunciado (B17)', () => {
+    it('la empresa lo sube, el candidato invitado lo ve y lo descarga, y nadie mas', async () => {
+      const { idVacante, ejercicios } = await vacanteLista();
+      const idEjercicio = ejercicios[0];
+      await api(app)
+        .post(`/api/v1/ejercicios/${idEjercicio}/adjuntos`)
+        .set(auth(reclutador))
+        .attach('archivo', Buffer.from('id,valor\n1,10\n'), 'datos.csv')
+        .expect(201);
+
+      const { body: lista } = await api(app)
+        .get(`/api/v1/vacantes/${idVacante}/ejercicios`)
+        .set(auth(candidato))
+        .expect(200);
+      expect(lista[0].adjuntos).toHaveLength(1);
+      expect(lista[0].adjuntos[0]).toMatchObject({ nombre: 'datos.csv', bytes: 14 });
+
+      const idAdjunto = lista[0].adjuntos[0].id as string;
+      const ruta = `/api/v1/vacantes/${idVacante}/ejercicios/${idEjercicio}/adjuntos/${idAdjunto}`;
+      const { body: enlace } = await api(app).get(ruta).set(auth(candidato)).expect(200);
+      expect(enlace.url).toMatch(/^http/);
+      await api(app).get(ruta).set(auth(otroCandidato)).expect(404);
+      await api(app).get(ruta).set(auth(otroReclutador)).expect(404);
+    });
+
+    it('otra empresa no adjunta a un ejercicio ajeno, y un ejecutable no entra', async () => {
+      const { ejercicios } = await vacanteLista();
+      await api(app)
+        .post(`/api/v1/ejercicios/${ejercicios[0]}/adjuntos`)
+        .set(auth(otroReclutador))
+        .attach('archivo', Buffer.from('x'), 'datos.csv')
+        .expect(404);
+      await api(app)
+        .post(`/api/v1/ejercicios/${ejercicios[0]}/adjuntos`)
+        .set(auth(reclutador))
+        .attach('archivo', Buffer.from('MZ'), 'virus.exe')
+        .expect(400);
+    });
+
+    it('hasta cinco por version', async () => {
+      const { ejercicios } = await vacanteLista();
+      for (let i = 0; i < 5; i++) {
+        await api(app)
+          .post(`/api/v1/ejercicios/${ejercicios[0]}/adjuntos`)
+          .set(auth(reclutador))
+          .attach('archivo', Buffer.from(`d${i}`), `d${i}.csv`)
+          .expect(201);
+      }
+      await api(app)
+        .post(`/api/v1/ejercicios/${ejercicios[0]}/adjuntos`)
+        .set(auth(reclutador))
+        .attach('archivo', Buffer.from('mas'), 'mas.csv')
+        .expect(400);
+    });
+  });
+
+  describe('sesion cronometrada: el reloj es del servidor', () => {
+    async function vacanteCronometrada(
+      minutos: number,
+    ): Promise<{ idVacante: string; idEjercicio: string }> {
+      const { body: ej } = await api(app)
+        .post('/api/v1/ejercicios')
+        .set(auth(reclutador))
+        .send({
+          titulo: `Con reloj ${++contador}`,
+          duracionMinutos: minutos,
+          enunciado: 'Enunciado de prueba suficientemente largo para pasar la validacion del DTO.',
+          criterios: [
+            {
+              nombre: 'Correccion',
+              descripcion: 'Resuelve los casos del enunciado, incluidos los limite.',
+              peso: 100,
+              escalaMaxima: 5,
+            },
+          ],
+        })
+        .expect(201);
+      const { body: v } = await api(app)
+        .post('/api/v1/vacantes')
+        .set(auth(reclutador))
+        .send({ titulo: 'Backend con reloj', descripcion: 'Buscamos una persona para plataforma.' })
+        .expect(201);
+      await api(app)
+        .put(`/api/v1/vacantes/${v.id}/ejercicios`)
+        .set(auth(reclutador))
+        .send({ idsDeEjercicios: [ej.id] })
+        .expect(200);
+      await api(app).post(`/api/v1/vacantes/${v.id}/publicar`).set(auth(reclutador)).expect(200);
+      await api(app)
+        .post(`/api/v1/vacantes/${v.id}/candidatos`)
+        .set(auth(reclutador))
+        .send({ idCandidato: candidato.id })
+        .expect(200);
+      return { idVacante: v.id as string, idEjercicio: ej.id as string };
+    }
+    const sesion = (quien: Sesion, ids: { idVacante: string; idEjercicio: string }) =>
+      api(app).post('/api/v1/entregas/sesion').set(auth(quien)).send(ids);
+
+    it('sin iniciar no se entrega; al iniciar corre el reloj y se puede entregar', async () => {
+      const ids = await vacanteCronometrada(30);
+      await entregar(candidato, ids.idVacante, ids.idEjercicio).expect(403);
+
+      const { body } = await sesion(candidato, ids).expect(200);
+      expect(body.duracionMinutos).toBe(30);
+      expect(body.restanteSegundos).toBeGreaterThan(29 * 60);
+      await entregar(candidato, ids.idVacante, ids.idEjercicio).expect(201);
+    });
+
+    it('iniciar dos veces devuelve la misma sesion: no da otra ventana', async () => {
+      const ids = await vacanteCronometrada(30);
+      const { body: a } = await sesion(candidato, ids).expect(200);
+      const { body: b } = await sesion(candidato, ids).expect(200);
+      expect(b.venceEn).toBe(a.venceEn);
+    });
+
+    it('vencida la sesion, mas alla de la gracia de subida, la entrega se rechaza', async () => {
+      const ids = await vacanteCronometrada(30);
+      await sesion(candidato, ids).expect(200);
+      await consultar(
+        `update entregas.sesiones set vence_en = now() - interval '5 minutes' where id_vacante = $1`,
+        [ids.idVacante],
+      );
+      const { body } = await entregar(candidato, ids.idVacante, ids.idEjercicio).expect(403);
+      expect(JSON.stringify(body)).toMatch(/tiempo/i);
+      const { body: estado } = await api(app)
+        .get('/api/v1/entregas/sesion')
+        .query(ids)
+        .set(auth(candidato))
+        .expect(200);
+      expect(estado.restanteSegundos).toBe(0);
+    });
+
+    it('un ejercicio sin limite no se inicia, y se entrega como siempre', async () => {
+      const { idVacante, ejercicios } = await vacanteLista();
+      await sesion(candidato, { idVacante, idEjercicio: ejercicios[0] }).expect(400);
+      await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+    });
+
+    it('quien no esta invitado no inicia nada', async () => {
+      const ids = await vacanteCronometrada(30);
+      await sesion(otroCandidato, ids).expect(404);
+    });
+  });
+
+  describe('verificacion de la entrega: camara o modalidad alterna', () => {
+    const JPEG = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      Buffer.from('fotodeprueba'),
+    ]);
+
+    async function unaEntrega(): Promise<string> {
+      const { idVacante, ejercicios } = await vacanteLista();
+      const { body } = await entregar(candidato, idVacante, ejercicios[0]).expect(201);
+      return body.id as string;
+    }
+    const verificar = (quien: Sesion, id: string, modalidad: string, foto?: Buffer) => {
+      const peticion = api(app)
+        .post(`/api/v1/entregas/${id}/verificacion`)
+        .set(auth(quien))
+        .field('modalidad', modalidad);
+      return foto ? peticion.attach('foto', foto, 'cara.jpg') : peticion;
+    };
+
+    it('con camara guarda la foto 90 dias, y la empresa y el candidato ven el estado', async () => {
+      const id = await unaEntrega();
+      const { body } = await verificar(candidato, id, 'camara', JPEG).expect(201);
+      expect(body.modalidad).toBe('camara');
+      expect(body.enlace).toMatch(/^http/);
+      const dias =
+        (new Date(body.conservarHasta).getTime() - new Date(body.creadaEn).getTime()) / 86_400_000;
+      expect(Math.round(dias)).toBe(90);
+
+      const { body: paraLaEmpresa } = await api(app)
+        .get(`/api/v1/entregas/${id}/verificacion`)
+        .set(auth(reclutador))
+        .expect(200);
+      expect(paraLaEmpresa.modalidad).toBe('camara');
+    });
+
+    it('una vez por entrega, y solo imagenes reales', async () => {
+      const id = await unaEntrega();
+      await verificar(candidato, id, 'camara', Buffer.from('esto no es una imagen')).expect(400);
+      await verificar(candidato, id, 'camara', JPEG).expect(201);
+      await verificar(candidato, id, 'alterna').expect(409);
+    });
+
+    it('sin el permiso biometrico la camara da 403 y la alterna funciona', async () => {
+      await api(app)
+        .put('/api/v1/autenticacion/consentimientos')
+        .set(auth(candidato))
+        .send({ decisiones: [{ tipo: 'biometria', concedido: false }], origen: 'perfil' })
+        .expect(200);
+      const id = await unaEntrega();
+      await verificar(candidato, id, 'camara', JPEG).expect(403);
+      const { body } = await verificar(candidato, id, 'alterna').expect(201);
+      expect(body).toMatchObject({ modalidad: 'alterna', enlace: null });
+    });
+
+    it('nadie mas verifica ni ve una entrega ajena', async () => {
+      const id = await unaEntrega();
+      await verificar(otroCandidato, id, 'alterna').expect(404);
+      await api(app)
+        .get(`/api/v1/entregas/${id}/verificacion`)
+        .set(auth(otroCandidato))
+        .expect(404);
+      await api(app)
+        .get(`/api/v1/entregas/${id}/verificacion`)
+        .set(auth(otroReclutador))
+        .expect(404);
+      await verificar(reclutador, id, 'alterna').expect(403);
+    });
+
+    it('pasados los 90 dias la foto se borra y queda el registro', async () => {
+      const id = await unaEntrega();
+      await verificar(candidato, id, 'camara', JPEG).expect(201);
+      const { VerificacionesService } =
+        await import('../../src/modules/entregas/verificaciones.service.js');
+      const servicio = app.get(VerificacionesService);
+      expect(await servicio.purgarVencidas()).toBe(0);
+      expect(await servicio.purgarVencidas(new Date(Date.now() + 91 * 86_400_000))).toBe(1);
+
+      const { body } = await api(app)
+        .get(`/api/v1/entregas/${id}/verificacion`)
+        .set(auth(candidato))
+        .expect(200);
+      expect(body).toMatchObject({ modalidad: 'camara', enlace: null });
+      const [fila] = await consultar<{ clave: string | null; purgada_en: Date | null }>(
+        'select clave, purgada_en from entregas.verificaciones where id_entrega = $1',
+        [id],
+      );
+      expect(fila.clave).toBeNull();
+      expect(fila.purgada_en).not.toBeNull();
+    });
+  });
 });

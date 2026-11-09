@@ -11,6 +11,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Rol } from '../dominio/rol.js';
+import { TipoCliente } from '../dominio/tipo-cliente.js';
 import { normalizarNit } from '../dominio/nit.js';
 import { SECTORES, SectorEmpresa } from '../dominio/sector.js';
 
@@ -121,4 +122,64 @@ export class UsuarioDeEmpresaRespuesta {
   @ApiProperty() nombreCompleto!: string;
   @ApiProperty({ enum: Rol }) rol!: Rol;
   @ApiProperty({ format: 'uuid' }) idEmpresa!: string;
+}
+
+/**
+ * Auto-registro de una empresa (pantalla A01).
+ *
+ * Crea la empresa y a su primer administrador en un solo acto. A diferencia de
+ * `CrearEmpresaDto`, el NIT es obligatorio: sin un administrador de plataforma
+ * mirando, el digito de verificacion es la unica comprobacion disponible, y la
+ * verificacion contra la Camara de Comercio sigue sin existir.
+ */
+export class RegistrarEmpresaDto {
+  @ApiProperty({ example: 'Acme S.A.S.', minLength: 2, maxLength: 160 })
+  @IsString()
+  @MinLength(2, { message: 'nombreEmpresa es demasiado corto' })
+  @MaxLength(160, { message: 'nombreEmpresa no puede superar los 160 caracteres' })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  nombreEmpresa!: string;
+
+  @ApiProperty({ enum: SECTORES, example: SectorEmpresa.Financiero })
+  @IsEnum(SectorEmpresa, { message: `sector debe ser uno de: ${SECTORES.join(', ')}` })
+  sector!: SectorEmpresa;
+
+  @ApiProperty({ example: '890903938-8', description: 'NIT con digito de verificacion. Unico.' })
+  @IsString()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizarNit(value.trim()) : value,
+  )
+  @Matches(/^\d{8,15}-\d$/, {
+    message: 'nit debe tener entre 8 y 15 digitos, un guion y el digito de verificacion',
+  })
+  nit!: string;
+
+  @ApiProperty({ example: 'ana@acme.com', maxLength: 254 })
+  @IsEmail({}, { message: 'correo debe ser una direccion de correo valida' })
+  @MaxLength(254, { message: 'correo no puede superar los 254 caracteres' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  correo!: string;
+
+  @ApiProperty({ minLength: 12, maxLength: 128 })
+  @IsString()
+  @MinLength(12, { message: 'contrasena debe tener al menos 12 caracteres' })
+  @MaxLength(128, { message: 'contrasena no puede superar los 128 caracteres' })
+  contrasena!: string;
+
+  @ApiProperty({ example: 'Ana Maria Torres', maxLength: 120 })
+  @IsString()
+  @MinLength(2, { message: 'nombreCompleto es demasiado corto' })
+  @MaxLength(120, { message: 'nombreCompleto no puede superar los 120 caracteres' })
+  @Matches(/^[\p{L}\p{M}' .-]+$/u, {
+    message: 'nombreCompleto solo admite letras, espacios, apostrofos, puntos y guiones',
+  })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  nombreCompleto!: string;
+
+  @ApiPropertyOptional({ enum: TipoCliente, default: TipoCliente.Web })
+  @IsOptional()
+  @IsEnum(TipoCliente, { message: 'cliente debe ser "web" o "apk"' })
+  cliente?: TipoCliente;
 }

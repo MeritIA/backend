@@ -4,10 +4,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { Vacante } from './entities/vacante.entity.js';
+import type { Modalidad } from './dominio/modalidad.js';
 import { VacanteEjercicio } from './entities/vacante-ejercicio.entity.js';
 import { VacanteCandidato } from './entities/vacante-candidato.entity.js';
 import { Postulacion } from './entities/postulacion.entity.js';
@@ -24,7 +26,14 @@ import {
 } from './dominio/politica-de-invitacion.js';
 import type { CalculadorDeAfinidad } from './dominio/calculador-de-afinidad.js';
 import { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';
-import { EmpresasService, Rol, type SectorEmpresa } from '../autenticacion/index.js';
+import {
+  AutenticacionService,
+  CUENTA_ELIMINADA,
+  EmpresasService,
+  Rol,
+  type EventoCuentaEliminada,
+  type SectorEmpresa,
+} from '../autenticacion/index.js';
 import { BusDeEventos } from '../../common/events/index.js';
 import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
@@ -62,7 +71,7 @@ export interface Solicitante {
  * criterio: cambiar un identificador en la peticion nunca debe dar acceso.
  */
 @Injectable()
-export class VacantesService {
+export class VacantesService implements OnModuleInit {
   private readonly logger = new Logger('Vacantes');
 
   /**
@@ -86,9 +95,18 @@ export class VacantesService {
     // El catalogo necesita el nombre de quien publica. Se pide a su dueño en
     // vez de importar la entidad Empresa: la empresa es parte de la identidad.
     private readonly empresas: EmpresasService,
+    private readonly autenticacion: AutenticacionService,
     private readonly ejerciciosDelBanco: EjerciciosService,
     private readonly bus: BusDeEventos,
   ) {}
+
+  onModuleInit(): void {
+    // Una postulacion es una solicitud de la persona: sin persona no tiene sentido.
+    // Las invitaciones y entregas SI se conservan: son parte del proceso de la empresa.
+    this.bus.suscribir<EventoCuentaEliminada>(CUENTA_ELIMINADA, async (evento) => {
+      await this.postulaciones.delete({ idCandidato: evento.payload.idUsuario });
+    });
+  }
 
   async crear(datos: CrearVacanteDto, solicitante: Solicitante): Promise<Vacante> {
     const idEmpresa = this.empresaDe(solicitante);
@@ -96,6 +114,8 @@ export class VacantesService {
       titulo: datos.titulo,
       descripcion: datos.descripcion,
       ubicacion: datos.ubicacion ?? null,
+      modalidad: datos.modalidad ?? null,
+      tecnologias: datos.tecnologias ?? [],
       intentosPermitidos: datos.intentosPermitidos ?? 1,
       // Los dos son planes del reclutador y pueden no existir: null significa
       // "no lo planifico", que es distinto de cero o de una fecha inventada.
@@ -117,8 +137,10 @@ export class VacantesService {
    * Listado, distinto segun quien pregunta.
    *
    * Tercer criterio de aceptacion: un candidato solo ve las vacantes que le han
-   * sido asignadas. Y ademas solo las publicadas: una vacante en borrador
-   * todavia no esta lista para que nadie la vea.
+   * sido asignadas. Y de esas, las publicadas y las cerradas: lo que se
+   * esconde es el BORRADOR, que todavia no esta listo para que nadie lo vea.
+   * Un proceso cerrado si se muestra, porque es donde el candidato va a mirar
+   * su resultado cuando le llega el aviso.
    */
   async listar(solicitante: Solicitante): Promise<Vacante[]> {
     if (solicitante.rol === Rol.Candidato) {
@@ -129,8 +151,17 @@ export class VacantesService {
       const ids = asignadas.map((a) => a.idVacante);
       if (ids.length === 0) return [];
 
+      // Publicadas Y CERRADAS. El filtro existe para esconder los borradores
+      // —una vacante sin publicar todavia no esta lista para que nadie la
+      // vea—, no para esconder los procesos terminados: el aviso de cierre le
+      // dice al candidato "tu resultado ya esta disponible en MeritIA" (D-10),
+      // y dejar la vacante fuera de su lista le quita la unica forma de
+      // llegar a el. Se encontro recorriendo el flujo con el front.
       return this.vacantes.find({
-        where: { id: In(ids), estado: EstadoVacante.Publicada },
+        where: {
+          id: In(ids),
+          estado: In([EstadoVacante.Publicada, EstadoVacante.Cerrada]),
+        },
         relations: { ejercicios: true },
         order: { publicadaEn: 'DESC' },
       });
@@ -181,6 +212,9 @@ export class VacantesService {
       }
       vacante.intentosPermitidos = datos.intentosPermitidos;
     }
+
+    if (datos.modalidad !== undefined) vacante.modalidad = datos.modalidad;
+    if (datos.tecnologias !== undefined) vacante.tecnologias = datos.tecnologias;
 
     // Sin la comprobacion de estado que llevan los intentos, y a proposito: la
     // razon esta escrita al lado de la columna en la entidad.
@@ -325,6 +359,29 @@ export class VacantesService {
   }
 
   /** Invita a un candidato. Es lo que le permitira ver la vacante. */
+  /** Invita por identificador o por correo; el correo se resuelve a un candidato real. */
+  async invitar(
+    id: string,
+    datos: { idCandidato?: string; correo?: string },
+    solicitante: Solicitante,
+  ): Promise<Vacante> {
+    if ((datos.idCandidato === undefined) === (datos.correo === undefined)) {
+      throw new BadRequestException('Envia idCandidato o correo, uno de los dos.');
+    }
+    let idCandidato = datos.idCandidato;
+    if (idCandidato === undefined) {
+      // Se comprueba la propiedad ANTES de buscar: quien no es dueño de la
+      // vacante no debe poder usar este endpoint para saber que correos existen.
+      this.exigirPropiedad(await this.obtenerCompleta(id), solicitante);
+      const encontrado = await this.autenticacion.idDeCandidatoPorCorreo(datos.correo!);
+      if (!encontrado) {
+        throw new NotFoundException('No hay ningun candidato registrado con ese correo.');
+      }
+      idCandidato = encontrado;
+    }
+    return this.asignarCandidato(id, idCandidato, solicitante);
+  }
+
   async asignarCandidato(
     id: string,
     idCandidato: string,
@@ -669,6 +726,27 @@ export class VacantesService {
     );
   }
 
+  /**
+   * Enlace firmado a un adjunto del enunciado de un ejercicio de esta vacante.
+   * Mismo acceso que leer el enunciado: el candidato invitado a una vacante
+   * publicada, o la empresa dueña. El ejercicio debe ser de la vacante: un
+   * identificador cambiado en la ruta no da acceso a adjuntos de otra.
+   */
+  async enlaceDeAdjunto(
+    id: string,
+    idEjercicio: string,
+    idAdjunto: string,
+    solicitante: Solicitante,
+  ): Promise<{ url: string; expiraEnSegundos: number }> {
+    const vacante = await this.obtenerCompleta(id);
+    await this.exigirAcceso(vacante, solicitante);
+    if (!vacante.ejercicios.some((e) => e.idEjercicio === idEjercicio)) {
+      throw new NotFoundException('El archivo no existe.');
+    }
+    const url = await this.ejerciciosDelBanco.enlaceDeAdjunto(idEjercicio, idAdjunto);
+    return { url, expiraEnSegundos: 300 };
+  }
+
   // --- Interno ---
 
   private async obtenerCompleta(id: string): Promise<Vacante> {
@@ -682,6 +760,20 @@ export class VacantesService {
   }
 
   /** Solo el reclutador dueno, o un administrador, modifican una vacante. */
+
+  /** En cuantas vacantes (no borrador) de la empresa se usa cada ejercicio. */
+  async usoDeEjercicios(idEmpresa: string): Promise<Record<string, number>> {
+    const filas = await this.asociaciones
+      .createQueryBuilder('a')
+      .innerJoin('a.vacante', 'v')
+      .select('a.id_ejercicio', 'idEjercicio')
+      .addSelect('count(distinct a.id_vacante)::int', 'vacantes')
+      .where('v.id_empresa = :idEmpresa', { idEmpresa })
+      .andWhere('v.estado <> :borrador', { borrador: EstadoVacante.Borrador })
+      .groupBy('a.id_ejercicio')
+      .getRawMany<{ idEjercicio: string; vacantes: number }>();
+    return Object.fromEntries(filas.map((f) => [f.idEjercicio, Number(f.vacantes)]));
+  }
 
   /**
    * El catalogo de ofertas abiertas (pantalla «explorar»).
@@ -736,6 +828,8 @@ export class VacantesService {
           titulo: v.titulo,
           descripcion: v.descripcion,
           ubicacion: v.ubicacion,
+          modalidad: v.modalidad,
+          tecnologias: v.tecnologias,
           empresa: empresa.nombre,
           sector: empresa.sector,
           ejercicios: v.ejercicios?.length ?? 0,
@@ -807,6 +901,27 @@ export class VacantesService {
       }
       throw error;
     }
+  }
+
+  /**
+   * El candidato retira una postulacion que la empresa aun no decidio.
+   *
+   * Una ya decidida no se retira: la decision es un registro sobre una persona
+   * y borrarla la haria desaparecer, con su motivo. Despues de retirar puede
+   * volver a postularse mientras la vacante siga publicada.
+   */
+  async retirarPostulacion(idVacante: string, solicitante: Solicitante): Promise<void> {
+    const postulacion = await this.postulaciones.findOne({
+      where: { idVacante, idCandidato: solicitante.id },
+    });
+    if (!postulacion) throw new NotFoundException('No te has postulado a esta vacante.');
+    if (postulacion.estado !== EstadoPostulacion.EnRevision) {
+      throw new BadRequestException(
+        `Tu postulacion ya esta ${postulacion.estado}: solo se retira la que sigue en revision.`,
+      );
+    }
+    await this.postulaciones.delete({ id: postulacion.id });
+    this.registrar('postulacion_retirada', solicitante, { idVacante });
   }
 
   /** Las postulaciones del propio candidato, con la oferta a la que son. */
@@ -1209,6 +1324,8 @@ export interface OfertaDelCatalogo {
   titulo: string;
   descripcion: string;
   ubicacion: string | null;
+  modalidad: Modalidad | null;
+  tecnologias: string[];
   empresa: string;
   sector: SectorEmpresa;
   ejercicios: number;

@@ -30,6 +30,9 @@ export const latencia = {
   evaluacionesVacante: new Trend('op_evaluaciones_vacante', true),
   entregar: new Trend('op_entregar', true),
   salud: new Trend('op_salud', true),
+  mentorContexto: new Trend('op_mentor_contexto', true),
+  mentorPreguntar: new Trend('op_mentor_preguntar', true),
+  registroEmpresa: new Trend('op_registro_empresa', true),
 };
 
 export const entregasAceptadas = new Counter('entregas_aceptadas');
@@ -52,6 +55,9 @@ export const umbrales = {
   op_listar_vacantes: ['p(95)<1500'],
   op_reporte_vacante: ['p(95)<3000'],
   op_entregar: ['p(95)<5000'],
+  op_mentor_contexto: ['p(95)<1500'],
+  // Incluye la latencia del modelo: con el doble, 800 ms de base.
+  op_mentor_preguntar: ['p(95)<4000'],
 };
 
 /** Percentiles que pide la seccion 11, incluidos p50 y p99. */
@@ -133,7 +139,9 @@ export function entregar(candidato) {
   );
 
   latencia.entregar.add(r.timings.duration);
-  const bien = check(r, { 'entrega aceptada o sin intentos': (x) => [201, 409].includes(x.status) });
+  const bien = check(r, {
+    'entrega aceptada o sin intentos': (x) => [201, 409].includes(x.status),
+  });
   erroresDeNegocio.add(!bien);
   if (r.status === 201) entregasAceptadas.add(1);
   if (r.status === 409) entregasSinIntentos.add(1);
@@ -160,4 +168,69 @@ export function sesionMixta(vu, iteracion, porcentajeDeEntregas = 10) {
   if (iteracion % 11 === 0) misEntregas(candidato);
 
   if (Math.random() * 100 < porcentajeDeEntregas) entregar(candidato);
+}
+
+/**
+ * Mentor: el resumen que se le entrega a la IA y la pregunta.
+ *
+ * `preguntar` incluye la latencia del servicio de IA (simulada por el doble), asi
+ * que su umbral es mayor; `contexto` es solo base de datos y calculo.
+ */
+export function mentorContexto(candidato) {
+  const r = http.get(`${BASE}/api/v1/mentor/contexto`, auth(candidato.token));
+  medir(latencia.mentorContexto, r, [200]);
+}
+
+export function mentorPreguntar(candidato) {
+  const r = http.post(
+    `${BASE}/api/v1/mentor/preguntar`,
+    JSON.stringify({
+      pregunta: 'En que criterio debo mejorar primero?',
+      historial: [
+        { rol: 'candidato', texto: 'Como voy?' },
+        { rol: 'mentor', texto: 'Vas bien en correccion; la claridad es lo mas flojo.' },
+      ],
+    }),
+    {
+      headers: { ...auth(candidato.token).headers, 'Content-Type': 'application/json' },
+      tags: { esperado: 'si' },
+    },
+  );
+  medir(latencia.mentorPreguntar, r, [200]);
+}
+
+const PESOS_NIT = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+
+/** NIT con su digito de verificacion, para registrar empresas distintas sin choques. */
+function nitValido(base) {
+  const suma = String(base)
+    .split('')
+    .reverse()
+    .reduce((s, x, i) => s + Number(x) * PESOS_NIT[i], 0);
+  const resto = suma % 11;
+  return `${base}-${resto > 1 ? 11 - resto : resto}`;
+}
+
+/**
+ * Auto-registro de una empresa. Es publico y hace argon2id (caro a proposito),
+ * asi que es el endpoint donde mas pesa el hash. Cada llamada crea una empresa.
+ */
+export function registrarEmpresa(vu, iteracion) {
+  const sufijo = `${Date.now().toString(36)}${vu}x${iteracion}`;
+  const base = 800000000 + ((vu * 100003 + iteracion * 7919 + Date.now()) % 99999999);
+  const r = http.post(
+    `${BASE}/api/v1/autenticacion/registro-empresa`,
+    JSON.stringify({
+      nombreEmpresa: `Empresa carga ${sufijo}`,
+      sector: 'tecnologia',
+      nit: nitValido(base),
+      correo: `empresa-${sufijo}@carga.test`,
+      contrasena: 'una-frase-larga-y-dificil',
+      nombreCompleto: 'Directora De Carga',
+      cliente: 'apk',
+    }),
+    { headers: { 'Content-Type': 'application/json' }, tags: { esperado: 'si' } },
+  );
+  // 409: el NIT calculado choco con otro. Es la respuesta correcta del dominio.
+  medir(latencia.registroEmpresa, r, [201, 409]);
 }

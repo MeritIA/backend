@@ -56,14 +56,12 @@ function clasificar(r) {
       ? (r.iteraciones_descartadas / (r.iteraciones + r.iteraciones_descartadas)) * 100
       : 0;
 
-  if (r.errores_inesperados_pct > LIMITES.degradado.erroresPct) return { estado: 'CAIDO', descartadasPct };
+  if (r.errores_inesperados_pct > LIMITES.degradado.erroresPct)
+    return { estado: 'CAIDO', descartadasPct };
   if (r.global_p95 >= LIMITES.degradado.p95) return { estado: 'CAIDO', descartadasPct };
-  if (descartadasPct >= LIMITES.degradado.descartadasPct) return { estado: 'CAIDO', descartadasPct };
-  if (
-    r.global_p95 < LIMITES.sano.p95 &&
-    descartadasPct === 0 &&
-    r.errores_inesperados_pct === 0
-  ) {
+  if (descartadasPct >= LIMITES.degradado.descartadasPct)
+    return { estado: 'CAIDO', descartadasPct };
+  if (r.global_p95 < LIMITES.sano.p95 && descartadasPct === 0 && r.errores_inesperados_pct === 0) {
     return { estado: 'SANO', descartadasPct };
   }
   return { estado: 'DEGRADADO', descartadasPct };
@@ -134,7 +132,9 @@ for (const rps of RITMOS) {
 const sanos = filas.filter((f) => f.estado === 'SANO').map((f) => f.rps_objetivo);
 const capacidad = sanos.length > 0 ? Math.max(...sanos) : null;
 
-console.log('\n| it/s | pet/s | p50 | p95 | p99 | reporte p95 | entregar p95 | descartadas | estado |');
+console.log(
+  '\n| it/s | pet/s | p50 | p95 | p99 | reporte p95 | entregar p95 | descartadas | estado |',
+);
 console.log('|---|---|---|---|---|---|---|---|---|');
 for (const f of filas) {
   console.log(

@@ -6,6 +6,8 @@ import { ColaDeEvaluacionService } from './cola/cola-de-evaluacion.service.js';
 import { EVALUADOR, EvaluadorSinServicioDeIa } from './cola/evaluador.js';
 import { EvaluadorQuePersiste } from './cola/evaluador-que-persiste.js';
 import { ClienteServicioIa } from './cola/cliente-servicio-ia.js';
+import { MentorController } from './mentor/mentor.controller.js';
+import { MentorService } from './mentor/mentor.service.js';
 import { Evaluacion } from './entities/evaluacion.entity.js';
 import { CalificacionCriterio } from './entities/calificacion-criterio.entity.js';
 import { AutenticacionModule } from '../autenticacion/index.js';
@@ -24,9 +26,10 @@ import { AlmacenamientoModule } from '../../common/almacenamiento/index.js';
     VacantesModule,
     AlmacenamientoModule,
   ],
-  controllers: [EvaluacionesController],
+  controllers: [EvaluacionesController, MentorController],
   providers: [
     EvaluacionService,
+    MentorService,
     ColaDeEvaluacionService,
     ClienteServicioIa,
     EvaluadorQuePersiste,

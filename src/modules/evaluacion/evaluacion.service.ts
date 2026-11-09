@@ -52,10 +52,88 @@ export class EvaluacionService {
       throw new NotFoundException('La vacante no existe.');
     }
     return this.evaluaciones.find({
-      where: { idVacante },
+      where: { idVacante, descalificada: false },
       relations: { criterios: true },
       order: { notaFinal: 'DESC', creadaEn: 'ASC', criterios: { orden: 'ASC' } },
     });
+  }
+
+  /** Lo que un moderador necesita para decidir. Sin identidad: el caso lleva alias. */
+  async paraRevision(idEvaluacion: string): Promise<{
+    idEvaluacion: string;
+    idEntrega: string;
+    idVacante: string;
+    idCandidato: string;
+    notaFinal: number;
+    riesgo: string;
+    puntajeInyeccion: number;
+    banderas: { codigo: string; archivo: string; ocurrencias: number }[];
+    descalificada: boolean;
+    criterios: { criterio: string; puntaje: number; escalaMaxima: number; evidencia: string }[];
+  } | null> {
+    const e = await this.evaluaciones.findOne({
+      where: { id: idEvaluacion },
+      relations: { criterios: true },
+      order: { criterios: { orden: 'ASC' } },
+    });
+    if (!e) return null;
+    return {
+      idEvaluacion: e.id,
+      idEntrega: e.idEntrega,
+      idVacante: e.idVacante,
+      idCandidato: e.idCandidato,
+      notaFinal: e.notaFinal,
+      riesgo: e.riesgoInyeccion,
+      puntajeInyeccion: e.puntajeInyeccion,
+      banderas: e.banderas,
+      descalificada: e.descalificada,
+      criterios: e.criterios.map((c) => ({
+        criterio: c.criterio,
+        puntaje: c.puntaje,
+        escalaMaxima: c.escalaMaxima,
+        evidencia: c.evidencia,
+      })),
+    };
+  }
+
+  /**
+   * Integridad de una vacante, contando TAMBIEN las descalificadas: es lo que la
+   * auditoria necesita ver y el ranking no. Alcance ya comprobado por quien llama.
+   */
+  async integridadDeVacante(idVacante: string): Promise<{
+    evaluaciones: number;
+    descalificadas: number;
+    riesgoAlto: number;
+    riesgoMedio: number;
+  }> {
+    const [fila] = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('count(*)::int', 'evaluaciones')
+      .addSelect('count(*) filter (where e.descalificada)::int', 'descalificadas')
+      .addSelect("count(*) filter (where e.riesgo_inyeccion = 'alto')::int", 'riesgoAlto')
+      .addSelect("count(*) filter (where e.riesgo_inyeccion = 'medio')::int", 'riesgoMedio')
+      .where('e.id_vacante = :idVacante', { idVacante })
+      .getRawMany<{
+        evaluaciones: number;
+        descalificadas: number;
+        riesgoAlto: number;
+        riesgoMedio: number;
+      }>();
+    return {
+      evaluaciones: Number(fila.evaluaciones),
+      descalificadas: Number(fila.descalificadas),
+      riesgoAlto: Number(fila.riesgoAlto),
+      riesgoMedio: Number(fila.riesgoMedio),
+    };
+  }
+
+  /** Solo la llama moderacion, al decidir un caso. */
+  async marcarDescalificada(idEvaluacion: string, descalificada: boolean): Promise<void> {
+    await this.evaluaciones.update({ id: idEvaluacion }, { descalificada });
+  }
+
+  async contarEvaluaciones(): Promise<number> {
+    return this.evaluaciones.count();
   }
 
   /** Las del propio candidato. */
@@ -247,6 +325,51 @@ export class EvaluacionService {
       .where('e.idVacante = :idVacante', { idVacante })
       .getRawMany<{ idCandidato: string }>();
     return filas.map((f) => f.idCandidato);
+  }
+
+  /** Evaluaciones y nota promedio de cada ejercicio, solo de la empresa que pregunta. */
+  async estadisticasPorEjercicio(
+    idEmpresa: string,
+  ): Promise<Record<string, { evaluaciones: number; notaPromedio: number }>> {
+    const filas = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('e.id_ejercicio', 'idEjercicio')
+      .addSelect('count(*)::int', 'evaluaciones')
+      .addSelect('round(avg(e.nota_final), 1)::float', 'notaPromedio')
+      .where('e.id_empresa = :idEmpresa', { idEmpresa })
+      .groupBy('e.id_ejercicio')
+      .getRawMany<{ idEjercicio: string; evaluaciones: number; notaPromedio: number }>();
+    return Object.fromEntries(
+      filas.map((f) => [
+        f.idEjercicio,
+        { evaluaciones: Number(f.evaluaciones), notaPromedio: Number(f.notaPromedio) },
+      ]),
+    );
+  }
+
+  /**
+   * La mejor nota y cuantas evaluaciones tiene cada persona, en cualquier
+   * vacante. Para quien YA autorizo mostrar su perfil: el que llama filtra por
+   * consentimiento antes de preguntar.
+   */
+  async resumenPorCandidato(
+    idsDeCandidatos: readonly string[],
+  ): Promise<{ idCandidato: string; mejorNota: number; evaluaciones: number }[]> {
+    if (idsDeCandidatos.length === 0) return [];
+    const filas = await this.evaluaciones
+      .createQueryBuilder('e')
+      .select('e.id_candidato', 'idCandidato')
+      .addSelect('max(e.nota_final)::float', 'mejorNota')
+      .addSelect('count(*)::int', 'evaluaciones')
+      .where('e.id_candidato IN (:...idsDeCandidatos)', { idsDeCandidatos })
+      .andWhere('e.descalificada = false')
+      .groupBy('e.id_candidato')
+      .getRawMany<{ idCandidato: string; mejorNota: number; evaluaciones: number }>();
+    return filas.map((f) => ({
+      idCandidato: f.idCandidato,
+      mejorNota: Number(f.mejorNota),
+      evaluaciones: Number(f.evaluaciones),
+    }));
   }
 
   /**

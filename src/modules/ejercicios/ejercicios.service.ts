@@ -4,6 +4,8 @@ import { DataSource, In, Repository } from 'typeorm';
 import { Ejercicio } from './entities/ejercicio.entity.js';
 import { EjercicioVersion } from './entities/ejercicio-version.entity.js';
 import { CriterioRubrica } from './entities/criterio-rubrica.entity.js';
+import { Adjunto } from './entities/adjunto.entity.js';
+import { AlmacenamientoService, ArchivoInvalidoError } from '../../common/almacenamiento/index.js';
 import { RubricaInvalidaError, validarRubrica, type CriterioEntrada } from './dominio/rubrica.js';
 import { Rol } from '../autenticacion/index.js';
 import type { CrearEjercicioDto, NuevaVersionDto } from './dto/index.js';
@@ -16,12 +18,24 @@ export interface Solicitante {
 }
 
 /** Lo que otros modulos necesitan saber de una version, sin ver sus entidades. */
+const MAXIMO_DE_ADJUNTOS = 5;
+
+export interface ResumenDeAdjunto {
+  readonly id: string;
+  readonly nombre: string;
+  readonly bytes: number;
+}
+
 export interface ResumenVersion {
   readonly idEjercicio: string;
   readonly idVersion: string;
   readonly numero: number;
   readonly titulo: string;
   readonly enunciado: string;
+  /** Minutos de la sesion cronometrada; null si el ejercicio no tiene limite. */
+  readonly duracionMinutos: number | null;
+  /** Archivos que acompanan el enunciado (dataset, esqueleto). */
+  readonly adjuntos: readonly ResumenDeAdjunto[];
   readonly criterios: readonly {
     readonly nombre: string;
     readonly descripcion: string;
@@ -48,7 +62,9 @@ export class EjerciciosService {
   constructor(
     @InjectRepository(Ejercicio) private readonly ejercicios: Repository<Ejercicio>,
     @InjectRepository(EjercicioVersion) private readonly versiones: Repository<EjercicioVersion>,
+    @InjectRepository(Adjunto) private readonly adjuntos: Repository<Adjunto>,
     private readonly dataSource: DataSource,
+    private readonly almacen: AlmacenamientoService,
   ) {}
 
   async crear(datos: CrearEjercicioDto, solicitante: Solicitante): Promise<Ejercicio> {
@@ -74,6 +90,7 @@ export class EjerciciosService {
         datos.criterios,
         null,
         solicitante,
+        datos.duracionMinutos ?? null,
       );
       return ejercicio.id;
     });
@@ -117,6 +134,7 @@ export class EjerciciosService {
         datos.criterios,
         datos.motivoDelCambio ?? null,
         solicitante,
+        datos.duracionMinutos ?? null,
       );
     });
 
@@ -136,6 +154,79 @@ export class EjerciciosService {
    */
   async cuantosEnElBanco(idEmpresa: string): Promise<number> {
     return this.ejercicios.count({ where: { idEmpresa, activo: true } });
+  }
+
+  /**
+   * Adjunta un archivo a la version VIGENTE del ejercicio (la ultima).
+   *
+   * Solo el dueno del ejercicio. Maximo cinco por version: es un dataset o un
+   * esqueleto, no un repositorio. El archivo no se interpreta ni se envia a la IA.
+   */
+  async adjuntar(
+    idEjercicio: string,
+    archivo: { originalname: string; buffer: Buffer; mimetype: string } | undefined,
+    solicitante: Solicitante,
+  ): Promise<ResumenVersion> {
+    if (!archivo) throw new BadRequestException('Falta el archivo (campo "archivo").');
+    const ejercicio = await this.obtenerCompleto(idEjercicio);
+    this.exigirPropiedad(ejercicio, solicitante);
+    const version = await this.versiones.findOneOrFail({
+      where: { idEjercicio },
+      order: { numero: 'DESC' },
+      relations: { adjuntos: true, criterios: true, ejercicio: true },
+    });
+    if (version.adjuntos.length >= MAXIMO_DE_ADJUNTOS) {
+      throw new BadRequestException(
+        `Una version admite hasta ${MAXIMO_DE_ADJUNTOS} archivos adjuntos.`,
+      );
+    }
+    let referencia;
+    try {
+      referencia = await this.almacen.subirAdjunto(
+        idEjercicio,
+        archivo.originalname,
+        archivo.buffer,
+        archivo.mimetype || 'application/octet-stream',
+      );
+    } catch (e) {
+      if (e instanceof ArchivoInvalidoError) throw new BadRequestException(e.message);
+      throw e;
+    }
+    await this.adjuntos.save(
+      this.adjuntos.create({
+        idVersion: version.id,
+        nombre: archivo.originalname.slice(0, 200),
+        clave: referencia.clave,
+        bytes: referencia.bytes,
+        tipoContenido: referencia.tipoContenido,
+        sha256: referencia.sha256,
+      }),
+    );
+    this.registrar('adjunto_agregado', solicitante, { idEjercicio });
+    return this.aResumen(
+      await this.versiones.findOneOrFail({
+        where: { id: version.id },
+        relations: { criterios: true, ejercicio: true, adjuntos: true },
+      }),
+    );
+  }
+
+  /** Enlace firmado de un adjunto. Quien llama ya comprobo que puede leer el ejercicio. */
+  async enlaceDeAdjunto(idEjercicio: string, idAdjunto: string): Promise<string> {
+    const adjunto = await this.adjuntos
+      .createQueryBuilder('a')
+      .innerJoin('a.version', 'v')
+      .where('a.id = :idAdjunto', { idAdjunto })
+      .andWhere('v.id_ejercicio = :idEjercicio', { idEjercicio })
+      .getOne();
+    if (!adjunto) throw new NotFoundException('El archivo no existe.');
+    return this.almacen.enlaceDeDescarga({
+      clave: adjunto.clave,
+      bytes: adjunto.bytes,
+      sha256: adjunto.sha256,
+      tipoContenido: adjunto.tipoContenido,
+      nombreOriginal: adjunto.nombre,
+    });
   }
 
   async listar(solicitante: Solicitante): Promise<Ejercicio[]> {
@@ -193,7 +284,7 @@ export class EjerciciosService {
   async versionVigenteDe(idEjercicio: string): Promise<ResumenVersion | null> {
     const version = await this.versiones.findOne({
       where: { idEjercicio },
-      relations: { criterios: true, ejercicio: true },
+      relations: { criterios: true, ejercicio: true, adjuntos: true },
       order: { numero: 'DESC' },
     });
     return version ? this.aResumen(version) : null;
@@ -203,7 +294,7 @@ export class EjerciciosService {
   async versionPorId(idVersion: string): Promise<ResumenVersion | null> {
     const version = await this.versiones.findOne({
       where: { id: idVersion },
-      relations: { criterios: true, ejercicio: true },
+      relations: { criterios: true, ejercicio: true, adjuntos: true },
     });
     return version ? this.aResumen(version) : null;
   }
@@ -218,6 +309,7 @@ export class EjerciciosService {
     criterios: readonly CriterioEntrada[],
     motivoDelCambio: string | null,
     solicitante: Solicitante,
+    duracionMinutos: number | null = null,
   ): Promise<void> {
     const version = await manager.save(
       manager.create(EjercicioVersion, {
@@ -225,6 +317,7 @@ export class EjerciciosService {
         numero,
         enunciado,
         motivoDelCambio,
+        duracionMinutos,
         idAutor: solicitante.id,
       }),
     );
@@ -258,7 +351,7 @@ export class EjerciciosService {
   private async obtenerCompleto(id: string): Promise<Ejercicio> {
     const ejercicio = await this.ejercicios.findOne({
       where: { id },
-      relations: { versiones: { criterios: true } },
+      relations: { versiones: { criterios: true, adjuntos: true } },
       order: { versiones: { numero: 'DESC', criterios: { orden: 'ASC' } } },
     });
     if (!ejercicio) throw new NotFoundException('El ejercicio no existe.');
@@ -296,6 +389,12 @@ export class EjerciciosService {
       numero: version.numero,
       titulo: version.ejercicio?.titulo ?? '',
       enunciado: version.enunciado,
+      duracionMinutos: version.duracionMinutos,
+      adjuntos: (version.adjuntos ?? []).map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        bytes: a.bytes,
+      })),
       criterios: [...version.criterios]
         .sort((a, b) => a.orden - b.orden)
         .map((c) => ({

@@ -19,6 +19,18 @@ interface ResponseMinima {
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  // Detras de un proxy (nginx, ingress), req.ip seria la IP del proxy y el
+  // limitador por IP juntaria a todos los usuarios en un solo cupo. Se activa
+  // por entorno con el numero de saltos de confianza, y apagado por omision:
+  // confiar en X-Forwarded-For sin proxy delante deja falsificar la IP.
+  const saltos = Number(process.env.TRUST_PROXY ?? 0);
+  if (Number.isInteger(saltos) && saltos > 0) {
+    (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
+      'trust proxy',
+      saltos,
+    );
+  }
+
   // Sin esto, req.cookies no existe y el token de la web nunca se leeria.
   app.use(cookieParser());
 

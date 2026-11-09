@@ -320,3 +320,11 @@ export class PanelDeEmpresaRespuesta {
   retosEnElBanco!: number;
   @ApiProperty() generadoEn!: Date;
 }
+
+export class FilaDeTalentoRespuesta {
+  @ApiProperty({ format: 'uuid' }) idCandidato!: string;
+  @ApiProperty({ example: 'Candidato ••••3f8a2c' }) alias!: string;
+  @ApiProperty({ example: 87.5, description: 'La mejor nota final (0-100) en cualquier vacante.' })
+  mejorNota!: number;
+  @ApiProperty({ example: 3 }) evaluaciones!: number;
+}
