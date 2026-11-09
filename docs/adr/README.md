@@ -27,7 +27,9 @@ consecuencias malas no es una decisión, es publicidad.
 | [0012](0012-404-en-vez-de-403.md) | A un recurso ajeno se responde 404, no 403 | Vigente |
 | [0013](0013-aviso-por-correo-al-cerrar.md) | Cerrar una vacante avisa por correo, y el aviso no lleva el resultado | Vigente, apagado por defecto |
 | [0014](0014-registro-de-consentimientos.md) | Los consentimientos son un historial, y cada permiso dice si alguien lo hace cumplir | Vigente |
-| [0015](0015-postulacion-sin-motor-de-afinidad.md) | Se puede postular a una vacante abierta; el motor de afinidad de A04 no se inventa | Vigente, con decisión de producto pendiente |
+| [0015](0015-postulacion-sin-motor-de-afinidad.md) | Se puede postular a una vacante abierta; el motor de afinidad de A04 no se inventa | **Superada en parte por la 0016** |
+| [0016](0016-afinidad-desde-rubricas-calificadas.md) | El % de afinidad sale de rúbricas ya calificadas, lleva cobertura y desglose, y ordena sin esconder | Vigente |
+| [0017](0017-vocabulario-de-habilidades-e-invitacion-automatica.md) | Vocabulario de habilidades de plataforma, e invitación automática que solo dice sí | Vigente |
 
 El **plan de actualización tecnológica** —cómo cambia el monolito con el tiempo,
 y a qué número se parte qué— está en

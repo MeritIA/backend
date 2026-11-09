@@ -927,6 +927,46 @@
         ]
       }
     },
+    "/vacantes/{id}/invitacion-automatica": {
+      "put": {
+        "description": "Con `umbral`, entra solo quien lo alcanza; quien no tiene evidencia NO se rechaza, queda en revision para una persona. SIN `umbral` (nulo) acepta a todo el que se postule hasta el `cupo`: el reto pasa a ser el unico filtro. La automatizacion solo dice SI: nunca rechaza a nadie. El `cupo` limita lo automatico, no las invitaciones a mano (D-12). Al encenderla se procesan las postulaciones que ya estaban en revision, en orden de llegada, y la respuesta dice cuantas entraron.",
+        "operationId": "VacantesController_configurarInvitacionAutomatica",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitacionAutomaticaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "404": {
+            "description": "La vacante no existe o no es de su empresa."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Enciende o apaga la invitacion automatica por afinidad (A04)",
+        "tags": [
+          "vacantes"
+        ]
+      }
+    },
     "/vacantes/{id}/postular": {
       "post": {
         "description": "Crea una solicitud EN REVISION. No da acceso al reto: lo que da acceso es la invitacion, y esa la crea el reclutador al aceptar. Si ya estaba invitado se responde 400 diciendo que puede empezar sin postularse.",
@@ -1319,6 +1359,173 @@
         "summary": "Adjunta un archivo al enunciado (dataset, esqueleto)",
         "tags": [
           "ejercicios"
+        ]
+      }
+    },
+    "/habilidades": {
+      "get": {
+        "description": "Lo lee cualquiera autenticado: un reclutador necesita ver que nombres ya existen antes de escribir los criterios de su rubrica, y escribirlos con el nombre del catalogo es lo que hace que la afinidad acierte.",
+        "operationId": "HabilidadesController_catalogo",
+        "parameters": [
+          {
+            "name": "incluirRetiradas",
+            "required": false,
+            "in": "query",
+            "description": "Las retiradas ya no se ofrecen, pero siguen resolviendo lo que ya se escribio.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El vocabulario de habilidades, con sus alias",
+        "tags": [
+          "habilidades"
+        ]
+      },
+      "post": {
+        "description": "Cambia el perfil de habilidades de TODO EL MUNDO y, con el, las afinidades: se calculan en vivo, sin copia guardada. Eso es lo que se quiere --unir dos nombres es un arreglo-- pero conviene saberlo antes de pulsar. Las invitaciones automaticas ya emitidas no se mueven: guardan la afinidad con la que se decidieron.",
+        "operationId": "HabilidadesController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearHabilidadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "La habilidad o uno de sus alias ya existe, o el nombre ya es alias de otra habilidad: un nombre no puede resolver a dos sitios."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Anade una habilidad al vocabulario",
+        "tags": [
+          "habilidades"
+        ]
+      }
+    },
+    "/habilidades/{id}/alias": {
+      "post": {
+        "description": "Es la pieza que hace que el vocabulario sirva: sin alias, el catalogo solo acertaria cuando el reclutador escribiera exactamente el nombre canonico.",
+        "operationId": "HabilidadesController_anadirAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnadirAliasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "Ese termino ya es alias de alguna habilidad, o es el nombre canonico de otra."
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Anade otra forma de escribir una habilidad",
+        "tags": [
+          "habilidades"
+        ]
+      }
+    },
+    "/habilidades/{id}/alias/{termino}": {
+      "delete": {
+        "operationId": "HabilidadesController_quitarAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "termino",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Quita un alias de una habilidad",
+        "tags": [
+          "habilidades"
+        ]
+      }
+    },
+    "/habilidades/{id}": {
+      "delete": {
+        "description": "No la borra: sigue resolviendo los nombres que ya se escribieron. Borrarla cambiaria el perfil de los candidatos que ya la tenian, y un perfil que se mueve porque alguien edito un catalogo no es auditable.",
+        "operationId": "HabilidadesController_retirar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "Retira una habilidad del vocabulario",
+        "tags": [
+          "habilidades"
         ]
       }
     },
@@ -2043,6 +2250,48 @@
           }
         ],
         "summary": "Las cifras de la empresa de quien pregunta (pantalla A02)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/afinidad": {
+      "get": {
+        "description": "Compara lo que cada vacante EXIGE --los criterios de las rubricas de sus ejercicios, con sus pesos-- contra lo que el candidato ha DEMOSTRADO en las pruebas que ya resolvio. No compara un CV con una descripcion de puesto. Cada fila trae el desglose por criterio, para que el numero se pueda discutir en vez de creer. `porcentaje` es null --no cero-- cuando no hay ninguna evidencia sobre lo que esa vacante pide: no es \"no encajas\", es \"no se sabe\". `cobertura` dice sobre cuanto peso de la rubrica hay evidencia, y es lo que impide que un 100 % con una sola prueba engane. Devuelve el catalogo COMPLETO: la afinidad ordena, nunca esconde (ADR-0016).",
+        "operationId": "ReportesController_catalogoConAfinidad",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El catalogo abierto con el % de afinidad de quien pregunta (pantalla B13)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/mi-perfil-de-habilidades": {
+      "get": {
+        "description": "Su nivel medio en cada criterio sobre el que alguna vez se le califico, de mayor a menor, con cuantas calificaciones lo sostienen. El nivel es puntaje/escala, asi que un 4 sobre 5 y un 8 sobre 10 son el mismo nivel. Solo para si mismo: lo que una empresa ve de un candidato es su desglose en SU vacante, no lo que demostro en las de la competencia.",
+        "operationId": "ReportesController_miPerfilDeHabilidades",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "paseto": []
+          }
+        ],
+        "summary": "El perfil de habilidades del propio candidato (pantalla B13)",
         "tags": [
           "reportes"
         ]
@@ -3265,6 +3514,31 @@
           }
         }
       },
+      "InvitacionAutomaticaDto": {
+        "type": "object",
+        "properties": {
+          "activa": {
+            "type": "boolean",
+            "description": "Si la vacante invita sola. Al encenderla se procesan las postulaciones que ya estaban en revision."
+          },
+          "umbral": {
+            "type": "object",
+            "minimum": 0,
+            "maximum": 100,
+            "nullable": true,
+            "description": "Minimo de afinidad para entrar sola. Omitirlo o enviarlo nulo con activa=true significa ACEPTAR A TODOS hasta el cupo: el reto pasa a ser el unico filtro. Con umbral, quien no tiene evidencia NO se rechaza: queda en revision para una persona."
+          },
+          "cupo": {
+            "type": "object",
+            "minimum": 0,
+            "nullable": true,
+            "description": "Tope de invitaciones AUTOMATICAS. Nulo es sin tope. No limita las invitaciones a mano: `finalistasAEvaluar` sigue siendo un plan y no un maximo (D-12)."
+          }
+        },
+        "required": [
+          "activa"
+        ]
+      },
       "RechazarPostulacionDto": {
         "type": "object",
         "properties": {
@@ -3378,6 +3652,52 @@
         "required": [
           "enunciado",
           "criterios"
+        ]
+      },
+      "CrearHabilidadDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "El nombre canonico, tal como se mostrara. Se compara normalizado, asi que las mayusculas y los acentos son solo presentacion.",
+            "example": "Claridad del codigo"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Que se entiende por esta habilidad. Es lo que evita que dos reclutadores la usen para cosas distintas.",
+            "example": "Nombres descriptivos, estructura simple y comentarios donde aportan. No incluye correccion funcional."
+          },
+          "alias": {
+            "maxItems": 50,
+            "description": "Otras formas de escribirla. Un termino no puede ser alias de dos habilidades, ni el nombre canonico de otra.",
+            "example": [
+              "Legibilidad",
+              "Codigo legible"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "nombre",
+          "descripcion"
+        ]
+      },
+      "AnadirAliasDto": {
+        "type": "object",
+        "properties": {
+          "termino": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Otra forma de escribir el nombre de esta habilidad.",
+            "example": "Legibilidad"
+          }
+        },
+        "required": [
+          "termino"
         ]
       },
       "SesionDto": {
@@ -3790,6 +4110,29 @@
           "historial"
         ]
       },
+      "FuenteDelMentorRespuesta": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "number"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "archivo": {
+            "type": "string"
+          },
+          "extracto": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "titulo",
+          "archivo",
+          "extracto"
+        ]
+      },
       "RespuestaDelMentor": {
         "type": "object",
         "properties": {
@@ -3801,11 +4144,19 @@
             "items": {
               "type": "string"
             }
+          },
+          "fuentes": {
+            "description": "Material de estudio en que se apoya la respuesta. Vacio si no hubo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FuenteDelMentorRespuesta"
+            }
           }
         },
         "required": [
           "respuesta",
-          "sugerencias"
+          "sugerencias",
+          "fuentes"
         ]
       },
       "FilaDeTalentoRespuesta": {

@@ -114,6 +114,37 @@ export class Vacante {
   @Column({ type: 'int', name: 'finalistas_a_evaluar', nullable: true })
   finalistasAEvaluar!: number | null;
 
+  /**
+   * Si esta vacante invita sola a quien se postula y pasa la politica (A04).
+   *
+   * Nace apagada. Una funcion que decide sobre personas no se enciende por
+   * omision, y encenderla exige que el calculo de afinidad este disponible: ver
+   * `dominio/calculador-de-afinidad.ts`.
+   */
+  @Column({ type: 'boolean', name: 'invitacion_automatica', default: false })
+  invitacionAutomatica!: boolean;
+
+  /**
+   * Minimo de afinidad para entrar sola, 0 a 100.
+   *
+   * `null` CON la politica activa no es "cero": es modo abierto, acepta a todo
+   * el que se postule hasta el cupo. Es la tesis del producto --el reto es el
+   * filtro-- y el unico modo sin trampa del principiante, porque no mira el
+   * perfil. La distincion esta explicada en `dominio/politica-de-invitacion.ts`.
+   */
+  @Column({ type: 'int', name: 'umbral_de_afinidad', nullable: true })
+  umbralDeAfinidad!: number | null;
+
+  /**
+   * Tope de invitaciones AUTOMATICAS. `null` es sin tope.
+   *
+   * No se reutiliza `finalistasAEvaluar` a proposito: D-12 dice que ese es un
+   * plan y no un maximo, y usarlo como tope la contradiria. El reclutador sigue
+   * invitando a mano sin limite.
+   */
+  @Column({ type: 'int', name: 'cupo_de_invitacion_automatica', nullable: true })
+  cupoDeInvitacionAutomatica!: number | null;
+
   @Column({ type: 'timestamptz', name: 'publicada_en', nullable: true })
   publicadaEn!: Date | null;
 

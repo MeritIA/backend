@@ -20,6 +20,11 @@ import {
   puedeTransicionar,
 } from './dominio/estado-vacante.js';
 import { EstadoPostulacion, puedeDecidirse } from './dominio/estado-postulacion.js';
+import {
+  decidirInvitacionAutomatica,
+  type PoliticaDeInvitacion,
+} from './dominio/politica-de-invitacion.js';
+import type { CalculadorDeAfinidad } from './dominio/calculador-de-afinidad.js';
 import { VACANTE_CERRADA, type EventoVacanteCerrada } from './dominio/eventos.js';
 import {
   AutenticacionService,
@@ -32,6 +37,16 @@ import {
 import { BusDeEventos } from '../../common/events/index.js';
 import { EjerciciosService, type ResumenVersion } from '../ejercicios/index.js';
 import type { CrearVacanteDto, EditarVacanteDto } from './dto/index.js';
+
+/**
+ * El "solicitante" con el que se registran los actos de la maquina.
+ *
+ * Los registros de seguridad llevan siempre un usuario, y una invitacion
+ * automatica no la pide nadie. Se usa el reclutador de la vacante --quien
+ * encendio la politica y responde por ella-- con el rol anotado, para que una
+ * auditoria distinga lo que hizo una persona de lo que hizo la politica.
+ */
+const SISTEMA = { rol: Rol.Reclutador, idEmpresa: null } as const;
 
 /** Quien pide, tal como lo resolvio el guardia de autenticacion. */
 export interface Solicitante {
@@ -58,6 +73,15 @@ export interface Solicitante {
 @Injectable()
 export class VacantesService implements OnModuleInit {
   private readonly logger = new Logger('Vacantes');
+
+  /**
+   * Quien sabe calcular la afinidad, o `null` si nadie se registro.
+   *
+   * No es una dependencia del constructor porque vendria de `reportes`, y
+   * `reportes` depende de este modulo: seria un ciclo. Lo registra
+   * `ReportesService` al arrancar. Ver `dominio/calculador-de-afinidad.ts`.
+   */
+  private calculadorDeAfinidad: CalculadorDeAfinidad | null = null;
 
   constructor(
     @InjectRepository(Vacante) private readonly vacantes: Repository<Vacante>,
@@ -650,6 +674,59 @@ export class VacantesService implements OnModuleInit {
   }
 
   /**
+   * Las rubricas de varias vacantes PUBLICADAS, en lote.
+   *
+   * La usa el calculo de afinidad del catalogo abierto. No pasa por
+   * `exigirAcceso` a proposito, y la razon no es comodidad: el candidato del
+   * catalogo **no esta invitado**, asi que `exigirAcceso` le responderia 404 y
+   * no habria afinidad que calcular para nadie.
+   *
+   * POR QUE ES SEGURO NO EXIGIR INVITACION AQUI
+   *
+   * Solo lee vacantes en estado **publicada**, que son las que ya salen en el
+   * catalogo para todo el mundo. Y devuelve unicamente **nombre y peso** de
+   * cada criterio: ni el enunciado, ni la descripcion del criterio, que es lo
+   * que B14 ensena a quien ya esta dentro. Que los pesos sean publicos es la
+   * promesa del producto --la rubrica es la misma para todos los finalistas--
+   * no una fuga.
+   */
+  async rubricasDeVacantesPublicadas(
+    ids: readonly string[],
+  ): Promise<Map<string, { nombre: string; peso: number }[][]>> {
+    if (ids.length === 0) return new Map();
+
+    const vacantes = await this.vacantes.find({
+      where: { id: In([...ids]), estado: EstadoVacante.Publicada },
+      relations: { ejercicios: true },
+    });
+
+    // Una sola lectura por ejercicio aunque lo usen varias vacantes: en una
+    // empresa que reutiliza su banco, eso es la diferencia entre 4 consultas y
+    // 40.
+    const idsDeEjercicios = [
+      ...new Set(vacantes.flatMap((v) => v.ejercicios.map((e) => e.idEjercicio))),
+    ];
+    const versiones = new Map(
+      await Promise.all(
+        idsDeEjercicios.map(
+          async (idEjercicio) =>
+            [idEjercicio, await this.ejerciciosDelBanco.versionVigenteDe(idEjercicio)] as const,
+        ),
+      ),
+    );
+
+    return new Map(
+      vacantes.map((vacante) => [
+        vacante.id,
+        vacante.ejercicios
+          .map((enlace) => versiones.get(enlace.idEjercicio))
+          .filter((v): v is ResumenVersion => v != null)
+          .map((version) => version.criterios.map((c) => ({ nombre: c.nombre, peso: c.peso }))),
+      ]),
+    );
+  }
+
+  /**
    * Enlace firmado a un adjunto del enunciado de un ejercicio de esta vacante.
    * Mismo acceso que leer el enunciado: el candidato invitado a una vacante
    * publicada, o la empresa dueña. El ejercicio debe ser de la vacante: un
@@ -812,7 +889,10 @@ export class VacantesService implements OnModuleInit {
         }),
       );
       this.registrar('postulacion_creada', solicitante, { idVacante });
-      return postulacion;
+      // Si la vacante invita sola, se decide AHORA y de forma sincrona, para que
+      // la respuesta del POST diga el estado final en vez de dejar al candidato
+      // mirando un "en revision" que ya no es verdad.
+      return await this.aplicarInvitacionAutomatica(vacante, postulacion);
     } catch (error) {
       // El unico de la base es el que decide, no una comprobacion previa: entre
       // leer y escribir caben dos pulsaciones del mismo boton.
@@ -944,6 +1024,170 @@ export class VacantesService implements OnModuleInit {
     // persona y los registros se leen en sitios donde ese texto no hace falta.
     this.registrar('postulacion_rechazada', solicitante, { idVacante, idCandidato });
     return guardada;
+  }
+
+  /**
+   * Registra quien sabe calcular la afinidad.
+   *
+   * Lo llama `ReportesService` al arrancar. Ver
+   * `dominio/calculador-de-afinidad.ts` para por que la llamada va al reves y
+   * por que no por el bus de eventos.
+   */
+  registrarCalculadorDeAfinidad(calculador: CalculadorDeAfinidad): void {
+    this.calculadorDeAfinidad = calculador;
+  }
+
+  /**
+   * Enciende o apaga la invitacion automatica de una vacante (A04).
+   *
+   * EXIGE QUE EL CALCULO DE AFINIDAD ESTE DISPONIBLE, y falla si no.
+   *
+   * Encenderla sin calculador dejaria dos salidas malas: inventar un porcentaje,
+   * o saltarse el umbral y aceptar a todo el mundo. Las dos serian una funcion
+   * que decide sobre personas comportandose distinto de lo que dice su
+   * configuracion. Mejor no arrancar.
+   *
+   * AL ENCENDERLA SE PROCESA LO QUE YA ESTABA PENDIENTE
+   *
+   * Si no, encenderla no haria nada visible hasta la siguiente postulacion, y
+   * quien llevara tres dias esperando seguiria esperando. Es una pasada acotada:
+   * las postulaciones en revision de UNA vacante.
+   */
+  async configurarInvitacionAutomatica(
+    id: string,
+    politica: PoliticaDeInvitacion,
+    solicitante: Solicitante,
+  ): Promise<{ vacante: Vacante; aceptadas: number }> {
+    const vacante = await this.obtenerCompleta(id);
+    this.exigirPropiedad(vacante, solicitante);
+
+    if (politica.activa && this.calculadorDeAfinidad === null) {
+      throw new BadRequestException(
+        'La invitacion automatica no se puede encender: el calculo de afinidad no esta disponible en esta instancia.',
+      );
+    }
+    if (vacante.estado === EstadoVacante.Cerrada) {
+      throw new BadRequestException('Una vacante cerrada no invita a nadie.');
+    }
+
+    vacante.invitacionAutomatica = politica.activa;
+    vacante.umbralDeAfinidad = politica.umbral;
+    vacante.cupoDeInvitacionAutomatica = politica.cupo;
+    await this.vacantes.save(vacante);
+
+    this.registrar('invitacion_automatica_configurada', solicitante, {
+      idVacante: id,
+      activa: politica.activa,
+      umbral: politica.umbral,
+      cupo: politica.cupo,
+    });
+
+    let aceptadas = 0;
+    if (politica.activa) {
+      const pendientes = await this.postulaciones.find({
+        where: { idVacante: id, estado: EstadoPostulacion.EnRevision },
+        order: { creadaEn: 'ASC' },
+      });
+      // En orden de llegada: si hay cupo, lo justo es que lo coja quien se
+      // postulo antes y no quien el `find` devuelva primero.
+      for (const pendiente of pendientes) {
+        const despues = await this.aplicarInvitacionAutomatica(
+          await this.obtenerCompleta(id),
+          pendiente,
+        );
+        if (despues.estado === EstadoPostulacion.Aceptada) aceptadas += 1;
+      }
+    }
+
+    return { vacante: await this.obtenerCompleta(id), aceptadas };
+  }
+
+  /**
+   * Aplica la politica de la vacante a una postulacion recien creada o pendiente.
+   *
+   * Devuelve la postulacion como queda: aceptada si entro sola, igual si no.
+   * NUNCA la rechaza --ver `dominio/politica-de-invitacion.ts`-- asi que lo peor
+   * que puede pasar es que se quede esperando a una persona, que es donde
+   * estaria si esta funcion no existiera.
+   */
+  private async aplicarInvitacionAutomatica(
+    vacante: Vacante,
+    postulacion: Postulacion,
+  ): Promise<Postulacion> {
+    const calculador = this.calculadorDeAfinidad;
+    if (!vacante.invitacionAutomatica || calculador === null) return postulacion;
+
+    const politica: PoliticaDeInvitacion = {
+      activa: vacante.invitacionAutomatica,
+      umbral: vacante.umbralDeAfinidad,
+      cupo: vacante.cupoDeInvitacionAutomatica,
+    };
+
+    // Solo se pide la afinidad si la politica la va a mirar: en modo abierto no
+    // hace falta, y es una consulta de agregacion por candidato.
+    let afinidad: number | null = null;
+    if (politica.umbral !== null) {
+      afinidad = await calculador.porcentajeDe(postulacion.idCandidato, vacante.id);
+    }
+
+    const emitidas = await this.postulaciones.count({
+      where: {
+        idVacante: vacante.id,
+        decisionAutomatica: true,
+        estado: EstadoPostulacion.Aceptada,
+      },
+    });
+
+    const decision = decidirInvitacionAutomatica(politica, vacante.estado, afinidad, emitidas);
+
+    if (!decision.acepta) {
+      this.registrar(
+        'invitacion_automatica_no_aplicada',
+        { ...SISTEMA, id: vacante.idReclutador },
+        {
+          idVacante: vacante.id,
+          idCandidato: postulacion.idCandidato,
+          motivo: decision.motivo,
+        },
+      );
+      return postulacion;
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const yaInvitado = await manager
+        .getRepository(VacanteCandidato)
+        .exists({ where: { idVacante: vacante.id, idCandidato: postulacion.idCandidato } });
+      if (!yaInvitado) {
+        await manager
+          .getRepository(VacanteCandidato)
+          .save(
+            manager
+              .getRepository(VacanteCandidato)
+              .create({ idVacante: vacante.id, idCandidato: postulacion.idCandidato }),
+          );
+      }
+
+      postulacion.estado = EstadoPostulacion.Aceptada;
+      postulacion.decisionAutomatica = true;
+      postulacion.afinidadAlDecidir = decision.afinidad;
+      // Quien encendio la politica responde por lo que la maquina acepte, asi
+      // que no se pierde el responsable: se guarda el reclutador de la vacante.
+      postulacion.idUsuarioQueDecidio = vacante.idReclutador;
+      postulacion.decididaEn = new Date();
+      const guardada = await manager.getRepository(Postulacion).save(postulacion);
+
+      this.registrar(
+        'invitacion_automatica_emitida',
+        { ...SISTEMA, id: vacante.idReclutador },
+        {
+          idVacante: vacante.id,
+          idCandidato: postulacion.idCandidato,
+          afinidad: decision.afinidad,
+          umbral: politica.umbral,
+        },
+      );
+      return guardada;
+    });
   }
 
   /**

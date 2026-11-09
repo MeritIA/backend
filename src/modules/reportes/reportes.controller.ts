@@ -22,6 +22,8 @@ import {
   type AuditoriaDeVacante,
   type DatosPersonales,
   type FilaDeTalento,
+  type HabilidadDelPerfil,
+  type OfertaConAfinidad,
   type PanelDeEmpresa,
   type UsoDeEjercicio,
 } from './reportes.service.js';
@@ -118,6 +120,35 @@ export class ReportesController {
   @ApiOkResponse({ type: PanelDeEmpresaRespuesta })
   panel(@Req() p: Peticion): Promise<PanelDeEmpresa> {
     return this.reportes.panelDeLaEmpresa(solicitanteDe(p));
+  }
+
+  @Get('afinidad')
+  @RequierePermiso('postulaciones:crear')
+  @ApiOperation({
+    summary: 'El catalogo abierto con el % de afinidad de quien pregunta (pantalla B13)',
+    description:
+      'Compara lo que cada vacante EXIGE --los criterios de las rubricas de sus ejercicios, con sus pesos-- ' +
+      'contra lo que el candidato ha DEMOSTRADO en las pruebas que ya resolvio. No compara un CV con una descripcion de puesto. ' +
+      'Cada fila trae el desglose por criterio, para que el numero se pueda discutir en vez de creer. ' +
+      '`porcentaje` es null --no cero-- cuando no hay ninguna evidencia sobre lo que esa vacante pide: no es "no encajas", es "no se sabe". ' +
+      '`cobertura` dice sobre cuanto peso de la rubrica hay evidencia, y es lo que impide que un 100 % con una sola prueba engane. ' +
+      'Devuelve el catalogo COMPLETO: la afinidad ordena, nunca esconde (ADR-0016).',
+  })
+  catalogoConAfinidad(@Req() p: Peticion): Promise<OfertaConAfinidad[]> {
+    return this.reportes.catalogoConAfinidad(solicitanteDe(p));
+  }
+
+  @Get('mi-perfil-de-habilidades')
+  @RequierePermiso('postulaciones:crear')
+  @ApiOperation({
+    summary: 'El perfil de habilidades del propio candidato (pantalla B13)',
+    description:
+      'Su nivel medio en cada criterio sobre el que alguna vez se le califico, de mayor a menor, con cuantas calificaciones lo sostienen. ' +
+      'El nivel es puntaje/escala, asi que un 4 sobre 5 y un 8 sobre 10 son el mismo nivel. ' +
+      'Solo para si mismo: lo que una empresa ve de un candidato es su desglose en SU vacante, no lo que demostro en las de la competencia.',
+  })
+  miPerfilDeHabilidades(@Req() p: Peticion): Promise<HabilidadDelPerfil[]> {
+    return this.reportes.miPerfilDeHabilidades(solicitanteDe(p));
   }
 
   @Get('vacantes/:idVacante')

@@ -15,6 +15,7 @@ export {
   type TrabajoDeEvaluacion,
 } from './cola/evaluador.js';
 export { NOMBRE_COLA_EVALUACION } from './cola/politica-de-cola.js';
+export { type NivelDeHabilidad } from './dominio/habilidad.js';
 export { EVALUACION_FINALIZADA, type EventoEvaluacionFinalizada } from './dominio/eventos.js';
 export { EntregaIlegibleError, extraerTexto } from './cola/extraer-texto.js';
 export { ClienteServicioIa } from './cola/cliente-servicio-ia.js';

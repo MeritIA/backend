@@ -26,6 +26,7 @@ import {
   AsociarEjerciciosDto,
   CrearVacanteDto,
   EditarVacanteDto,
+  InvitacionAutomaticaDto,
   RechazarPostulacionDto,
 } from './dto/index.js';
 import { RequierePermiso, type UsuarioAutenticado } from '../autenticacion/index.js';
@@ -240,6 +241,29 @@ export class VacantesController {
     @Req() p: Peticion,
   ): Promise<Vacante> {
     return this.vacantes.cerrar(id, solicitanteDe(p));
+  }
+
+  @Put(':id/invitacion-automatica')
+  @RequierePermiso('postulaciones:decidir')
+  @ApiOperation({
+    summary: 'Enciende o apaga la invitacion automatica por afinidad (A04)',
+    description:
+      'Con `umbral`, entra solo quien lo alcanza; quien no tiene evidencia NO se rechaza, queda en revision para una persona. ' +
+      'SIN `umbral` (nulo) acepta a todo el que se postule hasta el `cupo`: el reto pasa a ser el unico filtro. ' +
+      'La automatizacion solo dice SI: nunca rechaza a nadie. El `cupo` limita lo automatico, no las invitaciones a mano (D-12). ' +
+      'Al encenderla se procesan las postulaciones que ya estaban en revision, en orden de llegada, y la respuesta dice cuantas entraron.',
+  })
+  @ApiNotFoundResponse({ description: 'La vacante no existe o no es de su empresa.' })
+  async configurarInvitacionAutomatica(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() datos: InvitacionAutomaticaDto,
+    @Req() p: Peticion,
+  ): Promise<{ vacante: Vacante; aceptadas: number }> {
+    return this.vacantes.configurarInvitacionAutomatica(
+      id,
+      { activa: datos.activa, umbral: datos.umbral ?? null, cupo: datos.cupo ?? null },
+      solicitanteDe(p),
+    );
   }
 
   // --- Postulaciones -------------------------------------------------------
