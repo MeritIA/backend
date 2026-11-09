@@ -37,11 +37,58 @@ const CANDIDATOS = [
   ['diego@ejemplo.com', 'Diego Ramirez'],
 ];
 
-/** Las tres vacantes, cada una enseñando un caso distinto del panel. */
+/**
+ * Las tres vacantes, cada una enseñando un caso distinto del panel.
+ *
+ * LA DESCRIPCION ES DISTINTA EN CADA UNA, Y NO ES DECORACION
+ *
+ * Antes las tres compartian una sola frase generica. Dos consecuencias feas:
+ * el catalogo parecia roto --tres ofertas de cargos distintos diciendo lo
+ * mismo-- y el boton "Ver mas" de la pantalla de explorar no mostraba nada,
+ * porque con una linea de texto no hay nada que el recorte de tres lineas
+ * esconda. Un texto realista es ademas lo unico que deja ver si la tarjeta
+ * aguanta descripciones largas.
+ */
 const VACANTES = [
-  { titulo: 'Desarrollador backend junior', dias: 12, plan: 3, invitar: 4, evaluar: 2 },
-  { titulo: 'Analista de datos de obra', dias: -5, plan: 2, invitar: 3, evaluar: 3 },
-  { titulo: 'Ingeniero de calidad', dias: null, plan: null, invitar: 0, evaluar: 0 },
+  {
+    titulo: 'Desarrollador backend junior',
+    dias: 12,
+    plan: 3,
+    invitar: 4,
+    evaluar: 2,
+    descripcion:
+      'Mantendras y ampliaras los servicios que registran el avance de obra: APIs en Node, ' +
+      'el modelo de datos en PostgreSQL y las integraciones con los equipos de campo. ' +
+      'Trabajaras con alguien senior en las revisiones de codigo y entraras al turno de ' +
+      'soporte cuando lleves tres meses. No pedimos experiencia previa en construccion; ' +
+      'si ganas de entender el negocio.',
+  },
+  {
+    titulo: 'Analista de datos de obra',
+    dias: -5,
+    plan: 2,
+    invitar: 3,
+    evaluar: 3,
+    descripcion:
+      'Consolidaras los datos de avance, costos y rendimiento que hoy viven repartidos entre ' +
+      'hojas de calculo y los sistemas de cada proyecto. Construiras los tableros que usan ' +
+      'los directores de obra para decidir cada semana, y propondras que medir cuando nadie ' +
+      'lo haya definido. Trabajo cercano a residentes e interventoria, con visitas ' +
+      'ocasionales a obra.',
+  },
+  {
+    titulo: 'Ingeniero de calidad',
+    dias: null,
+    plan: null,
+    invitar: 0,
+    evaluar: 0,
+    descripcion:
+      'Definiras y haras cumplir los protocolos de calidad en obra: ensayos de materiales, ' +
+      'liberacion de actividades y cierre de no conformidades. Acompanaras a los residentes ' +
+      'en sitio, documentaras hallazgos y llevaras los indicadores que se presentan al ' +
+      'cliente. Buscamos criterio tecnico y mano firme para sostener un estandar cuando el ' +
+      'cronograma aprieta.',
+  },
 ];
 
 function conexion() {
@@ -152,7 +199,7 @@ async function main() {
       token: jefe.token,
       cuerpo: {
         titulo: plantilla.titulo,
-        descripcion: 'Buscamos una persona para el equipo de plataforma de obra en Bogota.',
+        descripcion: plantilla.descripcion,
         ...(plantilla.dias === null ? {} : { cierreEstimado: enDias(plantilla.dias) }),
         ...(plantilla.plan === null ? {} : { finalistasAEvaluar: plantilla.plan }),
       },
