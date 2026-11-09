@@ -192,6 +192,18 @@ export class VariablesDeEntorno {
   @IsString()
   AI_SERVICE_API_KEY?: string;
 
+  /**
+   * Servicio del mentor (rag-service). Opcional: si falta, el mentor usa
+   * AI_SERVICE_URL y AI_SERVICE_API_KEY, como antes.
+   */
+  @IsOptional()
+  @IsString()
+  MENTOR_SERVICE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  MENTOR_SERVICE_API_KEY?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

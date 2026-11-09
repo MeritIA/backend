@@ -54,9 +54,21 @@ class PreguntaAlMentorDto {
   historial!: TurnoDto[];
 }
 
+class FuenteDelMentorRespuesta {
+  @ApiProperty() n!: number;
+  @ApiProperty() titulo!: string;
+  @ApiProperty() archivo!: string;
+  @ApiProperty() extracto!: string;
+}
+
 class RespuestaDelMentor {
   @ApiProperty() respuesta!: string;
   @ApiProperty({ type: [String] }) sugerencias!: string[];
+  @ApiProperty({
+    type: [FuenteDelMentorRespuesta],
+    description: 'Material de estudio en que se apoya la respuesta. Vacio si no hubo.',
+  })
+  fuentes!: FuenteDelMentorRespuesta[];
 }
 
 class CriterioDelPerfilRespuesta {
@@ -112,6 +124,10 @@ export class MentorController {
   @ApiServiceUnavailableResponse({ description: 'El servicio de IA no esta disponible.' })
   async preguntar(@Body() d: PreguntaAlMentorDto, @Req() p: Peticion): Promise<RespuestaDelMentor> {
     const r = await this.mentor.preguntar(d.pregunta, d.historial, p.usuario);
-    return { respuesta: r.respuesta, sugerencias: [...r.sugerencias] };
+    return {
+      respuesta: r.respuesta,
+      sugerencias: [...r.sugerencias],
+      fuentes: [...(r.fuentes ?? [])],
+    };
   }
 }
